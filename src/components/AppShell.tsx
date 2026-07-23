@@ -67,7 +67,11 @@ export function AppShell({ children, showCallBar = true, tenant, hidePublicNav =
     }
     if (logoTarget.kind === "dashboard") {
       return (
-        <Link to="/dashboard" className="flex items-center gap-2" aria-label={`${brand.name} — dashboard`}>
+        <Link
+          to="/dashboard"
+          className="flex items-center gap-2"
+          aria-label={`${brand.name} — dashboard`}
+        >
           {children}
         </Link>
       );
@@ -89,19 +93,32 @@ export function AppShell({ children, showCallBar = true, tenant, hidePublicNav =
             <div className="leading-tight">
               <div className="font-extrabold tracking-tight text-sm sm:text-base">{brand.name}</div>
               {brand.location && (
-                <div className="text-[11px] uppercase tracking-widest text-muted-foreground">{brand.location}</div>
+                <div className="text-[11px] uppercase tracking-widest text-muted-foreground">
+                  {brand.location}
+                </div>
               )}
             </div>
           </LogoLink>
           {!hidePublicNav && (
             <nav className="hidden md:flex items-center gap-5 text-sm text-muted-foreground">
-              <Link to="/services/emergency" className="hover:text-foreground">Emergency</Link>
-              <Link to="/services/blocked-drains" className="hover:text-foreground">Blocked drains</Link>
-              <Link to="/areas" className="hover:text-foreground">Areas</Link>
-              <Link to="/dashboard" className="hover:text-foreground">Plumber view</Link>
-              <Link to="/missed-call" className="hover:text-foreground font-semibold text-primary">Demo</Link>
+              <Link to="/services/emergency" className="hover:text-foreground">
+                Emergency
+              </Link>
+              <Link to="/services/blocked-drains" className="hover:text-foreground">
+                Blocked drains
+              </Link>
+              <Link to="/areas" className="hover:text-foreground">
+                Areas
+              </Link>
+              <Link to="/dashboard" className="hover:text-foreground">
+                Plumber view
+              </Link>
+              <Link to="/missed-call" className="hover:text-foreground font-semibold text-primary">
+                Demo
+              </Link>
               <Link
                 to="/signup"
+                search={{ partner: undefined, ref: undefined }}
                 className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-3 py-1.5 font-bold text-primary hover:bg-primary hover:text-primary-foreground"
               >
                 <UserPlus className="h-4 w-4" /> Sign Up Free
@@ -111,6 +128,7 @@ export function AppShell({ children, showCallBar = true, tenant, hidePublicNav =
           {!hidePublicNav && (
             <Link
               to="/signup"
+              search={{ partner: undefined, ref: undefined }}
               className="md:hidden inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2 py-1.5 text-xs font-bold text-primary"
               aria-label="Sign up free — signup and configuration are free"
             >
@@ -139,17 +157,28 @@ export function AppShell({ children, showCallBar = true, tenant, hidePublicNav =
             </div>
             {!hidePublicNav && (
               <div className="flex flex-wrap gap-x-4 gap-y-1">
-                <Link to="/services/emergency" className="hover:text-foreground">Emergency plumbing</Link>
-                <Link to="/services/blocked-drains" className="hover:text-foreground">Blocked drains</Link>
-                <Link to="/areas" className="hover:text-foreground">Service areas</Link>
-                <Link to="/dashboard" className="hover:text-foreground">Plumber view</Link>
-                <Link to="/missed-call" className="hover:text-foreground">Demo</Link>
+                <Link to="/services/emergency" className="hover:text-foreground">
+                  Emergency plumbing
+                </Link>
+                <Link to="/services/blocked-drains" className="hover:text-foreground">
+                  Blocked drains
+                </Link>
+                <Link to="/areas" className="hover:text-foreground">
+                  Service areas
+                </Link>
+                <Link to="/dashboard" className="hover:text-foreground">
+                  Plumber view
+                </Link>
+                <Link to="/missed-call" className="hover:text-foreground">
+                  Demo
+                </Link>
               </div>
             )}
           </div>
           {!tenant && (
             <p className="mt-6 text-xs opacity-70">
-              Demo site. Job requests here are for demonstration only — no data is sent and no plumber will call back.
+              Demo site. Job requests here are for demonstration only — no data is sent and no
+              plumber will call back.
             </p>
           )}
         </div>
