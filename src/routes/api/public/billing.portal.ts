@@ -28,11 +28,17 @@ export const Route = createFileRoute('/api/public/billing/portal')({
         }
 
         // Enforce: only access the Stripe customer linked to THIS user's business.
-        const { data: billingData } = await supabaseAdmin
+        const { data: billingData, error: billingLookupError } = await supabaseAdmin
           .from('business_billing')
           .select('stripe_customer_id')
           .eq('business_id', businessId)
           .maybeSingle();
+        if (billingLookupError) {
+          return new Response(JSON.stringify({ error: 'Billing lookup failed' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
 
         const customerId = (billingData as { stripe_customer_id?: string | null } | null)?.stripe_customer_id;
         if (!customerId) {
