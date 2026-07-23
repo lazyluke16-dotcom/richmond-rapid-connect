@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
+  getOnboardingReadinessFailures,
   OnboardingStepSchema,
   ONBOARDING_STEP_MAX,
-} from '../onboarding-validation';
-import { resolveOnboardingResumeStep } from '../onboarding.functions';
+} from "../onboarding-validation";
+import { resolveOnboardingResumeStep } from "../onboarding.functions";
 
 const emptyProgress = {
   hasBusiness: true,
@@ -15,34 +16,80 @@ const emptyProgress = {
   completed: false,
 };
 
-describe('OnboardingStepSchema strict write validation', () => {
-  it('rejects negative steps', () => {
+describe("OnboardingStepSchema strict write validation", () => {
+  it("rejects negative steps", () => {
     expect(OnboardingStepSchema.safeParse(-1).success).toBe(false);
   });
-  it('rejects steps above max', () => {
+  it("rejects steps above max", () => {
     expect(OnboardingStepSchema.safeParse(ONBOARDING_STEP_MAX + 1).success).toBe(false);
   });
-  it('rejects fractional steps', () => {
+  it("rejects fractional steps", () => {
     expect(OnboardingStepSchema.safeParse(3.5).success).toBe(false);
   });
-  it('rejects non-numeric strings', () => {
-    expect(OnboardingStepSchema.safeParse('4' as unknown as number).success).toBe(false);
-    expect(OnboardingStepSchema.safeParse('foo' as unknown as number).success).toBe(false);
+  it("rejects non-numeric strings", () => {
+    expect(OnboardingStepSchema.safeParse("4" as unknown as number).success).toBe(false);
+    expect(OnboardingStepSchema.safeParse("foo" as unknown as number).success).toBe(false);
   });
-  it('rejects null / undefined / NaN', () => {
+  it("rejects null / undefined / NaN", () => {
     expect(OnboardingStepSchema.safeParse(null as unknown as number).success).toBe(false);
     expect(OnboardingStepSchema.safeParse(undefined as unknown as number).success).toBe(false);
     expect(OnboardingStepSchema.safeParse(Number.NaN).success).toBe(false);
   });
-  it('accepts every valid step 0..7', () => {
+  it("accepts every valid step 0..7", () => {
     for (let i = 0; i <= ONBOARDING_STEP_MAX; i++) {
       expect(OnboardingStepSchema.safeParse(i).success).toBe(true);
     }
   });
 });
 
-describe('resolveOnboardingResumeStep', () => {
-  it('returns max when completed regardless of persisted or derived', () => {
+describe("server-authoritative onboarding readiness", () => {
+  const ready = {
+    businessName: "Harbour Plumbing",
+    servicesCount: 2,
+    areasCount: 3,
+    hoursCount: 7,
+    selectedPlan: "ai_receptionist",
+    heroHeading: "A plumber who answers",
+    heroSubheading: "Fast local plumbing help.",
+  };
+
+  it("allows completion only when every mandatory operating gate exists", () => {
+    expect(getOnboardingReadinessFailures(ready)).toEqual([]);
+  });
+
+  it.each([
+    ["business profile", { businessName: " " }],
+    ["at least one service", { servicesCount: 0 }],
+    ["at least one service area", { areasCount: 0 }],
+    ["business hours", { hoursCount: 0 }],
+    ["a valid plan", { selectedPlan: "enterprise" }],
+    ["website headline", { heroHeading: "" }],
+    ["website description", { heroSubheading: null }],
+  ])("blocks completion when %s is missing", (expected, patch) => {
+    expect(getOnboardingReadinessFailures({ ...ready, ...patch })).toContain(expected);
+  });
+
+  it("reports all missing gates in one response", () => {
+    expect(
+      getOnboardingReadinessFailures({
+        servicesCount: 0,
+        areasCount: 0,
+        hoursCount: 0,
+      }),
+    ).toEqual([
+      "business profile",
+      "at least one service",
+      "at least one service area",
+      "business hours",
+      "a valid plan",
+      "website headline",
+      "website description",
+    ]);
+  });
+});
+
+describe("resolveOnboardingResumeStep", () => {
+  it("returns max when completed regardless of persisted or derived", () => {
     expect(
       resolveOnboardingResumeStep({
         persistedStep: 2,
@@ -52,7 +99,7 @@ describe('resolveOnboardingResumeStep', () => {
     ).toBe(ONBOARDING_STEP_MAX);
   });
 
-  it('legacy row (persisted=0) falls back to derived', () => {
+  it("legacy row (persisted=0) falls back to derived", () => {
     expect(
       resolveOnboardingResumeStep({
         persistedStep: 0,
@@ -62,7 +109,7 @@ describe('resolveOnboardingResumeStep', () => {
     ).toBe(4); // derived from services+areas
   });
 
-  it('legacy row with null persisted step falls back to derived', () => {
+  it("legacy row with null persisted step falls back to derived", () => {
     expect(
       resolveOnboardingResumeStep({
         persistedStep: null,
@@ -72,7 +119,7 @@ describe('resolveOnboardingResumeStep', () => {
     ).toBe(3);
   });
 
-  it('honours persisted exact step even when derived would be lower', () => {
+  it("honours persisted exact step even when derived would be lower", () => {
     // User advanced to step 5 but has not saved services/areas/hours yet.
     expect(
       resolveOnboardingResumeStep({
@@ -83,7 +130,7 @@ describe('resolveOnboardingResumeStep', () => {
     ).toBe(5);
   });
 
-  it('never regresses persisted progress when derived is higher', () => {
+  it("never regresses persisted progress when derived is higher", () => {
     // Persisted says step 2, but data implies step 6 — the user has moved on.
     expect(
       resolveOnboardingResumeStep({
@@ -100,7 +147,7 @@ describe('resolveOnboardingResumeStep', () => {
     ).toBeGreaterThanOrEqual(6);
   });
 
-  it('ignores garbage persisted values and falls back to derived', () => {
+  it("ignores garbage persisted values and falls back to derived", () => {
     expect(
       resolveOnboardingResumeStep({
         persistedStep: Number.NaN,
@@ -117,7 +164,7 @@ describe('resolveOnboardingResumeStep', () => {
     ).toBe(2); // fractional persisted → treated as legacy → derived (branding)
   });
 
-  it('clamps out-of-range persisted values into [0, MAX]', () => {
+  it("clamps out-of-range persisted values into [0, MAX]", () => {
     expect(
       resolveOnboardingResumeStep({
         persistedStep: 99,
@@ -135,7 +182,7 @@ describe('resolveOnboardingResumeStep', () => {
   });
 });
 
-describe('tenant fail-closed contract', () => {
+describe("tenant fail-closed contract", () => {
   const ORIGINAL_ENV_ID = process.env.DEFAULT_BUSINESS_ID;
   const ORIGINAL_ENV_SLUG = process.env.DEFAULT_BUSINESS_SLUG;
 
@@ -152,20 +199,20 @@ describe('tenant fail-closed contract', () => {
     else process.env.DEFAULT_BUSINESS_SLUG = ORIGINAL_ENV_SLUG;
   });
 
-  it('resolveBusinessId throws when no explicit slug/id is configured', async () => {
-    const mod = await import('../tenant');
+  it("resolveBusinessId throws when no explicit slug/id is configured", async () => {
+    const mod = await import("../tenant");
     await expect(mod.resolveBusinessId()).rejects.toThrow(/Tenant resolution failed/);
   });
 
-  it('has no hardcoded Richmond default', async () => {
-    const mod = await import('../tenant');
+  it("has no hardcoded Richmond default", async () => {
+    const mod = await import("../tenant");
     expect(mod.DEFAULT_BUSINESS_SLUG).toBeNull();
   });
 
-  it('resolveBusinessId honours DEFAULT_BUSINESS_ID env override without touching the DB', async () => {
-    process.env.DEFAULT_BUSINESS_ID = '00000000-0000-0000-0000-000000000abc';
+  it("resolveBusinessId honours DEFAULT_BUSINESS_ID env override without touching the DB", async () => {
+    process.env.DEFAULT_BUSINESS_ID = "00000000-0000-0000-0000-000000000abc";
     vi.resetModules();
-    const mod = await import('../tenant');
-    await expect(mod.resolveBusinessId()).resolves.toBe('00000000-0000-0000-0000-000000000abc');
+    const mod = await import("../tenant");
+    await expect(mod.resolveBusinessId()).resolves.toBe("00000000-0000-0000-0000-000000000abc");
   });
 });
