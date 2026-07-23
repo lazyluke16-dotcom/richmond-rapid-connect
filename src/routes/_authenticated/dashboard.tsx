@@ -16,6 +16,8 @@ import {
   PhoneCall,
   LogOut,
   Settings,
+  CreditCard,
+  Search,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
@@ -30,6 +32,10 @@ function Dashboard() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Lead["status"] | "all">("all");
+  const [sourceFilter, setSourceFilter] = useState<NonNullable<Lead["source"]> | "all">("all");
+  const [urgentOnly, setUrgentOnly] = useState(false);
   const tenant = useMyTenantBrand();
 
   const loadAll = async () => {
@@ -54,6 +60,17 @@ function Dashboard() {
   }, []);
 
   const active = leads.find((l) => l.id === activeId) ?? null;
+  const normalisedSearch = search.trim().toLowerCase();
+  const visibleLeads = leads.filter((lead) => {
+    if (statusFilter !== "all" && lead.status !== statusFilter) return false;
+    if (sourceFilter !== "all" && (lead.source ?? "form") !== sourceFilter) return false;
+    if (urgentOnly && lead.urgency !== "now" && lead.leadScore < 85) return false;
+    if (!normalisedSearch) return true;
+    return [lead.name, lead.phone, lead.suburb, jobLabel(lead.jobType), lead.aiSummary]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalisedSearch);
+  });
 
   const handleStatus = async (id: string, status: Lead["status"]) => {
     setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status } : l)));
@@ -72,7 +89,7 @@ function Dashboard() {
   return (
     <AppShell showCallBar={false} tenant={tenant} hidePublicNav>
       <div className="mx-auto max-w-6xl px-4 py-6">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col items-start justify-between gap-4 xl:flex-row">
           <div>
             <div className="text-xs uppercase tracking-widest text-primary">Plumber view</div>
             <h1 className="mt-1 text-2xl font-black sm:text-3xl">Missed-job inbox</h1>
@@ -80,7 +97,7 @@ function Dashboard() {
               Prioritised by urgency and AI lead score.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto">
             <div className="hidden sm:block rounded-md border border-border bg-card px-4 py-2 text-sm">
               <div className="text-muted-foreground text-xs uppercase tracking-widest">
                 New today
@@ -109,6 +126,12 @@ function Dashboard() {
             >
               <Bot className="h-3.5 w-3.5" /> AI reception
             </Link>
+            <Link
+              to="/billing"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
+            >
+              <CreditCard className="h-3.5 w-3.5" /> Billing
+            </Link>
           </div>
         </div>
 
@@ -123,59 +146,104 @@ function Dashboard() {
         )}
 
         {!loading && (
-          <div className="mt-6 grid gap-4 lg:grid-cols-[360px_1fr]">
-            <div className="space-y-2">
-              {leads.map((l) => (
-                <button
-                  key={l.id}
-                  onClick={() => setActiveId(l.id)}
-                  className={`w-full rounded-lg border p-3 text-left transition ${
-                    activeId === l.id
-                      ? "border-primary bg-primary/10"
-                      : "border-border bg-card hover:border-primary/50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate font-bold">{l.name}</div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {jobLabel(l.jobType)} · {l.suburb}
+          <>
+            <div className="mt-6 grid gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-2 lg:grid-cols-[1fr_auto_auto_auto]">
+              <label className="relative block">
+                <span className="sr-only">Search jobs</span>
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search name, phone, suburb or job"
+                  className="w-full rounded-md border border-border bg-input py-2 pl-9 pr-3 text-sm"
+                />
+              </label>
+              <select
+                aria-label="Filter by status"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as Lead["status"] | "all")}
+                className="rounded-md border border-border bg-input px-3 py-2 text-sm"
+              >
+                <option value="all">All statuses</option>
+                <option value="new">New</option>
+                <option value="called-back">Called back</option>
+                <option value="booked">Booked</option>
+                <option value="closed">Closed</option>
+              </select>
+              <select
+                aria-label="Filter by source"
+                value={sourceFilter}
+                onChange={(event) =>
+                  setSourceFilter(event.target.value as NonNullable<Lead["source"]> | "all")
+                }
+                className="rounded-md border border-border bg-input px-3 py-2 text-sm"
+              >
+                <option value="all">All sources</option>
+                <option value="form">Website</option>
+                <option value="missed_call">Missed call</option>
+                <option value="ai_phone_agent">AI phone</option>
+              </select>
+              <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={urgentOnly}
+                  onChange={(event) => setUrgentOnly(event.target.checked)}
+                />
+                Urgent only
+              </label>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-[360px_1fr]">
+              <div className="space-y-2">
+                {visibleLeads.map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => setActiveId(l.id)}
+                    className={`w-full rounded-lg border p-3 text-left transition ${
+                      activeId === l.id
+                        ? "border-primary bg-primary/10"
+                        : "border-border bg-card hover:border-primary/50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate font-bold">{l.name}</div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {jobLabel(l.jobType)} · {l.suburb}
+                        </div>
+                      </div>
+                      <ScoreBadge score={l.leadScore} urgency={l.urgency} />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="h-3 w-3" /> {timeAgo(l.createdAt)}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <SourceChip source={l.source} />
+                        <StatusPill status={l.status} />
                       </div>
                     </div>
-                    <ScoreBadge score={l.leadScore} urgency={l.urgency} />
+                  </button>
+                ))}
+                {visibleLeads.length === 0 && !error && (
+                  <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                    {leads.length === 0
+                      ? "No jobs have arrived yet."
+                      : "No jobs match these filters."}
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> {timeAgo(l.createdAt)}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <SourceChip source={l.source} />
-                      <StatusPill status={l.status} />
-                    </div>
-                  </div>
-                </button>
-              ))}
-              {leads.length === 0 && !error && (
-                <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                  No leads yet. Start the demo from the{" "}
-                  <a href="/missed-call" className="text-primary underline">
-                    missed-call page
-                  </a>{" "}
-                  or submit a job request.
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
-            <div>
-              {active ? (
-                <LeadDetail lead={active} onStatus={(s) => void handleStatus(active.id, s)} />
-              ) : (
-                <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
-                  Select a lead to see the AI summary and recommended action.
-                </div>
-              )}
+              <div>
+                {active ? (
+                  <LeadDetail lead={active} onStatus={(s) => void handleStatus(active.id, s)} />
+                ) : (
+                  <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
+                    Select a lead to see the AI summary and recommended action.
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     </AppShell>
