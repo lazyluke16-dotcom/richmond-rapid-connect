@@ -1,9 +1,9 @@
-import { createServerFn } from '@tanstack/react-start';
-import type { Lead } from './leads';
-import { fireOutboundWebhook } from './webhooks';
-import { sendSms } from './sms';
-import { resolveBusinessIdBySlug } from './tenant';
-import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
+import { createServerFn } from "@tanstack/react-start";
+import type { Lead } from "./leads";
+import { fireOutboundWebhook } from "./webhooks";
+import { sendSms } from "./sms";
+import { resolveBusinessIdBySlug } from "./tenant";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 /**
  * Public: called by the unauthenticated customer chat flow. Uses the
@@ -11,15 +11,15 @@ import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
  * lockdown, and derives `business_id` on the server — any client-supplied
  * business_id in `data` is ignored.
  */
-export const insertLead = createServerFn({ method: 'POST' })
+export const insertLead = createServerFn({ method: "POST" })
   .inputValidator((data: Lead & { businessSlug?: string }) => data)
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // Server-side tenant resolution. The caller MUST pass an explicit
     // `businessSlug`; there is no default-tenant fallback. Any client-
     // supplied `business_id` on the lead payload is ignored.
     if (!data.businessSlug) {
-      throw new Error('insertLead: businessSlug is required');
+      throw new Error("insertLead: businessSlug is required");
     }
     const resolved = await resolveBusinessIdBySlug(data.businessSlug);
     if (!resolved) throw new Error(`Unknown business slug: ${data.businessSlug}`);
@@ -30,13 +30,14 @@ export const insertLead = createServerFn({ method: 'POST' })
     let externalCallId: string | null = data.external_call_id ?? null;
     if (externalCallId) {
       const { data: mc } = await supabaseAdmin
-        .from('missed_calls')
-        .select('business_id')
-        .eq('id', externalCallId)
+        .from("missed_calls")
+        .select("business_id")
+        .eq("id", externalCallId)
         .maybeSingle();
       if (!mc || (mc as { business_id: string }).business_id !== businessId) {
-        console.warn('[attribution] mcid mismatch — dropping external_call_id', {
-          mcid: externalCallId, resolvedBusinessId: businessId,
+        console.warn("[attribution] mcid mismatch — dropping external_call_id", {
+          mcid: externalCallId,
+          resolvedBusinessId: businessId,
         });
         externalCallId = null;
       }
@@ -57,12 +58,12 @@ export const insertLead = createServerFn({ method: 'POST' })
       lead_score: data.leadScore,
       recommended_action: data.recommendedAction,
       status: data.status,
-      source: data.source ?? 'form',
+      source: data.source ?? "form",
       external_call_id: externalCallId,
       call_recording_url: data.call_recording_url ?? null,
       business_id: businessId, // server-derived, never client-supplied
     };
-    const { error } = await supabaseAdmin.from('leads').insert(row as never);
+    const { error } = await supabaseAdmin.from("leads").insert(row as never);
     if (error) throw new Error(error.message);
 
     await fireOutboundWebhook(data);
@@ -70,36 +71,41 @@ export const insertLead = createServerFn({ method: 'POST' })
     // Plumber alert: read tenant settings and log a tenant-scoped event.
     try {
       const { data: mcs } = await supabaseAdmin
-        .from('business_missed_call_settings')
-        .select('plumber_alert_enabled, alert_method, alert_phone, alert_email')
-        .eq('business_id', businessId)
+        .from("business_missed_call_settings")
+        .select("plumber_alert_enabled, alert_method, alert_phone, alert_email")
+        .eq("business_id", businessId)
         .maybeSingle();
       const settings = mcs as {
-        plumber_alert_enabled: boolean; alert_method: string;
-        alert_phone: string | null; alert_email: string | null;
+        plumber_alert_enabled: boolean;
+        alert_method: string;
+        alert_phone: string | null;
+        alert_email: string | null;
       } | null;
       if (settings?.plumber_alert_enabled) {
-        const urgencyText = data.urgency === 'now' ? '🚨 EMERGENCY' : '📋 New lead';
-        const alertBody = `${urgencyText}: ${data.name} — ${data.jobType} in ${data.suburb}. Callback: ${data.bestTime || 'ASAP'}. Score: ${data.leadScore}/100.`;
-        const smsMode = process.env.SMS_MODE === 'twilio' ? 'twilio' : 'demo';
-        const destination = settings.alert_phone || process.env.DEMO_PLUMBER_PHONE || '';
-        const live = smsMode === 'twilio' && settings.alert_method === 'sms' && destination;
-        await supabaseAdmin.from('sms_events').insert({
-          to_number: destination || 'demo:no-destination',
-          from_number: process.env.TWILIO_FROM_NUMBER ?? 'DEMO_NUMBER',
+        const urgencyText = data.urgency === "now" ? "🚨 EMERGENCY" : "📋 New lead";
+        const alertBody = `${urgencyText}: ${data.name} — ${data.jobType} in ${data.suburb}. Callback: ${data.bestTime || "ASAP"}. Score: ${data.leadScore}/100.`;
+        const smsMode = process.env.SMS_MODE === "twilio" ? "twilio" : "demo";
+        const destination = settings.alert_phone || process.env.DEMO_PLUMBER_PHONE || "";
+        const live = smsMode === "twilio" && settings.alert_method === "sms" && destination;
+        await supabaseAdmin.from("sms_events").insert({
+          to_number: destination || "demo:no-destination",
+          from_number: process.env.TWILIO_FROM_NUMBER ?? "DEMO_NUMBER",
           body: alertBody,
-          mode: live ? 'twilio' : 'demo',
-          status: live ? 'sent' : 'simulated',
-          event_type: 'plumber_alert',
+          mode: live ? "twilio" : "demo",
+          status: live ? "sent" : "simulated",
+          event_type: "plumber_alert",
           business_id: businessId,
         } as never);
         if (live) {
-          try { await sendSms(destination, alertBody, businessId); }
-          catch (e) { console.error('[SMS] Plumber alert failed:', e); }
+          try {
+            await sendSms(destination, alertBody, businessId);
+          } catch (e) {
+            console.error("[SMS] Plumber alert failed:", e);
+          }
         }
       }
     } catch (e) {
-      console.error('[alert] failed to log plumber alert:', e);
+      console.error("[alert] failed to log plumber alert:", e);
     }
 
     return { success: true, id: data.id };
@@ -111,14 +117,14 @@ export const insertLead = createServerFn({ method: 'POST' })
  * scoping alone is enough — RLS prevents cross-tenant updates even if a
  * caller guessed a lead id from another business.
  */
-export const updateLeadStatus = createServerFn({ method: 'POST' })
+export const updateLeadStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { id: string; status: Lead['status'] }) => data)
+  .inputValidator((data: { id: string; status: Lead["status"] }) => data)
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase
-      .from('leads')
+      .from("leads")
       .update({ status: data.status })
-      .eq('id', data.id);
+      .eq("id", data.id);
     if (error) throw new Error(error.message);
     return { success: true };
   });
@@ -126,13 +132,52 @@ export const updateLeadStatus = createServerFn({ method: 'POST' })
 /**
  * Authenticated: dashboard-only. RLS filters to the caller's tenant.
  */
-export const fetchLeads = createServerFn({ method: 'GET' })
+export const fetchLeads = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { data, error } = await context.supabase
-      .from('leads')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .from("leads")
+      .select("*")
+      .order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
-    return (data ?? []) as unknown as Lead[];
+    return ((data ?? []) as Record<string, unknown>[]).map(mapLeadRow);
   });
+
+/**
+ * The database deliberately uses snake_case while the customer-facing app uses
+ * a camelCase Lead contract. Keeping the conversion here prevents every caller
+ * from accidentally rendering undefined fields from a raw database row.
+ */
+export function mapLeadRow(row: Record<string, unknown>): Lead {
+  const chat = Array.isArray(row.chat) ? row.chat : [];
+  const photos = Array.isArray(row.photos) ? row.photos : [];
+  return {
+    id: String(row.id ?? ""),
+    createdAt: Number(row.created_at ?? 0),
+    jobType: row.job_type as Lead["jobType"],
+    suburb: String(row.suburb ?? ""),
+    urgency: row.urgency as Lead["urgency"],
+    propertyType: row.property_type as Lead["propertyType"],
+    photos: photos.filter((value): value is string => typeof value === "string"),
+    name: String(row.name ?? ""),
+    phone: String(row.phone ?? ""),
+    bestTime: String(row.best_time ?? ""),
+    chat: chat.filter((value): value is Lead["chat"][number] =>
+      Boolean(
+        value &&
+        typeof value === "object" &&
+        ["ai", "customer"].includes(String((value as { role?: unknown }).role)) &&
+        typeof (value as { text?: unknown }).text === "string" &&
+        Number.isFinite(Number((value as { ts?: unknown }).ts)),
+      ),
+    ),
+    aiSummary: String(row.ai_summary ?? ""),
+    leadScore: Number(row.lead_score ?? 0),
+    recommendedAction: String(row.recommended_action ?? ""),
+    status: row.status as Lead["status"],
+    source: row.source as Lead["source"],
+    external_call_id: typeof row.external_call_id === "string" ? row.external_call_id : undefined,
+    call_recording_url:
+      typeof row.call_recording_url === "string" ? row.call_recording_url : undefined,
+  };
+}
