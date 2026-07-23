@@ -47,6 +47,7 @@ import { Route as ApiPublicBillingPortalRouteImport } from './routes/api/public/
 import { Route as ApiPublicBillingSummaryRouteImport } from './routes/api/public/billing.summary'
 import { Route as ApiPublicWebhooksStripeInboundRouteImport } from './routes/api/public/webhooks.stripe-inbound'
 import { Route as ApiPublicWebhooksVapiInboundRouteImport } from './routes/api/public/webhooks.vapi-inbound'
+import { Route as ApiPublicWebhooksTwilioMissedCallSlugRouteImport } from './routes/api/public.webhooks.twilio-missed-call.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -246,6 +247,12 @@ const ApiPublicWebhooksVapiInboundRoute =
     path: '/api/public/webhooks/vapi-inbound',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicWebhooksTwilioMissedCallSlugRoute =
+  ApiPublicWebhooksTwilioMissedCallSlugRouteImport.update({
+    id: '/api/public/webhooks/twilio-missed-call/$slug',
+    path: '/api/public/webhooks/twilio-missed-call/$slug',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -285,6 +292,7 @@ export interface FileRoutesByFullPath {
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
+  '/api/public/webhooks/twilio-missed-call/$slug': typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -323,6 +331,7 @@ export interface FileRoutesByTo {
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
+  '/api/public/webhooks/twilio-missed-call/$slug': typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -364,6 +373,7 @@ export interface FileRoutesById {
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
+  '/api/public/webhooks/twilio-missed-call/$slug': typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -405,6 +415,7 @@ export interface FileRouteTypes {
     | '/api/public/billing/summary'
     | '/api/public/webhooks/stripe-inbound'
     | '/api/public/webhooks/vapi-inbound'
+    | '/api/public/webhooks/twilio-missed-call/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -443,6 +454,7 @@ export interface FileRouteTypes {
     | '/api/public/billing/summary'
     | '/api/public/webhooks/stripe-inbound'
     | '/api/public/webhooks/vapi-inbound'
+    | '/api/public/webhooks/twilio-missed-call/$slug'
   id:
     | '__root__'
     | '/'
@@ -483,6 +495,7 @@ export interface FileRouteTypes {
     | '/api/public/billing/summary'
     | '/api/public/webhooks/stripe-inbound'
     | '/api/public/webhooks/vapi-inbound'
+    | '/api/public/webhooks/twilio-missed-call/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -513,6 +526,7 @@ export interface RootRouteChildren {
   ApiPublicBillingSummaryRoute: typeof ApiPublicBillingSummaryRoute
   ApiPublicWebhooksStripeInboundRoute: typeof ApiPublicWebhooksStripeInboundRoute
   ApiPublicWebhooksVapiInboundRoute: typeof ApiPublicWebhooksVapiInboundRoute
+  ApiPublicWebhooksTwilioMissedCallSlugRoute: typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -783,6 +797,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWebhooksVapiInboundRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/webhooks/twilio-missed-call/$slug': {
+      id: '/api/public/webhooks/twilio-missed-call/$slug'
+      path: '/api/public/webhooks/twilio-missed-call/$slug'
+      fullPath: '/api/public/webhooks/twilio-missed-call/$slug'
+      preLoaderRoute: typeof ApiPublicWebhooksTwilioMissedCallSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -854,6 +875,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicBillingSummaryRoute: ApiPublicBillingSummaryRoute,
   ApiPublicWebhooksStripeInboundRoute: ApiPublicWebhooksStripeInboundRoute,
   ApiPublicWebhooksVapiInboundRoute: ApiPublicWebhooksVapiInboundRoute,
+  ApiPublicWebhooksTwilioMissedCallSlugRoute:
+    ApiPublicWebhooksTwilioMissedCallSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
