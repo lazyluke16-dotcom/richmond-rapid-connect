@@ -81,6 +81,9 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
             return jsonOk({ ok: true, duplicate: true });
           }
           console.error('[stripe-inbound] receipt insert failed:', insertErr.message);
+          // Never mutate billing state when the durable idempotency receipt
+          // could not be stored. Stripe will retry this event.
+          return jsonOk({ error: 'Could not persist webhook receipt' }, 500);
         }
 
         let handled = false;
@@ -102,7 +105,7 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
 
               const sub = await stripe.subscriptions.retrieve(subscriptionId);
 
-              await supabaseAdmin
+              const { error: activationError } = await supabaseAdmin
                 .from('business_billing')
                 .update({
                   billing_status: 'active',
@@ -132,6 +135,9 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
                   last_synced_at: new Date().toISOString(),
                 })
                 .eq('business_id', businessId);
+              if (activationError) {
+                throw new Error(`Failed to activate paid subscription: ${activationError.message}`);
+              }
 
               const { data: billingRow } = await supabaseAdmin
                 .from('business_billing')
@@ -145,7 +151,7 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
               } | null;
 
               if (bb?.union_offer_eligible && !bb?.union_offer_redeemed_at) {
-                await supabaseAdmin
+                const { error: offerError } = await supabaseAdmin
                   .from('business_billing')
                   .update({
                     union_offer_redeemed_at: new Date().toISOString(),
@@ -154,6 +160,9 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
                     ).toISOString(),
                   })
                   .eq('business_id', businessId);
+                if (offerError) {
+                  throw new Error(`Failed to record union offer redemption: ${offerError.message}`);
+                }
               }
 
               handled = true;
@@ -172,7 +181,7 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
               }
               if (!businessId) break;
 
-              await supabaseAdmin
+              const { error: subscriptionUpdateError } = await supabaseAdmin
                 .from('business_billing')
                 .update({
                   stripe_subscription_status: sub.status,
@@ -195,6 +204,9 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
                   last_synced_at: new Date().toISOString(),
                 })
                 .eq('business_id', businessId);
+              if (subscriptionUpdateError) {
+                throw new Error(`Failed to update subscription: ${subscriptionUpdateError.message}`);
+              }
 
               handled = true;
               break;
@@ -209,7 +221,7 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
               }
               if (!businessId) break;
 
-              await supabaseAdmin
+              const { error: cancellationError } = await supabaseAdmin
                 .from('business_billing')
                 .update({
                   billing_status: 'canceled',
@@ -218,6 +230,9 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
                   last_synced_at: new Date().toISOString(),
                 })
                 .eq('business_id', businessId);
+              if (cancellationError) {
+                throw new Error(`Failed to record cancellation: ${cancellationError.message}`);
+              }
 
               handled = true;
               break;
@@ -235,10 +250,11 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
 
               await clearGraceAndActivate(businessId, supabaseAdmin);
               try { await (supabaseAdmin.rpc as unknown as (fn: string, args: unknown) => Promise<unknown>)('increment_invoice_count', { _business_id: businessId }); } catch { /* optional RPC */ }
-              await supabaseAdmin
+              const { error: syncError } = await supabaseAdmin
                 .from('business_billing')
                 .update({ last_synced_at: new Date().toISOString() })
                 .eq('business_id', businessId);
+              if (syncError) throw new Error(`Failed to record payment recovery: ${syncError.message}`);
 
               try {
                 const { retryPendingMeterEvents } = await import('@/lib/billing-meter.server');
@@ -294,7 +310,7 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
               handled = false;
           }
 
-          await supabaseAdmin
+          const { error: receiptUpdateError } = await supabaseAdmin
             .from('stripe_webhook_events')
             .update({
               status: handled ? 'processed' : 'ignored',
@@ -302,6 +318,9 @@ export const Route = createFileRoute('/api/public/webhooks/stripe-inbound')({
               business_id: businessId,
             })
             .eq('stripe_event_id', event.id);
+          if (receiptUpdateError) {
+            throw new Error(`Failed to finalize webhook receipt: ${receiptUpdateError.message}`);
+          }
 
           return jsonOk({ ok: true, handled, eventType: event.type });
         } catch (err) {
