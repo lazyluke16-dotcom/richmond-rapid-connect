@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS leads_source_external_call_uk ON public.leads (source, external_call_id) WHERE external_call_id IS NOT NULL;
