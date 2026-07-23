@@ -98,13 +98,22 @@ export const Route = createFileRoute('/api/public/billing/checkout')({
           customerId = customer.id;
 
           // Persist customer ID immediately so retries reuse the same customer.
-          await supabaseAdmin
+          const { error: customerPersistError } = await supabaseAdmin
             .from('business_billing')
             .update({
               stripe_customer_id: customerId,
               billing_status: 'checkout_pending',
             })
             .eq('business_id', businessId);
+          if (customerPersistError) {
+            return new Response(JSON.stringify({
+              error: 'Could not save billing setup. No checkout session was created.',
+              code: 'billing_persistence_failed',
+            }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
         }
 
         // Union offer: apply a Stripe coupon that discounts the first month's base
