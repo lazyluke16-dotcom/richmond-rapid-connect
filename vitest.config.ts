@@ -1,0 +1,1 @@
+RuntimeException: Error calling MCP tool: [TextContent(type='text', text='Lovable API error: 499 request_cancelled: Request was cancelled', annotations=None, meta=None)]
