@@ -9,82 +9,51 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SignupRouteImport } from './routes/signup'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as RequestRouteImport } from './routes/request'
-import { Route as MissedCallRouteImport } from './routes/missed-call'
-import { Route as McpRouteImport } from './routes/mcp'
-import { Route as ConfirmationRouteImport } from './routes/confirmation'
-import { Route as ChatRouteImport } from './routes/chat'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AreasRouteImport } from './routes/areas'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ServicesEmergencyRouteImport } from './routes/services.emergency'
-import { Route as ServicesBlockedDrainsRouteImport } from './routes/services.blocked-drains'
-import { Route as BSlugRouteImport } from './routes/b.$slug'
-import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
-import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
-import { Route as AuthenticatedMissedCallSettingsRouteImport } from './routes/_authenticated/missed-call-settings'
-import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as AuthenticatedAiReceptionistRouteImport } from './routes/_authenticated/ai-receptionist'
-import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AreasRouteImport } from './routes/areas'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ChatRouteImport } from './routes/chat'
+import { Route as ConfirmationRouteImport } from './routes/confirmation'
+import { Route as McpRouteImport } from './routes/mcp'
+import { Route as MissedCallRouteImport } from './routes/missed-call'
+import { Route as RequestRouteImport } from './routes/request'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
-import { Route as BSlugIndexRouteImport } from './routes/b.$slug.index'
-import { Route as BSlugRequestRouteImport } from './routes/b.$slug.request'
-import { Route as BSlugMissedCallRouteImport } from './routes/b.$slug.missed-call'
-import { Route as BSlugConfirmationRouteImport } from './routes/b.$slug.confirmation'
-import { Route as BSlugChatRouteImport } from './routes/b.$slug.chat'
-import { Route as ApiWebhooksAiPhoneLeadRouteImport } from './routes/api/webhooks.ai-phone-lead'
-import { Route as ApiPublicProcessEnrichmentJobsRouteImport } from './routes/api/public/process-enrichment-jobs'
-import { Route as ApiDemoTriggerSmsRouteImport } from './routes/api/demo.trigger-sms'
-import { Route as ApiDashboardVerifyPinRouteImport } from './routes/api/dashboard.verify-pin'
-import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as AuthenticatedAiReceptionistRouteImport } from './routes/_authenticated/ai-receptionist'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedMissedCallSettingsRouteImport } from './routes/_authenticated/missed-call-settings'
+import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as BSlugRouteImport } from './routes/b.$slug'
+import { Route as ServicesBlockedDrainsRouteImport } from './routes/services.blocked-drains'
+import { Route as ServicesEmergencyRouteImport } from './routes/services.emergency'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
-import { Route as ApiPublicWebhooksVapiInboundRouteImport } from './routes/api/public/webhooks.vapi-inbound'
-import { Route as ApiPublicWebhooksStripeInboundRouteImport } from './routes/api/public/webhooks.stripe-inbound'
-import { Route as ApiPublicBillingSummaryRouteImport } from './routes/api/public/billing.summary'
-import { Route as ApiPublicBillingPortalRouteImport } from './routes/api/public/billing.portal'
+import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as ApiDashboardVerifyPinRouteImport } from './routes/api/dashboard.verify-pin'
+import { Route as ApiDemoTriggerSmsRouteImport } from './routes/api/demo.trigger-sms'
+import { Route as ApiPublicProcessEnrichmentJobsRouteImport } from './routes/api/public/process-enrichment-jobs'
+import { Route as ApiWebhooksAiPhoneLeadRouteImport } from './routes/api/webhooks.ai-phone-lead'
+import { Route as BSlugIndexRouteImport } from './routes/b.$slug.index'
+import { Route as BSlugChatRouteImport } from './routes/b.$slug.chat'
+import { Route as BSlugConfirmationRouteImport } from './routes/b.$slug.confirmation'
+import { Route as BSlugMissedCallRouteImport } from './routes/b.$slug.missed-call'
+import { Route as BSlugRequestRouteImport } from './routes/b.$slug.request'
 import { Route as ApiPublicBillingCheckoutRouteImport } from './routes/api/public/billing.checkout'
+import { Route as ApiPublicBillingPortalRouteImport } from './routes/api/public/billing.portal'
+import { Route as ApiPublicBillingSummaryRouteImport } from './routes/api/public/billing.summary'
+import { Route as ApiPublicWebhooksStripeInboundRouteImport } from './routes/api/public/webhooks.stripe-inbound'
+import { Route as ApiPublicWebhooksVapiInboundRouteImport } from './routes/api/public/webhooks.vapi-inbound'
 
-const SignupRoute = SignupRouteImport.update({
-  id: '/signup',
-  path: '/signup',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RequestRoute = RequestRouteImport.update({
-  id: '/request',
-  path: '/request',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MissedCallRoute = MissedCallRouteImport.update({
-  id: '/missed-call',
-  path: '/missed-call',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const McpRoute = McpRouteImport.update({
-  id: '/mcp',
-  path: '/mcp',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ConfirmationRoute = ConfirmationRouteImport.update({
-  id: '/confirmation',
-  path: '/confirmation',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ChatRoute = ChatRouteImport.update({
-  id: '/chat',
-  path: '/chat',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AreasRoute = AreasRouteImport.update({
@@ -92,38 +61,67 @@ const AreasRoute = AreasRouteImport.update({
   path: '/areas',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const ChatRoute = ChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ServicesEmergencyRoute = ServicesEmergencyRouteImport.update({
-  id: '/services/emergency',
-  path: '/services/emergency',
+const ConfirmationRoute = ConfirmationRouteImport.update({
+  id: '/confirmation',
+  path: '/confirmation',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ServicesBlockedDrainsRoute = ServicesBlockedDrainsRouteImport.update({
-  id: '/services/blocked-drains',
-  path: '/services/blocked-drains',
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BSlugRoute = BSlugRouteImport.update({
-  id: '/b/$slug',
-  path: '/b/$slug',
+const MissedCallRoute = MissedCallRouteImport.update({
+  id: '/missed-call',
+  path: '/missed-call',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => AuthenticatedRouteRoute,
+const RequestRoute = RequestRouteImport.update({
+  id: '/request',
+  path: '/request',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
-  id: '/onboarding',
-  path: '/onboarding',
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Char91DotmcpChar93ListToolsRoute =
+  Char91DotmcpChar93ListToolsRouteImport.update({
+    id: '/.mcp/list-tools',
+    path: '/.mcp/list-tools',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const AuthenticatedAiReceptionistRoute =
+  AuthenticatedAiReceptionistRouteImport.update({
+    id: '/ai-receptionist',
+    path: '/ai-receptionist',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedMissedCallSettingsRoute =
@@ -132,73 +130,34 @@ const AuthenticatedMissedCallSettingsRoute =
     path: '/missed-call-settings',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const AuthenticatedAiReceptionistRoute =
-  AuthenticatedAiReceptionistRouteImport.update({
-    id: '/ai-receptionist',
-    path: '/ai-receptionist',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const Char91DotwellKnownChar93OauthProtectedResourceRoute =
-  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
-    id: '/.well-known/oauth-protected-resource',
-    path: '/.well-known/oauth-protected-resource',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const Char91DotmcpChar93ListToolsRoute =
-  Char91DotmcpChar93ListToolsRouteImport.update({
-    id: '/.mcp/list-tools',
-    path: '/.mcp/list-tools',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const BSlugIndexRoute = BSlugIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => BSlugRoute,
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const BSlugRequestRoute = BSlugRequestRouteImport.update({
-  id: '/request',
-  path: '/request',
-  getParentRoute: () => BSlugRoute,
-} as any)
-const BSlugMissedCallRoute = BSlugMissedCallRouteImport.update({
-  id: '/missed-call',
-  path: '/missed-call',
-  getParentRoute: () => BSlugRoute,
-} as any)
-const BSlugConfirmationRoute = BSlugConfirmationRouteImport.update({
-  id: '/confirmation',
-  path: '/confirmation',
-  getParentRoute: () => BSlugRoute,
-} as any)
-const BSlugChatRoute = BSlugChatRouteImport.update({
-  id: '/chat',
-  path: '/chat',
-  getParentRoute: () => BSlugRoute,
-} as any)
-const ApiWebhooksAiPhoneLeadRoute = ApiWebhooksAiPhoneLeadRouteImport.update({
-  id: '/api/webhooks/ai-phone-lead',
-  path: '/api/webhooks/ai-phone-lead',
+const BSlugRoute = BSlugRouteImport.update({
+  id: '/b/$slug',
+  path: '/b/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicProcessEnrichmentJobsRoute =
-  ApiPublicProcessEnrichmentJobsRouteImport.update({
-    id: '/api/public/process-enrichment-jobs',
-    path: '/api/public/process-enrichment-jobs',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiDemoTriggerSmsRoute = ApiDemoTriggerSmsRouteImport.update({
-  id: '/api/demo/trigger-sms',
-  path: '/api/demo/trigger-sms',
+const ServicesBlockedDrainsRoute = ServicesBlockedDrainsRouteImport.update({
+  id: '/services/blocked-drains',
+  path: '/services/blocked-drains',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiDashboardVerifyPinRoute = ApiDashboardVerifyPinRouteImport.update({
-  id: '/api/dashboard/verify-pin',
-  path: '/api/dashboard/verify-pin',
+const ServicesEmergencyRoute = ServicesEmergencyRouteImport.update({
+  id: '/services/emergency',
+  path: '/services/emergency',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const Char91DotmcpChar93InvokeToolToolRoute =
@@ -207,37 +166,78 @@ const Char91DotmcpChar93InvokeToolToolRoute =
     path: '/.mcp/invoke-tool/$tool',
     getParentRoute: () => rootRouteImport,
   } as any)
-const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
-  id: '/.lovable/oauth/consent',
-  path: '/.lovable/oauth/consent',
+const ApiDashboardVerifyPinRoute = ApiDashboardVerifyPinRouteImport.update({
+  id: '/api/dashboard/verify-pin',
+  path: '/api/dashboard/verify-pin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicWebhooksVapiInboundRoute =
-  ApiPublicWebhooksVapiInboundRouteImport.update({
-    id: '/api/public/webhooks/vapi-inbound',
-    path: '/api/public/webhooks/vapi-inbound',
+const ApiDemoTriggerSmsRoute = ApiDemoTriggerSmsRouteImport.update({
+  id: '/api/demo/trigger-sms',
+  path: '/api/demo/trigger-sms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicProcessEnrichmentJobsRoute =
+  ApiPublicProcessEnrichmentJobsRouteImport.update({
+    id: '/api/public/process-enrichment-jobs',
+    path: '/api/public/process-enrichment-jobs',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiWebhooksAiPhoneLeadRoute = ApiWebhooksAiPhoneLeadRouteImport.update({
+  id: '/api/webhooks/ai-phone-lead',
+  path: '/api/webhooks/ai-phone-lead',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BSlugIndexRoute = BSlugIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => BSlugRoute,
+} as any)
+const BSlugChatRoute = BSlugChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => BSlugRoute,
+} as any)
+const BSlugConfirmationRoute = BSlugConfirmationRouteImport.update({
+  id: '/confirmation',
+  path: '/confirmation',
+  getParentRoute: () => BSlugRoute,
+} as any)
+const BSlugMissedCallRoute = BSlugMissedCallRouteImport.update({
+  id: '/missed-call',
+  path: '/missed-call',
+  getParentRoute: () => BSlugRoute,
+} as any)
+const BSlugRequestRoute = BSlugRequestRouteImport.update({
+  id: '/request',
+  path: '/request',
+  getParentRoute: () => BSlugRoute,
+} as any)
+const ApiPublicBillingCheckoutRoute =
+  ApiPublicBillingCheckoutRouteImport.update({
+    id: '/api/public/billing/checkout',
+    path: '/api/public/billing/checkout',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicBillingPortalRoute = ApiPublicBillingPortalRouteImport.update({
+  id: '/api/public/billing/portal',
+  path: '/api/public/billing/portal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicBillingSummaryRoute = ApiPublicBillingSummaryRouteImport.update({
+  id: '/api/public/billing/summary',
+  path: '/api/public/billing/summary',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicWebhooksStripeInboundRoute =
   ApiPublicWebhooksStripeInboundRouteImport.update({
     id: '/api/public/webhooks/stripe-inbound',
     path: '/api/public/webhooks/stripe-inbound',
     getParentRoute: () => rootRouteImport,
   } as any)
-const ApiPublicBillingSummaryRoute = ApiPublicBillingSummaryRouteImport.update({
-  id: '/api/public/billing/summary',
-  path: '/api/public/billing/summary',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicBillingPortalRoute = ApiPublicBillingPortalRouteImport.update({
-  id: '/api/public/billing/portal',
-  path: '/api/public/billing/portal',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPublicBillingCheckoutRoute =
-  ApiPublicBillingCheckoutRouteImport.update({
-    id: '/api/public/billing/checkout',
-    path: '/api/public/billing/checkout',
+const ApiPublicWebhooksVapiInboundRoute =
+  ApiPublicWebhooksVapiInboundRouteImport.update({
+    id: '/api/public/webhooks/vapi-inbound',
+    path: '/api/public/webhooks/vapi-inbound',
     getParentRoute: () => rootRouteImport,
   } as any)
 
@@ -505,67 +505,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/signup': {
-      id: '/signup'
-      path: '/signup'
-      fullPath: '/signup'
-      preLoaderRoute: typeof SignupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/request': {
-      id: '/request'
-      path: '/request'
-      fullPath: '/request'
-      preLoaderRoute: typeof RequestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/missed-call': {
-      id: '/missed-call'
-      path: '/missed-call'
-      fullPath: '/missed-call'
-      preLoaderRoute: typeof MissedCallRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mcp': {
-      id: '/mcp'
-      path: '/mcp'
-      fullPath: '/mcp'
-      preLoaderRoute: typeof McpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/confirmation': {
-      id: '/confirmation'
-      path: '/confirmation'
-      fullPath: '/confirmation'
-      preLoaderRoute: typeof ConfirmationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/chat': {
-      id: '/chat'
-      path: '/chat'
-      fullPath: '/chat'
-      preLoaderRoute: typeof ChatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/areas': {
-      id: '/areas'
-      path: '/areas'
-      fullPath: '/areas'
-      preLoaderRoute: typeof AreasRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -575,74 +519,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/areas': {
+      id: '/areas'
+      path: '/areas'
+      fullPath: '/areas'
+      preLoaderRoute: typeof AreasRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/services/emergency': {
-      id: '/services/emergency'
-      path: '/services/emergency'
-      fullPath: '/services/emergency'
-      preLoaderRoute: typeof ServicesEmergencyRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/services/blocked-drains': {
-      id: '/services/blocked-drains'
-      path: '/services/blocked-drains'
-      fullPath: '/services/blocked-drains'
-      preLoaderRoute: typeof ServicesBlockedDrainsRouteImport
+    '/chat': {
+      id: '/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof ChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/b/$slug': {
-      id: '/b/$slug'
-      path: '/b/$slug'
-      fullPath: '/b/$slug'
-      preLoaderRoute: typeof BSlugRouteImport
+    '/confirmation': {
+      id: '/confirmation'
+      path: '/confirmation'
+      fullPath: '/confirmation'
+      preLoaderRoute: typeof ConfirmationRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/settings': {
-      id: '/_authenticated/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/onboarding': {
-      id: '/_authenticated/onboarding'
-      path: '/onboarding'
-      fullPath: '/onboarding'
-      preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+    '/missed-call': {
+      id: '/missed-call'
+      path: '/missed-call'
+      fullPath: '/missed-call'
+      preLoaderRoute: typeof MissedCallRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/missed-call-settings': {
-      id: '/_authenticated/missed-call-settings'
-      path: '/missed-call-settings'
-      fullPath: '/missed-call-settings'
-      preLoaderRoute: typeof AuthenticatedMissedCallSettingsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+    '/request': {
+      id: '/request'
+      path: '/request'
+      fullPath: '/request'
+      preLoaderRoute: typeof RequestRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/dashboard': {
-      id: '/_authenticated/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/ai-receptionist': {
-      id: '/_authenticated/ai-receptionist'
-      path: '/ai-receptionist'
-      fullPath: '/ai-receptionist'
-      preLoaderRoute: typeof AuthenticatedAiReceptionistRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/.well-known/oauth-protected-resource': {
-      id: '/.well-known/oauth-protected-resource'
-      path: '/.well-known/oauth-protected-resource'
-      fullPath: '/.well-known/oauth-protected-resource'
-      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/.mcp/list-tools': {
@@ -652,74 +589,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/b/$slug/': {
-      id: '/b/$slug/'
-      path: '/'
-      fullPath: '/b/$slug/'
-      preLoaderRoute: typeof BSlugIndexRouteImport
-      parentRoute: typeof BSlugRoute
-    }
-    '/b/$slug/request': {
-      id: '/b/$slug/request'
-      path: '/request'
-      fullPath: '/b/$slug/request'
-      preLoaderRoute: typeof BSlugRequestRouteImport
-      parentRoute: typeof BSlugRoute
-    }
-    '/b/$slug/missed-call': {
-      id: '/b/$slug/missed-call'
-      path: '/missed-call'
-      fullPath: '/b/$slug/missed-call'
-      preLoaderRoute: typeof BSlugMissedCallRouteImport
-      parentRoute: typeof BSlugRoute
-    }
-    '/b/$slug/confirmation': {
-      id: '/b/$slug/confirmation'
-      path: '/confirmation'
-      fullPath: '/b/$slug/confirmation'
-      preLoaderRoute: typeof BSlugConfirmationRouteImport
-      parentRoute: typeof BSlugRoute
-    }
-    '/b/$slug/chat': {
-      id: '/b/$slug/chat'
-      path: '/chat'
-      fullPath: '/b/$slug/chat'
-      preLoaderRoute: typeof BSlugChatRouteImport
-      parentRoute: typeof BSlugRoute
-    }
-    '/api/webhooks/ai-phone-lead': {
-      id: '/api/webhooks/ai-phone-lead'
-      path: '/api/webhooks/ai-phone-lead'
-      fullPath: '/api/webhooks/ai-phone-lead'
-      preLoaderRoute: typeof ApiWebhooksAiPhoneLeadRouteImport
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/process-enrichment-jobs': {
-      id: '/api/public/process-enrichment-jobs'
-      path: '/api/public/process-enrichment-jobs'
-      fullPath: '/api/public/process-enrichment-jobs'
-      preLoaderRoute: typeof ApiPublicProcessEnrichmentJobsRouteImport
+    '/_authenticated/ai-receptionist': {
+      id: '/_authenticated/ai-receptionist'
+      path: '/ai-receptionist'
+      fullPath: '/ai-receptionist'
+      preLoaderRoute: typeof AuthenticatedAiReceptionistRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/missed-call-settings': {
+      id: '/_authenticated/missed-call-settings'
+      path: '/missed-call-settings'
+      fullPath: '/missed-call-settings'
+      preLoaderRoute: typeof AuthenticatedMissedCallSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/onboarding': {
+      id: '/_authenticated/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/b/$slug': {
+      id: '/b/$slug'
+      path: '/b/$slug'
+      fullPath: '/b/$slug'
+      preLoaderRoute: typeof BSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/demo/trigger-sms': {
-      id: '/api/demo/trigger-sms'
-      path: '/api/demo/trigger-sms'
-      fullPath: '/api/demo/trigger-sms'
-      preLoaderRoute: typeof ApiDemoTriggerSmsRouteImport
+    '/services/blocked-drains': {
+      id: '/services/blocked-drains'
+      path: '/services/blocked-drains'
+      fullPath: '/services/blocked-drains'
+      preLoaderRoute: typeof ServicesBlockedDrainsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/dashboard/verify-pin': {
-      id: '/api/dashboard/verify-pin'
-      path: '/api/dashboard/verify-pin'
-      fullPath: '/api/dashboard/verify-pin'
-      preLoaderRoute: typeof ApiDashboardVerifyPinRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/.mcp/invoke-tool/$tool': {
-      id: '/.mcp/invoke-tool/$tool'
-      path: '/.mcp/invoke-tool/$tool'
-      fullPath: '/.mcp/invoke-tool/$tool'
-      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
+    '/services/emergency': {
+      id: '/services/emergency'
+      path: '/services/emergency'
+      fullPath: '/services/emergency'
+      preLoaderRoute: typeof ServicesEmergencyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/.lovable/oauth/consent': {
@@ -729,25 +659,81 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DotlovableOauthConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/webhooks/vapi-inbound': {
-      id: '/api/public/webhooks/vapi-inbound'
-      path: '/api/public/webhooks/vapi-inbound'
-      fullPath: '/api/public/webhooks/vapi-inbound'
-      preLoaderRoute: typeof ApiPublicWebhooksVapiInboundRouteImport
+    '/.mcp/invoke-tool/$tool': {
+      id: '/.mcp/invoke-tool/$tool'
+      path: '/.mcp/invoke-tool/$tool'
+      fullPath: '/.mcp/invoke-tool/$tool'
+      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/webhooks/stripe-inbound': {
-      id: '/api/public/webhooks/stripe-inbound'
-      path: '/api/public/webhooks/stripe-inbound'
-      fullPath: '/api/public/webhooks/stripe-inbound'
-      preLoaderRoute: typeof ApiPublicWebhooksStripeInboundRouteImport
+    '/api/dashboard/verify-pin': {
+      id: '/api/dashboard/verify-pin'
+      path: '/api/dashboard/verify-pin'
+      fullPath: '/api/dashboard/verify-pin'
+      preLoaderRoute: typeof ApiDashboardVerifyPinRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/billing/summary': {
-      id: '/api/public/billing/summary'
-      path: '/api/public/billing/summary'
-      fullPath: '/api/public/billing/summary'
-      preLoaderRoute: typeof ApiPublicBillingSummaryRouteImport
+    '/api/demo/trigger-sms': {
+      id: '/api/demo/trigger-sms'
+      path: '/api/demo/trigger-sms'
+      fullPath: '/api/demo/trigger-sms'
+      preLoaderRoute: typeof ApiDemoTriggerSmsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/process-enrichment-jobs': {
+      id: '/api/public/process-enrichment-jobs'
+      path: '/api/public/process-enrichment-jobs'
+      fullPath: '/api/public/process-enrichment-jobs'
+      preLoaderRoute: typeof ApiPublicProcessEnrichmentJobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/webhooks/ai-phone-lead': {
+      id: '/api/webhooks/ai-phone-lead'
+      path: '/api/webhooks/ai-phone-lead'
+      fullPath: '/api/webhooks/ai-phone-lead'
+      preLoaderRoute: typeof ApiWebhooksAiPhoneLeadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/b/$slug/': {
+      id: '/b/$slug/'
+      path: '/'
+      fullPath: '/b/$slug/'
+      preLoaderRoute: typeof BSlugIndexRouteImport
+      parentRoute: typeof BSlugRoute
+    }
+    '/b/$slug/chat': {
+      id: '/b/$slug/chat'
+      path: '/chat'
+      fullPath: '/b/$slug/chat'
+      preLoaderRoute: typeof BSlugChatRouteImport
+      parentRoute: typeof BSlugRoute
+    }
+    '/b/$slug/confirmation': {
+      id: '/b/$slug/confirmation'
+      path: '/confirmation'
+      fullPath: '/b/$slug/confirmation'
+      preLoaderRoute: typeof BSlugConfirmationRouteImport
+      parentRoute: typeof BSlugRoute
+    }
+    '/b/$slug/missed-call': {
+      id: '/b/$slug/missed-call'
+      path: '/missed-call'
+      fullPath: '/b/$slug/missed-call'
+      preLoaderRoute: typeof BSlugMissedCallRouteImport
+      parentRoute: typeof BSlugRoute
+    }
+    '/b/$slug/request': {
+      id: '/b/$slug/request'
+      path: '/request'
+      fullPath: '/b/$slug/request'
+      preLoaderRoute: typeof BSlugRequestRouteImport
+      parentRoute: typeof BSlugRoute
+    }
+    '/api/public/billing/checkout': {
+      id: '/api/public/billing/checkout'
+      path: '/api/public/billing/checkout'
+      fullPath: '/api/public/billing/checkout'
+      preLoaderRoute: typeof ApiPublicBillingCheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/billing/portal': {
@@ -757,11 +743,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicBillingPortalRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/billing/checkout': {
-      id: '/api/public/billing/checkout'
-      path: '/api/public/billing/checkout'
-      fullPath: '/api/public/billing/checkout'
-      preLoaderRoute: typeof ApiPublicBillingCheckoutRouteImport
+    '/api/public/billing/summary': {
+      id: '/api/public/billing/summary'
+      path: '/api/public/billing/summary'
+      fullPath: '/api/public/billing/summary'
+      preLoaderRoute: typeof ApiPublicBillingSummaryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/stripe-inbound': {
+      id: '/api/public/webhooks/stripe-inbound'
+      path: '/api/public/webhooks/stripe-inbound'
+      fullPath: '/api/public/webhooks/stripe-inbound'
+      preLoaderRoute: typeof ApiPublicWebhooksStripeInboundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/vapi-inbound': {
+      id: '/api/public/webhooks/vapi-inbound'
+      path: '/api/public/webhooks/vapi-inbound'
+      fullPath: '/api/public/webhooks/vapi-inbound'
+      preLoaderRoute: typeof ApiPublicWebhooksVapiInboundRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
