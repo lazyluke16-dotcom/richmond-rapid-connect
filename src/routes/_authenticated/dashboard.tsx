@@ -5,7 +5,18 @@ import { useEffect, useState } from "react";
 import { fetchLeads, updateLeadStatus } from "@/lib/db-leads";
 import { jobLabel, urgencyLabel, type Lead } from "@/lib/leads";
 import { supabase } from "@/integrations/supabase/client";
-import { AlertTriangle, Phone, MapPin, Camera, TrendingUp, Clock, Bot, PhoneCall, LogOut, Settings } from "lucide-react";
+import {
+  AlertTriangle,
+  Phone,
+  MapPin,
+  Camera,
+  TrendingUp,
+  Clock,
+  Bot,
+  PhoneCall,
+  LogOut,
+  Settings,
+} from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -36,10 +47,11 @@ function Dashboard() {
 
   useEffect(() => {
     void loadAll();
-    const interval = setInterval(() => { void loadAll(); }, 5000);
+    const interval = setInterval(() => {
+      void loadAll();
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
-
 
   const active = leads.find((l) => l.id === activeId) ?? null;
 
@@ -54,7 +66,7 @@ function Dashboard() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    await router.navigate({ to: "/auth", replace: true });
+    await router.navigate({ to: "/auth", search: { next: undefined }, replace: true });
   };
 
   return (
@@ -64,15 +76,23 @@ function Dashboard() {
           <div>
             <div className="text-xs uppercase tracking-widest text-primary">Plumber view</div>
             <h1 className="mt-1 text-2xl font-black sm:text-3xl">Missed-job inbox</h1>
-            <p className="text-sm text-muted-foreground">Prioritised by urgency and AI lead score.</p>
+            <p className="text-sm text-muted-foreground">
+              Prioritised by urgency and AI lead score.
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden sm:block rounded-md border border-border bg-card px-4 py-2 text-sm">
-              <div className="text-muted-foreground text-xs uppercase tracking-widest">New today</div>
-              <div className="text-2xl font-black">{leads.filter((l) => l.status === "new").length}</div>
+              <div className="text-muted-foreground text-xs uppercase tracking-widest">
+                New today
+              </div>
+              <div className="text-2xl font-black">
+                {leads.filter((l) => l.status === "new").length}
+              </div>
             </div>
             <button
-              onClick={() => { void handleSignOut(); }}
+              onClick={() => {
+                void handleSignOut();
+              }}
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
             >
               <LogOut className="h-3.5 w-3.5" /> Sign out
@@ -110,7 +130,9 @@ function Dashboard() {
                   key={l.id}
                   onClick={() => setActiveId(l.id)}
                   className={`w-full rounded-lg border p-3 text-left transition ${
-                    activeId === l.id ? "border-primary bg-primary/10" : "border-border bg-card hover:border-primary/50"
+                    activeId === l.id
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-card hover:border-primary/50"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -123,7 +145,9 @@ function Dashboard() {
                     <ScoreBadge score={l.leadScore} urgency={l.urgency} />
                   </div>
                   <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" /> {timeAgo(l.createdAt)}</span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3 w-3" /> {timeAgo(l.createdAt)}
+                    </span>
                     <div className="flex items-center gap-2">
                       <SourceChip source={l.source} />
                       <StatusPill status={l.status} />
@@ -133,7 +157,11 @@ function Dashboard() {
               ))}
               {leads.length === 0 && !error && (
                 <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                  No leads yet. Start the demo from the <a href="/missed-call" className="text-primary underline">missed-call page</a> or submit a job request.
+                  No leads yet. Start the demo from the{" "}
+                  <a href="/missed-call" className="text-primary underline">
+                    missed-call page
+                  </a>{" "}
+                  or submit a job request.
                 </div>
               )}
             </div>
@@ -158,7 +186,9 @@ function LeadDetail({ lead, onStatus }: { lead: Lead; onStatus: (s: Lead["status
   const isUrgent = lead.urgency === "now" || lead.leadScore >= 85;
   return (
     <div className="rounded-lg border border-border bg-card">
-      <div className={`flex items-start justify-between gap-4 border-b border-border p-5 ${isUrgent ? "bg-destructive/10" : ""}`}>
+      <div
+        className={`flex items-start justify-between gap-4 border-b border-border p-5 ${isUrgent ? "bg-destructive/10" : ""}`}
+      >
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
             {isUrgent && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
@@ -178,7 +208,10 @@ function LeadDetail({ lead, onStatus }: { lead: Lead; onStatus: (s: Lead["status
           <SectionTitle>Customer</SectionTitle>
           <div className="mt-2 space-y-1 text-sm">
             <div className="font-bold text-base">{lead.name}</div>
-            <a href={`tel:${lead.phone.replace(/\s/g, "")}`} className="inline-flex items-center gap-2 text-primary font-semibold">
+            <a
+              href={`tel:${lead.phone.replace(/\s/g, "")}`}
+              className="inline-flex items-center gap-2 text-primary font-semibold"
+            >
               <Phone className="h-4 w-4" /> {lead.phone}
             </a>
             <div className="text-muted-foreground">Best time: {lead.bestTime || "—"}</div>
@@ -188,7 +221,14 @@ function LeadDetail({ lead, onStatus }: { lead: Lead; onStatus: (s: Lead["status
               <div className="text-muted-foreground text-xs">Call ref: {lead.external_call_id}</div>
             )}
             {lead.call_recording_url && (
-              <a href={lead.call_recording_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">Listen to call recording</a>
+              <a
+                href={lead.call_recording_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary underline"
+              >
+                Listen to call recording
+              </a>
             )}
           </div>
 
@@ -221,7 +261,12 @@ function LeadDetail({ lead, onStatus }: { lead: Lead; onStatus: (s: Lead["status
           {lead.photos.length ? (
             <div className="mt-2 grid grid-cols-2 gap-2">
               {lead.photos.map((p, i) => (
-                <img key={i} src={p} alt={`Job photo ${i + 1}`} className="aspect-square w-full rounded-md border border-border object-cover" />
+                <img
+                  key={i}
+                  src={p}
+                  alt={`Job photo ${i + 1}`}
+                  className="aspect-square w-full rounded-md border border-border object-cover"
+                />
               ))}
             </div>
           ) : (
@@ -247,38 +292,70 @@ function LeadDetail({ lead, onStatus }: { lead: Lead; onStatus: (s: Lead["status
   );
 }
 
-function SourceChip({ source }: { source?: Lead['source'] }) {
-  if (!source || source === 'form') return null;
+function SourceChip({ source }: { source?: Lead["source"] }) {
+  if (!source || source === "form") return null;
   const map = {
-    missed_call: { label: 'Missed call', icon: PhoneCall, cls: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' },
-    ai_phone_agent: { label: 'AI phone', icon: Bot, cls: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
+    missed_call: {
+      label: "Missed call",
+      icon: PhoneCall,
+      cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+    },
+    ai_phone_agent: {
+      label: "AI phone",
+      icon: Bot,
+      cls: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    },
   } as const;
   const cfg = map[source as keyof typeof map];
   if (!cfg) return null;
   const Icon = cfg.icon;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${cfg.cls}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${cfg.cls}`}
+    >
       <Icon className="h-2.5 w-2.5" /> {cfg.label}
     </span>
   );
 }
 
-function SectionTitle({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <div className={`text-xs uppercase tracking-widest text-muted-foreground ${className}`}>{children}</div>;
+function SectionTitle({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`text-xs uppercase tracking-widest text-muted-foreground ${className}`}>
+      {children}
+    </div>
+  );
 }
 
-function ScoreBadge({ score, urgency, large }: { score: number; urgency: Lead["urgency"]; large?: boolean }) {
+function ScoreBadge({
+  score,
+  urgency,
+  large,
+}: {
+  score: number;
+  urgency: Lead["urgency"];
+  large?: boolean;
+}) {
   const isHot = urgency === "now" || score >= 85;
   const isWarm = !isHot && score >= 60;
   const cls = isHot
     ? "bg-destructive text-destructive-foreground"
     : isWarm
-    ? "bg-primary text-primary-foreground"
-    : "bg-secondary text-foreground";
+      ? "bg-primary text-primary-foreground"
+      : "bg-secondary text-foreground";
   return (
     <div className={`rounded-md ${cls} ${large ? "px-3 py-2" : "px-2 py-1"} text-center`}>
       <div className={`font-black ${large ? "text-2xl" : "text-sm"} leading-none`}>{score}</div>
-      <div className={`${large ? "text-[10px]" : "text-[9px]"} uppercase tracking-widest opacity-90`}>score</div>
+      <div
+        className={`${large ? "text-[10px]" : "text-[9px]"} uppercase tracking-widest opacity-90`}
+      >
+        score
+      </div>
     </div>
   );
 }
@@ -286,7 +363,13 @@ function ScoreBadge({ score, urgency, large }: { score: number; urgency: Lead["u
 function StatusPill({ status }: { status: Lead["status"] }) {
   const label = status.replace("-", " ");
   const cls =
-    status === "new" ? "text-primary" : status === "called-back" ? "text-yellow-400" : status === "booked" ? "text-green-400" : "text-muted-foreground";
+    status === "new"
+      ? "text-primary"
+      : status === "called-back"
+        ? "text-yellow-400"
+        : status === "booked"
+          ? "text-green-400"
+          : "text-muted-foreground";
   return <span className={`uppercase font-bold tracking-widest ${cls}`}>{label}</span>;
 }
 
