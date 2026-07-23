@@ -5,7 +5,7 @@
  * the same rules; the server treats these as authoritative and never
  * trusts client-side validation.
  */
-import { z } from 'zod';
+import { z } from "zod";
 
 /** 8 wizard steps: Business, Branding, Services, Areas, Hours, Plan, Website, Finish. */
 export const ONBOARDING_STEP_MIN = 0;
@@ -19,7 +19,7 @@ export const OnboardingStepSchema = z
 
 /** Clamp any incoming value into the allowed step range. */
 export function clampOnboardingStep(input: unknown): number {
-  const n = typeof input === 'number' ? input : Number(input);
+  const n = typeof input === "number" ? input : Number(input);
   if (!Number.isFinite(n)) return ONBOARDING_STEP_MIN;
   const i = Math.trunc(n);
   if (i < ONBOARDING_STEP_MIN) return ONBOARDING_STEP_MIN;
@@ -44,12 +44,42 @@ export interface OnboardingProgressInput {
   hasWebsiteCopy: boolean;
   completed: boolean;
 }
+
+export interface OnboardingReadinessInput {
+  businessName?: string | null;
+  servicesCount: number;
+  areasCount: number;
+  hoursCount: number;
+  selectedPlan?: string | null;
+  heroHeading?: string | null;
+  heroSubheading?: string | null;
+}
+
+/**
+ * Return every mandatory first-customer onboarding gate that is still missing.
+ * The server uses this immediately before activation; the browser must never be
+ * the authority for deciding that onboarding is complete.
+ */
+export function getOnboardingReadinessFailures(input: OnboardingReadinessInput): string[] {
+  const failures: string[] = [];
+  if ((input.businessName ?? "").trim().length < 2) failures.push("business profile");
+  if (input.servicesCount < 1) failures.push("at least one service");
+  if (input.areasCount < 1) failures.push("at least one service area");
+  if (input.hoursCount < 1) failures.push("business hours");
+  if (!["missed_call_recovery", "ai_receptionist"].includes(input.selectedPlan ?? "")) {
+    failures.push("a valid plan");
+  }
+  if ((input.heroHeading ?? "").trim().length < 2) failures.push("website headline");
+  if ((input.heroSubheading ?? "").trim().length < 2) failures.push("website description");
+  return failures;
+}
 export function deriveOnboardingStep(p: OnboardingProgressInput): number {
   if (p.completed) return ONBOARDING_STEP_MAX;
   if (!p.hasBusiness) return 0;
   // Step 1 = branding — always reachable once business exists.
   let step = 1;
-  if (p.servicesCount > 0) step = 3; // services saved -> areas next
+  if (p.servicesCount > 0)
+    step = 3; // services saved -> areas next
   else if (step < 2) step = 2; // branding saved implicitly by business creation
   if (p.areasCount > 0) step = Math.max(step, 4);
   if (p.hoursCount > 0) step = Math.max(step, 5);
@@ -64,9 +94,9 @@ export const ServiceInputSchema = z.object({
   service_key: z
     .string()
     .trim()
-    .min(1, 'service_key required')
+    .min(1, "service_key required")
     .max(64)
-    .regex(/^[a-z0-9_\-]+$/i, 'service_key must be alphanumeric/underscore/hyphen'),
+    .regex(/^[a-z0-9_-]+$/i, "service_key must be alphanumeric/underscore/hyphen"),
   display_name: z.string().trim().min(1).max(120),
   active: z.boolean().optional(),
 });
@@ -93,17 +123,17 @@ export const HourRowSchema = z
   .refine(
     (r) =>
       r.closed ||
-      (typeof r.open_time === 'string' &&
-        typeof r.close_time === 'string' &&
+      (typeof r.open_time === "string" &&
+        typeof r.close_time === "string" &&
         r.open_time < r.close_time),
-    { message: 'open_time must be before close_time when the day is open' },
+    { message: "open_time must be before close_time when the day is open" },
   );
 export const HoursPayloadSchema = z.object({
   hours: z.array(HourRowSchema).max(7),
 });
 
 export const PlanPayloadSchema = z.object({
-  plan: z.enum(['missed_call_recovery', 'ai_receptionist']),
+  plan: z.enum(["missed_call_recovery", "ai_receptionist"]),
 });
 
 export type ServicesPayload = z.infer<typeof ServicesPayloadSchema>;
@@ -128,20 +158,14 @@ export const CoveragePayloadSchema = z.object({
     .string()
     .trim()
     .max(16)
-    .regex(/^\d{3,5}$/, 'postcode must be numeric')
+    .regex(/^\d{3,5}$/, "postcode must be numeric")
     .nullable()
     .optional()
-    .or(z.literal('').transform(() => null)),
-  travel_radius_km: z
-    .number()
-    .int()
-    .min(0)
-    .max(500)
-    .nullable()
-    .optional(),
+    .or(z.literal("").transform(() => null)),
+  travel_radius_km: z.number().int().min(0).max(500).nullable().optional(),
   region_labels: z.array(z.string().trim().min(1).max(80)).max(32).optional(),
   postcode_ranges: z
-    .array(z.string().trim().regex(POSTCODE_RANGE, 'expected e.g. 3000 or 3000-3199'))
+    .array(z.string().trim().regex(POSTCODE_RANGE, "expected e.g. 3000 or 3000-3199"))
     .max(64)
     .optional(),
   excluded_areas: z.array(z.string().trim().min(1).max(120)).max(128).optional(),
@@ -162,10 +186,10 @@ export const LicencePayloadSchema = z.object({
   licence_holder_name: z.string().trim().max(120).nullable().optional(),
   licence_expiry: z
     .string()
-    .regex(ISO_DATE, 'expected YYYY-MM-DD')
+    .regex(ISO_DATE, "expected YYYY-MM-DD")
     .nullable()
     .optional()
-    .or(z.literal('').transform(() => null)),
+    .or(z.literal("").transform(() => null)),
   licence_public: z.boolean().optional(),
 });
 export type LicencePayload = z.infer<typeof LicencePayloadSchema>;
@@ -182,13 +206,13 @@ export type LicencePayload = z.infer<typeof LicencePayloadSchema>;
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
 export function isValidTenantSlug(slug: unknown): slug is string {
-  return typeof slug === 'string' && SLUG_RE.test(slug);
+  return typeof slug === "string" && SLUG_RE.test(slug);
 }
 
 export type LogoLinkTarget =
-  | { kind: 'public'; to: '/' }
-  | { kind: 'tenant-public'; to: '/b/$slug'; slug: string }
-  | { kind: 'dashboard'; to: '/dashboard' };
+  | { kind: "public"; to: "/" }
+  | { kind: "tenant-public"; to: "/b/$slug"; slug: string }
+  | { kind: "dashboard"; to: "/dashboard" };
 
 /**
  * Resolve the destination for the top-left brand link.
@@ -205,9 +229,9 @@ export function resolveLogoLink(input: {
   authenticated: boolean;
   tenantSlug?: string | null;
 }): LogoLinkTarget {
-  if (!input.authenticated) return { kind: 'public', to: '/' };
+  if (!input.authenticated) return { kind: "public", to: "/" };
   if (isValidTenantSlug(input.tenantSlug)) {
-    return { kind: 'tenant-public', to: '/b/$slug', slug: input.tenantSlug };
+    return { kind: "tenant-public", to: "/b/$slug", slug: input.tenantSlug };
   }
-  return { kind: 'dashboard', to: '/dashboard' };
+  return { kind: "dashboard", to: "/dashboard" };
 }
