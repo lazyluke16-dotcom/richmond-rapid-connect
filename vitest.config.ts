@@ -1,1 +1,17 @@
-RuntimeException: Error calling MCP tool: [TextContent(type='text', text='Lovable API error: 499 request_cancelled: Request was cancelled', annotations=None, meta=None)]
+import { defineConfig } from "vitest/config";
+import tsconfigPaths from "vite-tsconfig-paths";
+
+export default defineConfig({
+  plugins: [tsconfigPaths()],
+  test: {
+    environment: "node",
+    globals: true,
+    include: ["src/**/__tests__/**/*.test.ts", "src/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],
+      include: ["src/lib/**/*.ts", "src/routes/api/**/*.ts"],
+      exclude: ["src/lib/__tests__/**", "src/integrations/**"],
+    },
+  },
+});
