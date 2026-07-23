@@ -4,18 +4,19 @@ import { parsePublicBusiness, PUBLIC_BUSINESS_COLUMNS, type TenantBundle } from 
 /**
  * Public loader: resolve a tenant + its public-facing services/areas/hours by
  * slug. This is a server-only function and reads only the deliberately
- * allowlisted public view/columns. Using the server client avoids production
+ * allowlisted public columns. Using the server client avoids production
  * runtime incompatibilities between Supabase's legacy JWT anon key and newer
- * opaque publishable keys while the view itself still filters inactive rows.
+ * opaque publishable keys. The active predicate is enforced explicitly.
  */
 export const getTenantBundleBySlug = createServerFn({ method: "GET" })
   .inputValidator((data: { slug: string }) => data)
   .handler(async ({ data }): Promise<TenantBundle | null> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: bizRaw, error: businessError } = await supabaseAdmin
-      .from("businesses_public")
+      .from("businesses")
       .select(PUBLIC_BUSINESS_COLUMNS)
       .eq("slug", data.slug)
+      .eq("active", true)
       .maybeSingle();
     if (businessError) {
       throw new Error(`Unable to load public business: ${businessError.message}`);
