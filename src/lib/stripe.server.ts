@@ -1,16 +1,73 @@
 // Server-only Stripe SDK client. The .server.ts suffix excludes this from the
 // browser bundle via vite-tanstack-config. Never import from client-side code.
-import Stripe from 'stripe';
+import Stripe from "stripe";
+
+export type StripeMode = "test" | "live";
+
+export const STRIPE_API_VERSION = "2026-06-24.dahlia";
+
+export function stripeKeyMode(key: string): StripeMode | null {
+  if (/^(?:sk|rk)_test_/.test(key)) return "test";
+  if (/^(?:sk|rk)_live_/.test(key)) return "live";
+  if (/^sk_org_test_/.test(key)) return "test";
+  if (/^sk_org_live_/.test(key)) return "live";
+  return null;
+}
+
+export function stripeKeyRequiresContext(key: string): boolean {
+  return /^sk_org_(?:test|live)_/.test(key);
+}
+
+export function assertStripeContextAvailable(
+  key: string,
+  context = process.env.STRIPE_CONTEXT,
+): string | undefined {
+  const normalized = context?.trim() || undefined;
+  if (stripeKeyRequiresContext(key) && !normalized) {
+    throw new Error(
+      "[stripe] STRIPE_CONTEXT is required when STRIPE_SECRET_KEY is an organization API key",
+    );
+  }
+  return normalized;
+}
+
+export function assertStripeKeyMatchesMode(
+  key: string,
+  configuredMode = process.env.STRIPE_MODE,
+): StripeMode {
+  const keyMode = stripeKeyMode(key);
+  if (!keyMode) {
+    throw new Error(
+      "[stripe] STRIPE_SECRET_KEY must be a Stripe account, restricted, or organization secret key",
+    );
+  }
+
+  if (configuredMode && configuredMode !== "test" && configuredMode !== "live") {
+    throw new Error('[stripe] STRIPE_MODE must be either "test" or "live"');
+  }
+
+  if (configuredMode && configuredMode !== keyMode) {
+    throw new Error(
+      `[stripe] STRIPE_MODE=${configuredMode} does not match the configured ${keyMode}-mode key`,
+    );
+  }
+
+  return keyMode;
+}
 
 function createStripeClient(): Stripe {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) {
-    throw new Error('[stripe] STRIPE_SECRET_KEY is not configured — set it in Lovable Project Settings → Environment Variables');
+    throw new Error(
+      "[stripe] STRIPE_SECRET_KEY is not configured — set it in Lovable Project Settings → Environment Variables",
+    );
   }
-  if (key.startsWith('sk_live_')) {
-    throw new Error('[stripe] Live-mode Stripe keys are not permitted in this build — use sk_test_ only');
-  }
-  return new Stripe(key);
+  assertStripeKeyMatchesMode(key);
+  const stripeContext = assertStripeContextAvailable(key);
+  return new Stripe(key, {
+    apiVersion: STRIPE_API_VERSION,
+    ...(stripeContext ? { stripeContext } : {}),
+  });
 }
 
 let _stripe: Stripe | undefined;
@@ -20,8 +77,14 @@ export function getStripe(): Stripe {
 }
 
 export function stripeConfigured(): boolean {
-  const key = process.env.STRIPE_SECRET_KEY ?? '';
-  return key.startsWith('sk_test_');
+  const key = process.env.STRIPE_SECRET_KEY ?? "";
+  try {
+    assertStripeKeyMatchesMode(key);
+    assertStripeContextAvailable(key);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Returns all required Stripe price IDs from environment variables.
@@ -33,18 +96,18 @@ export function getStripePrices(): { MCR_BASE: string; AIR_BASE: string; AIR_USA
   const require = (name: string): string => {
     const val = process.env[name];
     if (!val) missing.push(name);
-    return val ?? '';
+    return val ?? "";
   };
 
   const prices = {
-    MCR_BASE: require('STRIPE_PRICE_MCR_BASE'),
-    AIR_BASE: require('STRIPE_PRICE_AIR_BASE'),
-    AIR_USAGE: require('STRIPE_PRICE_AIR_USAGE'),
+    MCR_BASE: require("STRIPE_PRICE_MCR_BASE"),
+    AIR_BASE: require("STRIPE_PRICE_AIR_BASE"),
+    AIR_USAGE: require("STRIPE_PRICE_AIR_USAGE"),
   };
 
   if (missing.length > 0) {
     throw new Error(
-      `[stripe] Missing required Stripe price configuration: ${missing.join(', ')} — set these in Lovable Project Settings → Environment Variables`,
+      `[stripe] Missing required Stripe price configuration: ${missing.join(", ")} — set these in Lovable Project Settings → Environment Variables`,
     );
   }
 
@@ -60,21 +123,23 @@ export function getUnionCouponId(): string | null {
   return process.env.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE ?? null;
 }
 
-export const STRIPE_METER_EVENT_NAME = 'ai_voice_seconds';
+export const STRIPE_METER_EVENT_NAME = "ai_voice_seconds";
 
 // Base price amounts in AUD cents — must match Stripe config exactly.
-export const PLAN_BASE_PRICE_CENTS: Record<'missed_call_recovery' | 'ai_receptionist', number> = {
-  missed_call_recovery: 900,  // A$9/month
-  ai_receptionist: 1500,       // A$15/month
+export const PLAN_BASE_PRICE_CENTS: Record<"missed_call_recovery" | "ai_receptionist", number> = {
+  missed_call_recovery: 900, // A$9/month
+  ai_receptionist: 1500, // A$15/month
 };
 
-export type StripePlan = 'missed_call_recovery' | 'ai_receptionist';
+export type StripePlan = "missed_call_recovery" | "ai_receptionist";
 
 // Server selects line items — client never provides price IDs.
 // Throws if required Stripe price env vars are not configured.
-export function getCheckoutLineItems(plan: StripePlan): Stripe.Checkout.SessionCreateParams.LineItem[] {
+export function getCheckoutLineItems(
+  plan: StripePlan,
+): Stripe.Checkout.SessionCreateParams.LineItem[] {
   const prices = getStripePrices();
-  if (plan === 'missed_call_recovery') {
+  if (plan === "missed_call_recovery") {
     return [{ price: prices.MCR_BASE, quantity: 1 }];
   }
   return [

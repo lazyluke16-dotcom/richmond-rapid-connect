@@ -19,41 +19,71 @@ export async function sendSms(
   businessId?: string | null,
 ): Promise<SmsResult> {
   const mode = process.env.SMS_MODE ?? "demo";
-  const fromNumber = process.env.TWILIO_FROM_NUMBER ?? "DEMO_NUMBER";
+  const configuredFromNumber = process.env.TWILIO_FROM_NUMBER;
 
   if (mode === "twilio") {
     const sid = process.env.TWILIO_ACCOUNT_SID;
     const token = process.env.TWILIO_AUTH_TOKEN;
-    if (!sid || !token) {
-      console.warn(
-        "[SMS] TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN not set — falling back to demo mode",
+
+    if (!sid || !token || !configuredFromNumber) {
+      console.error("[SMS] Twilio production mode is incomplete");
+      const result: SmsResult = {
+        id: crypto.randomUUID(),
+        status: "failed",
+        to,
+        body,
+        mode: "twilio",
+        errorMessage: "Twilio production configuration is incomplete",
+      };
+      await logSmsEvent(
+        { ...result, fromNumber: configuredFromNumber ?? "UNCONFIGURED" },
+        businessId ?? null,
       );
-    } else {
+      return result;
+    }
+
+    try {
+      const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: "Basic " + Buffer.from(`${sid}:${token}`).toString("base64"),
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          To: to,
+          From: configuredFromNumber,
+          Body: body,
+        }).toString(),
+      });
+      const json = (await res.json()) as { sid?: string; status?: string; message?: string };
+      const result: SmsResult = {
+        id: json.sid ?? crypto.randomUUID(),
+        status: res.ok ? "sent" : "failed",
+        to,
+        body,
+        mode: "twilio",
+        twilioSid: json.sid,
+        errorMessage: res.ok ? undefined : json.message,
+      };
+      await logSmsEvent({ ...result, fromNumber: configuredFromNumber }, businessId ?? null);
+      return result;
+    } catch {
+      console.error("[SMS] Twilio send failed");
+      const result: SmsResult = {
+        id: crypto.randomUUID(),
+        status: "failed",
+        to,
+        body,
+        mode: "twilio",
+        errorMessage: "Twilio request failed",
+      };
       try {
-        const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            Authorization: "Basic " + Buffer.from(`${sid}:${token}`).toString("base64"),
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams({ To: to, From: fromNumber, Body: body }).toString(),
-        });
-        const json = (await res.json()) as { sid?: string; status?: string; message?: string };
-        const result: SmsResult = {
-          id: json.sid ?? crypto.randomUUID(),
-          status: res.ok ? "sent" : "failed",
-          to,
-          body,
-          mode: "twilio",
-          twilioSid: json.sid,
-          errorMessage: res.ok ? undefined : json.message,
-        };
-        await logSmsEvent({ ...result, fromNumber }, businessId ?? null);
-        return result;
-      } catch (err) {
-        console.error("[SMS] Twilio send failed:", err);
+        await logSmsEvent({ ...result, fromNumber: configuredFromNumber }, businessId ?? null);
+      } catch {
+        console.error("[SMS] Twilio failure audit persistence failed");
       }
+      return result;
     }
   }
 
@@ -64,7 +94,10 @@ export async function sendSms(
     body,
     mode: "demo",
   };
-  await logSmsEvent({ ...result, fromNumber }, businessId ?? null);
+  await logSmsEvent(
+    { ...result, fromNumber: configuredFromNumber ?? "DEMO_NUMBER" },
+    businessId ?? null,
+  );
   return result;
 }
 

@@ -1,48 +1,68 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { getStripe, getCheckoutLineItems, getUnionCouponId, type StripePlan } from '@/lib/stripe.server';
-import type Stripe from 'stripe';
-import { extractBearerToken, requireAuthAndBusiness } from '@/lib/billing.server';
+import { createFileRoute } from "@tanstack/react-router";
+import {
+  getStripe,
+  getCheckoutLineItems,
+  getUnionCouponId,
+  type StripePlan,
+} from "@/lib/stripe.server";
+import type Stripe from "stripe";
+import { extractBearerToken, requireAuthAndBusiness } from "@/lib/billing.server";
 
-const ALLOWED_PLANS = new Set<StripePlan>(['missed_call_recovery', 'ai_receptionist']);
+const ALLOWED_PLANS = new Set<StripePlan>(["missed_call_recovery", "ai_receptionist"]);
+const STRIPE_INTEGRATION_IDENTIFIER = "plumbing_ai_receptionist_vqkhtnra";
 
-export const Route = createFileRoute('/api/public/billing/checkout')({
+export function resolveBillingReturnOrigin(
+  request: Request,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const configured = env.PUBLIC_JOB_REQUEST_URL?.trim();
+  const url = new URL(configured || request.url);
+  const isLocalHttp =
+    url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+  if (url.protocol !== "https:" && !isLocalHttp) {
+    throw new Error("Billing return URL must use HTTPS");
+  }
+  return url.origin;
+}
+
+export const Route = createFileRoute("/api/public/billing/checkout")({
   server: {
     handlers: {
       POST: async ({ request }) => {
         const token = extractBearerToken(request);
         if (!token) {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), {
             status: 401,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { "Content-Type": "application/json" },
           });
         }
 
-        const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         let userId: string, businessId: string;
         try {
           ({ userId, businessId } = await requireAuthAndBusiness(token, supabaseAdmin));
         } catch (e) {
           const err = e as { status?: number; message?: string };
-          return new Response(JSON.stringify({ error: err.message ?? 'Auth failed' }), {
+          return new Response(JSON.stringify({ error: err.message ?? "Auth failed" }), {
             status: err.status ?? 401,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { "Content-Type": "application/json" },
           });
         }
 
         // Load billing row — source of truth for plan and subscription state.
         const { data: billingData, error: billingErr } = await supabaseAdmin
-          .from('business_billing')
+          .from("business_billing")
           .select(
-            'selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at',
+            "selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at",
           )
-          .eq('business_id', businessId)
+          .eq("business_id", businessId)
           .maybeSingle();
 
         if (billingErr) {
-          return new Response(JSON.stringify({ error: 'Billing lookup failed' }), {
+          return new Response(JSON.stringify({ error: "Billing lookup failed" }), {
             status: 500,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { "Content-Type": "application/json" },
           });
         }
 
@@ -58,32 +78,38 @@ export const Route = createFileRoute('/api/public/billing/checkout')({
         // Server selects the plan from DB — client cannot inject a plan.
         const plan = (billing?.selected_plan ?? null) as StripePlan | null;
         if (!plan || !ALLOWED_PLANS.has(plan)) {
-          return new Response(JSON.stringify({ error: 'No valid plan selected. Complete onboarding first.' }), {
-            status: 400,
-            headers: { 'Content-Type': 'application/json' },
-          });
+          return new Response(
+            JSON.stringify({ error: "No valid plan selected. Complete onboarding first." }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
         }
 
         // Guard: already subscribed — do not create duplicate checkout.
         if (billing?.stripe_subscription_id) {
-          return new Response(JSON.stringify({ error: 'Already subscribed', code: 'already_subscribed' }), {
-            status: 409,
-            headers: { 'Content-Type': 'application/json' },
-          });
+          return new Response(
+            JSON.stringify({ error: "Already subscribed", code: "already_subscribed" }),
+            {
+              status: 409,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
         }
 
         const stripe = getStripe();
-        const origin = request.headers.get('origin') ?? 'https://your-ai-trade-assistant.lovable.app';
+        const origin = resolveBillingReturnOrigin(request);
 
         // Reuse existing Stripe customer or create one.
         let customerId = billing?.stripe_customer_id ?? undefined;
-        const isFirstCheckout = !customerId && (billing?.billing_status ?? 'setup') === 'setup';
+        const isFirstCheckout = !customerId && (billing?.billing_status ?? "setup") === "setup";
 
         if (!customerId) {
           const { data: bizData } = await supabaseAdmin
-            .from('businesses')
-            .select('name')
-            .eq('id', businessId)
+            .from("businesses")
+            .select("name")
+            .eq("id", businessId)
             .maybeSingle();
           const bizName = (bizData as { name?: string } | null)?.name;
 
@@ -99,20 +125,23 @@ export const Route = createFileRoute('/api/public/billing/checkout')({
 
           // Persist customer ID immediately so retries reuse the same customer.
           const { error: customerPersistError } = await supabaseAdmin
-            .from('business_billing')
+            .from("business_billing")
             .update({
               stripe_customer_id: customerId,
-              billing_status: 'checkout_pending',
+              billing_status: "checkout_pending",
             })
-            .eq('business_id', businessId);
+            .eq("business_id", businessId);
           if (customerPersistError) {
-            return new Response(JSON.stringify({
-              error: 'Could not save billing setup. No checkout session was created.',
-              code: 'billing_persistence_failed',
-            }), {
-              status: 500,
-              headers: { 'Content-Type': 'application/json' },
-            });
+            return new Response(
+              JSON.stringify({
+                error: "Could not save billing setup. No checkout session was created.",
+                code: "billing_persistence_failed",
+              }),
+              {
+                status: 500,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
           }
         }
 
@@ -145,25 +174,27 @@ export const Route = createFileRoute('/api/public/billing/checkout')({
           if (!couponId) {
             return new Response(
               JSON.stringify({
-                error: 'Union offer is not configured — set STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE in environment variables',
-                code: 'union_coupon_not_configured',
+                error:
+                  "Union offer is not configured — set STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE in environment variables",
+                code: "union_coupon_not_configured",
               }),
-              { status: 500, headers: { 'Content-Type': 'application/json' } },
+              { status: 500, headers: { "Content-Type": "application/json" } },
             );
           }
           checkoutDiscounts = [{ coupon: couponId }];
         }
 
         const session = await stripe.checkout.sessions.create({
+          integration_identifier: STRIPE_INTEGRATION_IDENTIFIER,
           customer: customerId,
-          mode: 'subscription',
-          payment_method_collection: 'always',
+          mode: "subscription",
+          payment_method_collection: "always",
           line_items: getCheckoutLineItems(plan),
           ...(checkoutDiscounts ? { discounts: checkoutDiscounts } : {}),
           subscription_data: {
             metadata: { business_id: businessId, plan },
           },
-          customer_update: { address: 'auto' },
+          customer_update: { address: "auto" },
           tax_id_collection: { enabled: false },
           success_url: `${origin}/dashboard?billing=success&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${origin}/dashboard?billing=cancelled`,
@@ -172,7 +203,7 @@ export const Route = createFileRoute('/api/public/billing/checkout')({
 
         return new Response(JSON.stringify({ url: session.url }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { "Content-Type": "application/json" },
         });
       },
     },
