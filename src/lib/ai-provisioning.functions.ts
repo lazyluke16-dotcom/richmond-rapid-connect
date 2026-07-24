@@ -150,7 +150,8 @@ export const createAiAssistantForBusiness = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertCallerCanProvision(context as unknown as ProvisioningContext, data.businessId);
     await assertAiAccess(data.businessId);
-    const { createVapiAssistant, vapiCredentialsAvailable } = await import("@/lib/vapi.server");
+    const { createVapiAssistant, resolveVapiServerCredentialId, vapiCredentialsAvailable } =
+      await import("@/lib/vapi.server");
     if (!vapiCredentialsAvailable()) {
       return {
         provisioned: false,
@@ -159,13 +160,18 @@ export const createAiAssistantForBusiness = createServerFn({ method: "POST" })
       };
     }
     const cfg = await loadTenantConfig(data.businessId);
+    const serverUrl = resolveVapiWebhookUrl();
+    if (!serverUrl) {
+      throw new Error("VAPI_WEBHOOK_URL or PUBLIC_JOB_REQUEST_URL is required");
+    }
+    const serverCredentialId = await resolveVapiServerCredentialId(serverUrl);
     const created = await createVapiAssistant({
       name: `${cfg.business.name} Receptionist`,
       firstMessage: cfg.settings.first_message,
       systemPrompt: cfg.systemPrompt,
       language: cfg.settings.language,
-      serverUrl: resolveVapiWebhookUrl() || undefined,
-      serverSecret: process.env.VAPI_SERVER_SECRET,
+      serverUrl,
+      serverCredentialId,
       recordingEnabled: cfg.settings.recording_enabled,
       maxDurationSeconds: cfg.settings.max_call_duration_seconds,
     });
@@ -228,7 +234,8 @@ export const updateAiAssistantForBusiness = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertCallerCanProvision(context as unknown as ProvisioningContext, data.businessId);
     await assertAiAccess(data.businessId);
-    const { updateVapiAssistant, vapiCredentialsAvailable } = await import("@/lib/vapi.server");
+    const { resolveVapiServerCredentialId, updateVapiAssistant, vapiCredentialsAvailable } =
+      await import("@/lib/vapi.server");
     if (!vapiCredentialsAvailable()) {
       return {
         updated: false,
@@ -245,13 +252,18 @@ export const updateAiAssistantForBusiness = createServerFn({ method: "POST" })
     const assistantId = (row as { provider_assistant_id?: string } | null)?.provider_assistant_id;
     if (!assistantId) throw new Error("No provider_assistant_id — provision the assistant first");
     const cfg = await loadTenantConfig(data.businessId);
+    const serverUrl = resolveVapiWebhookUrl();
+    if (!serverUrl) {
+      throw new Error("VAPI_WEBHOOK_URL or PUBLIC_JOB_REQUEST_URL is required");
+    }
+    const serverCredentialId = await resolveVapiServerCredentialId(serverUrl, assistantId);
     await updateVapiAssistant(assistantId, {
       name: `${cfg.business.name} Receptionist`,
       firstMessage: cfg.settings.first_message,
       systemPrompt: cfg.systemPrompt,
       language: cfg.settings.language,
-      serverUrl: resolveVapiWebhookUrl() || undefined,
-      serverSecret: process.env.VAPI_SERVER_SECRET,
+      serverUrl,
+      serverCredentialId,
       recordingEnabled: cfg.settings.recording_enabled,
       maxDurationSeconds: cfg.settings.max_call_duration_seconds,
     });
