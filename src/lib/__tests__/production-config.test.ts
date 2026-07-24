@@ -53,6 +53,16 @@ describe("Stripe billing return URLs", () => {
     ).toBe("https://app.example");
   });
 
+  it("uses the request URL only when no production origin is configured", () => {
+    const request = new Request("https://app.example/api/public/billing/portal", {
+      headers: { origin: "https://attacker.example" },
+    });
+
+    expect(resolveBillingReturnOrigin(request, {} as NodeJS.ProcessEnv)).toBe(
+      "https://app.example",
+    );
+  });
+
   it("allows localhost HTTP for development", () => {
     const request = new Request("http://localhost:3000/api/public/billing/checkout");
     expect(resolveBillingReturnOrigin(request, {} as NodeJS.ProcessEnv)).toBe(
