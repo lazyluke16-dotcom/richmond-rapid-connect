@@ -441,7 +441,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { data: biz, error: businessError } = await context.supabase
       .from("businesses")
-      .select("id,name,selected_plan,hero_heading,hero_subheading")
+      .select("id,name,public_phone,selected_plan,hero_heading,hero_subheading")
       .limit(1)
       .maybeSingle();
     if (businessError) throw new Error(businessError.message);
@@ -465,6 +465,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
 
     const readinessFailures = getOnboardingReadinessFailures({
       businessName: biz.name as string | null,
+      publicPhone: biz.public_phone as string | null,
       servicesCount: servicesResult.data?.length ?? 0,
       areasCount: areasResult.data?.length ?? 0,
       hoursCount: hoursResult.data?.length ?? 0,

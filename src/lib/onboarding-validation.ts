@@ -6,6 +6,7 @@
  * trusts client-side validation.
  */
 import { z } from "zod";
+import { normalizeAustralianPhone } from "@/lib/call-handling";
 
 /** 8 wizard steps: Business, Branding, Services, Areas, Hours, Plan, Website, Finish. */
 export const ONBOARDING_STEP_MIN = 0;
@@ -47,6 +48,7 @@ export interface OnboardingProgressInput {
 
 export interface OnboardingReadinessInput {
   businessName?: string | null;
+  publicPhone?: string | null;
   servicesCount: number;
   areasCount: number;
   hoursCount: number;
@@ -63,6 +65,11 @@ export interface OnboardingReadinessInput {
 export function getOnboardingReadinessFailures(input: OnboardingReadinessInput): string[] {
   const failures: string[] = [];
   if ((input.businessName ?? "").trim().length < 2) failures.push("business profile");
+  try {
+    normalizeAustralianPhone(input.publicPhone ?? "");
+  } catch {
+    failures.push("an Australian business phone");
+  }
   if (input.servicesCount < 1) failures.push("at least one service");
   if (input.areasCount < 1) failures.push("at least one service area");
   if (input.hoursCount < 1) failures.push("business hours");
@@ -135,6 +142,21 @@ export const HoursPayloadSchema = z.object({
 export const PlanPayloadSchema = z.object({
   plan: z.enum(["missed_call_recovery", "ai_receptionist"]),
 });
+
+export const AustralianPhoneSchema = z
+  .string()
+  .trim()
+  .transform((value, context) => {
+    try {
+      return normalizeAustralianPhone(value);
+    } catch (error) {
+      context.addIssue({
+        code: "custom",
+        message: error instanceof Error ? error.message : "Enter a valid Australian phone number",
+      });
+      return z.NEVER;
+    }
+  });
 
 export type ServicesPayload = z.infer<typeof ServicesPayloadSchema>;
 export type AreasPayload = z.infer<typeof AreasPayloadSchema>;

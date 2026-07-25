@@ -18,6 +18,7 @@ import {
   type EditableBusiness,
 } from "@/lib/business-settings.functions";
 import { setMyCoverage } from "@/lib/business-settings.functions";
+import { normalizeAustralianPhone } from "@/lib/call-handling";
 import { CheckCircle2, ArrowRight, Plus, X, Sparkles, Bot, Info } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
@@ -164,6 +165,9 @@ function OnboardingWizard() {
           }
           // Server is authoritative about which step the wizard should resume at.
           setStep(Math.min(Math.max(status.step, 1), 7));
+        } else {
+          const signupPhone = sessionStorage.getItem("rc_business_phone");
+          if (signupPhone) setPublicPhone(signupPhone);
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -200,9 +204,17 @@ function OnboardingWizard() {
 
   const canNext = useMemo(() => {
     if (busy) return false;
-    if (step === 0) return bizName.trim().length >= 2;
+    if (step === 0) {
+      if (bizName.trim().length < 2) return false;
+      try {
+        normalizeAustralianPhone(publicPhone);
+        return true;
+      } catch {
+        return false;
+      }
+    }
     return true;
-  }, [step, bizName, busy]);
+  }, [step, bizName, publicPhone, busy]);
 
   const withBusy = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -439,7 +451,7 @@ function OnboardingWizard() {
                 placeholder="e.g. Harbour Plumbing Co"
               />
               <Field
-                label="Public phone"
+                label="Australian business phone *"
                 value={publicPhone}
                 onChange={setPublicPhone}
                 placeholder="0400 000 000"
@@ -731,6 +743,7 @@ function OnboardingWizard() {
                 title="AI Receptionist"
                 bullets={[
                   "Everything in Missed Call Recovery",
+                  "Both Text Link and AI included",
                   "AI phone receptionist",
                   "Phone-call job capture",
                   "AI call summary",

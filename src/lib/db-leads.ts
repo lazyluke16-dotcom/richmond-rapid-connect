@@ -24,10 +24,13 @@ export const insertLead = createServerFn({ method: "POST" })
     const resolved = await resolveBusinessIdBySlug(data.businessSlug);
     if (!resolved) throw new Error(`Unknown business slug: ${data.businessSlug}`);
     const businessId: string = resolved;
-    // ATTRIBUTION INTEGRITY: if the client claims a missed-call id,
-    // it MUST belong to the same tenant we just resolved. Otherwise drop
-    // the attribution rather than silently link across tenants.
-    let externalCallId: string | null = data.external_call_id ?? null;
+    // ATTRIBUTION INTEGRITY: Text Link submissions must carry the matching
+    // missed-call id for this tenant. Reject cross-tenant or fabricated ids;
+    // silently dropping attribution would create an orphaned job card.
+    const externalCallId: string | null = data.external_call_id ?? null;
+    if (data.source === "missed_call" && !externalCallId) {
+      throw new Error("A valid missed-call attribution is required");
+    }
     if (externalCallId) {
       const { data: mc } = await supabaseAdmin
         .from("missed_calls")
@@ -35,11 +38,11 @@ export const insertLead = createServerFn({ method: "POST" })
         .eq("id", externalCallId)
         .maybeSingle();
       if (!mc || (mc as { business_id: string }).business_id !== businessId) {
-        console.warn("[attribution] mcid mismatch — dropping external_call_id", {
+        console.warn("[attribution] mcid mismatch — rejecting lead", {
           mcid: externalCallId,
           resolvedBusinessId: businessId,
         });
-        externalCallId = null;
+        throw new Error("Missed-call attribution does not belong to this business");
       }
     }
     const row = {

@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { renderSmsTemplate } from "@/lib/missed-call.functions";
 import { sendSms } from "@/lib/sms";
 import { validateTwilioSignature } from "@/lib/twilio-webhook";
+import { buildNonBillableSmsUsage } from "@/lib/call-handling";
+import { markForwardingVerified } from "@/lib/call-handling.server";
 
 const MISSED_STATUSES = new Set(["busy", "failed", "no-answer", "canceled"]);
 
@@ -45,6 +47,28 @@ export async function handleTwilioMissedCall(request: Request, slug: string): Pr
     .maybeSingle();
   if (businessError) return Response.json({ error: "Database error" }, { status: 500 });
   if (!business) return Response.json({ error: "Unknown business" }, { status: 404 });
+
+  const calledNumber = (params.get("To") ?? "").trim();
+  const [{ data: telephony }, { data: textLinkAccess }] = await Promise.all([
+    supabaseAdmin
+      .from("business_telephony_settings")
+      .select("answering_mode,inbound_number")
+      .eq("business_id", business.id)
+      .maybeSingle(),
+    supabaseAdmin.rpc("has_missed_call_access", { _business_id: business.id } as never),
+  ]);
+  const routing = telephony as {
+    answering_mode?: string;
+    inbound_number?: string | null;
+  } | null;
+  if (
+    !textLinkAccess ||
+    routing?.answering_mode !== "text_link" ||
+    !calledNumber ||
+    routing.inbound_number !== calledNumber
+  ) {
+    return Response.json({ ok: true, ignored: true, reason: "text_link_routing_inactive" });
+  }
 
   const source = `twilio:${callSid}`;
   const { data: existing, error: existingError } = await supabaseAdmin
@@ -98,6 +122,25 @@ export async function handleTwilioMissedCall(request: Request, slug: string): Pr
     .eq("business_id", business.id);
   if (updateError)
     return Response.json({ error: "SMS sent but persistence failed" }, { status: 500 });
+  const { error: usageError } = await supabaseAdmin.from("billing_usage_events").insert(
+    buildNonBillableSmsUsage({
+      businessId: business.id,
+      provider: "twilio",
+      providerEventId: result.twilioSid ?? null,
+      externalCallId: callSid,
+      smsEventId: result.id,
+    }) as never,
+  );
+  if (
+    usageError &&
+    !/duplicate key|billing_usage_events_provider_call_uk/i.test(usageError.message)
+  ) {
+    return Response.json(
+      { error: "SMS sent but usage persistence failed", missedCallId },
+      { status: 500 },
+    );
+  }
+  await markForwardingVerified(business.id, callSid);
 
   return Response.json({ ok: true, missedCallId });
 }

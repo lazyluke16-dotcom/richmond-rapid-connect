@@ -19,6 +19,8 @@ type BillingSummary = {
   usage: {
     totalBillableSeconds: number;
     estimatedChargeAud: number;
+    smsMessages: number;
+    smsBillable: false;
     pendingMeterEvents: number;
     withinGraceCap: boolean;
   };
@@ -171,11 +173,12 @@ function BillingPage() {
               </div>
             </section>
 
-            <section className="grid gap-4 sm:grid-cols-3">
+            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Metric
                 label="AI voice usage"
                 value={`${Math.ceil(summary.usage.totalBillableSeconds / 60)} min`}
               />
+              <Metric label="Recovery SMS" value={`${summary.usage.smsMessages} recorded`} />
               <Metric
                 label="Estimated usage"
                 value={`A$${summary.usage.estimatedChargeAud.toFixed(2)}`}
@@ -193,6 +196,8 @@ function BillingPage() {
             <p className="text-xs text-muted-foreground">
               Subscription changes and cancellation are handled in Stripe’s secure customer portal.
               Access continues according to the displayed billing state and any stated grace period.
+              Recovery SMS usage is recorded but remains non-billable until an SMS customer price is
+              explicitly approved.
             </p>
           </div>
         )}

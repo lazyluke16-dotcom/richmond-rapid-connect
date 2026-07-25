@@ -24,6 +24,7 @@ import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedAiReceptionistRouteImport } from './routes/_authenticated/ai-receptionist'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
+import { Route as AuthenticatedCallHandlingRouteImport } from './routes/_authenticated/call-handling'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedMissedCallSettingsRouteImport } from './routes/_authenticated/missed-call-settings'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
@@ -126,6 +127,12 @@ const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
   path: '/billing',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCallHandlingRoute =
+  AuthenticatedCallHandlingRouteImport.update({
+    id: '/call-handling',
+    path: '/call-handling',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -269,6 +276,7 @@ export interface FileRoutesByFullPath {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/call-handling': typeof AuthenticatedCallHandlingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
@@ -309,6 +317,7 @@ export interface FileRoutesByTo {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/call-handling': typeof AuthenticatedCallHandlingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
@@ -350,6 +359,7 @@ export interface FileRoutesById {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/_authenticated/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
+  '/_authenticated/call-handling': typeof AuthenticatedCallHandlingRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
@@ -392,6 +402,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/ai-receptionist'
     | '/billing'
+    | '/call-handling'
     | '/dashboard'
     | '/missed-call-settings'
     | '/onboarding'
@@ -432,6 +443,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/ai-receptionist'
     | '/billing'
+    | '/call-handling'
     | '/dashboard'
     | '/missed-call-settings'
     | '/onboarding'
@@ -472,6 +484,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/_authenticated/ai-receptionist'
     | '/_authenticated/billing'
+    | '/_authenticated/call-handling'
     | '/_authenticated/dashboard'
     | '/_authenticated/missed-call-settings'
     | '/_authenticated/onboarding'
@@ -634,6 +647,13 @@ declare module '@tanstack/react-router' {
       path: '/billing'
       fullPath: '/billing'
       preLoaderRoute: typeof AuthenticatedBillingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/call-handling': {
+      id: '/_authenticated/call-handling'
+      path: '/call-handling'
+      fullPath: '/call-handling'
+      preLoaderRoute: typeof AuthenticatedCallHandlingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard': {
@@ -810,6 +830,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAiReceptionistRoute: typeof AuthenticatedAiReceptionistRoute
   AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
+  AuthenticatedCallHandlingRoute: typeof AuthenticatedCallHandlingRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedMissedCallSettingsRoute: typeof AuthenticatedMissedCallSettingsRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
@@ -819,6 +840,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAiReceptionistRoute: AuthenticatedAiReceptionistRoute,
   AuthenticatedBillingRoute: AuthenticatedBillingRoute,
+  AuthenticatedCallHandlingRoute: AuthenticatedCallHandlingRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedMissedCallSettingsRoute: AuthenticatedMissedCallSettingsRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,

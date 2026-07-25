@@ -209,8 +209,6 @@ export const getMyAiContext = createServerFn({ method: "GET" })
 export type AiSettingsUpdate = Partial<
   Pick<
     AiReceptionistSettings,
-    | "enabled"
-    | "mode"
     | "assistant_name"
     | "first_message"
     | "tone"
@@ -241,8 +239,6 @@ export const updateMyAiSettings = createServerFn({ method: "POST" })
   .inputValidator((data: AiSettingsUpdate) => data)
   .handler(async ({ data, context }) => {
     const patch: Record<string, unknown> = {};
-    if (data.enabled !== undefined) patch.enabled = !!data.enabled;
-    if (data.mode !== undefined) patch.mode = data.mode === "live" ? "live" : "demo";
     if (data.assistant_name !== undefined) {
       const v = clean(data.assistant_name, 60);
       if (v.length < 2) throw new Error("Assistant name too short");
@@ -273,25 +269,6 @@ export const updateMyAiSettings = createServerFn({ method: "POST" })
 
     const supa = context.supabase as unknown as Parameters<typeof loadOwnBusiness>[0];
     const biz = await loadOwnBusiness(supa);
-
-    if (patch.enabled === true) {
-      const { data: acc } = await context.supabase.rpc("has_ai_receptionist_access", {
-        _business_id: biz.id,
-      });
-      if (!acc) throw new Error("Plan does not include AI receptionist");
-    }
-    if (patch.mode === "live") {
-      // Require explicit provider mapping presence to allow live mode
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const { data: mapping } = await supabaseAdmin
-        .from("ai_provider_mappings")
-        .select("id")
-        .eq("business_id", biz.id)
-        .eq("active", true)
-        .limit(1)
-        .maybeSingle();
-      if (!mapping) patch.mode = "demo";
-    }
 
     const { error } = await context.supabase
       .from("business_ai_receptionist_settings")
