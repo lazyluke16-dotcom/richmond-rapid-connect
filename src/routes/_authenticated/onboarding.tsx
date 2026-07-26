@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   getOnboardingStatus,
+  getMySignupPhone,
   getMyOnboardingBundle,
   createMyBusiness,
   setMyServices,
@@ -12,6 +13,7 @@ import {
   setMyOnboardingStep,
   completeOnboarding,
 } from "@/lib/onboarding.functions";
+import { resolveOnboardingPhoneContinuity } from "@/lib/onboarding-validation";
 import {
   getMyBusiness,
   updateMyBusiness,
@@ -109,7 +111,14 @@ function OnboardingWizard() {
           if (full) {
             setBiz(full);
             setBizName(full.name);
-            setPublicPhone(full.public_phone ?? "");
+            setPublicPhone(
+              (await resolveOnboardingPhoneContinuity({
+                hasExistingBusiness: true,
+                existingBusinessPhone: full.public_phone,
+                sessionPhone: sessionStorage.getItem("rc_business_phone"),
+                loadAuthenticatedMetadataPhone: getMySignupPhone,
+              })) ?? "",
+            );
             setPublicEmail(full.public_email ?? "");
             setShortDesc(full.short_description ?? "");
           }
@@ -166,7 +175,12 @@ function OnboardingWizard() {
           // Server is authoritative about which step the wizard should resume at.
           setStep(Math.min(Math.max(status.step, 1), 7));
         } else {
-          const signupPhone = sessionStorage.getItem("rc_business_phone");
+          const signupPhone = await resolveOnboardingPhoneContinuity({
+            hasExistingBusiness: false,
+            existingBusinessPhone: null,
+            sessionPhone: sessionStorage.getItem("rc_business_phone"),
+            loadAuthenticatedMetadataPhone: getMySignupPhone,
+          });
           if (signupPhone) setPublicPhone(signupPhone);
         }
       } catch (e) {
@@ -258,6 +272,7 @@ function OnboardingWizard() {
       });
       const full = await getMyBusiness();
       if (full) setBiz(full);
+      sessionStorage.removeItem("rc_business_phone");
       await persistStep(1);
       setStep(1);
     });

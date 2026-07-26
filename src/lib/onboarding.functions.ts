@@ -9,6 +9,7 @@ import {
   OnboardingStepSchema,
   deriveOnboardingStep,
   ONBOARDING_STEP_MAX,
+  resolveSignupPhoneContinuity,
 } from "./onboarding-validation";
 
 export interface OnboardingStatus {
@@ -126,6 +127,23 @@ export const getOnboardingStatus = createServerFn({ method: "GET" })
       name: data.name as string,
       step,
     };
+  });
+
+/**
+ * Recover the signup phone from the authenticated JWT metadata. This server
+ * boundary prevents a caller from reading another user's auth record; the
+ * value is validated before it is returned to the onboarding form.
+ */
+export const getMySignupPhone = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<string | null> => {
+    const claims = context.claims as unknown as {
+      user_metadata?: { business_phone_e164?: unknown };
+    };
+    return resolveSignupPhoneContinuity({
+      sessionPhone: null,
+      loadAuthenticatedMetadataPhone: async () => claims.user_metadata?.business_phone_e164 ?? null,
+    });
   });
 
 /**

@@ -18,6 +18,44 @@ export const OnboardingStepSchema = z
   .min(ONBOARDING_STEP_MIN)
   .max(ONBOARDING_STEP_MAX);
 
+function validatedSignupPhone(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  try {
+    return normalizeAustralianPhone(value);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Preserve signup phone continuity across both same-tab signup and the
+ * email-confirmation/new-tab path. Browser storage is only a convenience:
+ * invalid storage is ignored and authenticated metadata is loaded from the
+ * server. Both sources pass through the same phone validator.
+ */
+export async function resolveSignupPhoneContinuity(input: {
+  sessionPhone: unknown;
+  loadAuthenticatedMetadataPhone: () => Promise<unknown>;
+}): Promise<string | null> {
+  const fromSession = validatedSignupPhone(input.sessionPhone);
+  if (fromSession) return fromSession;
+  return validatedSignupPhone(await input.loadAuthenticatedMetadataPhone());
+}
+
+export async function resolveOnboardingPhoneContinuity(input: {
+  hasExistingBusiness: boolean;
+  existingBusinessPhone: string | null;
+  sessionPhone: unknown;
+  loadAuthenticatedMetadataPhone: () => Promise<unknown>;
+}): Promise<string | null> {
+  if (input.hasExistingBusiness) {
+    // The tenant-scoped business row remains authoritative on resume. Signup
+    // storage and auth metadata must never overwrite an existing tenant.
+    return input.existingBusinessPhone;
+  }
+  return resolveSignupPhoneContinuity(input);
+}
+
 /** Clamp any incoming value into the allowed step range. */
 export function clampOnboardingStep(input: unknown): number {
   const n = typeof input === "number" ? input : Number(input);
