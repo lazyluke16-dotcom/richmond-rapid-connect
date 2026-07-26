@@ -18,6 +18,27 @@ const migration = readFileSync(
   resolve(process.cwd(), "supabase/migrations-pending/20260725160000_customer_call_handling.sql"),
   "utf8",
 );
+const recoveredVapiMappingMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "supabase/migrations/20260715222235_4714b86c-97e8-44aa-85fb-943ae7e2e722.sql",
+  ),
+  "utf8",
+);
+
+describe("fresh migration replay safety", () => {
+  it("guards the recovered Vapi mapping when its historical business is absent", () => {
+    expect(recoveredVapiMappingMigration).toContain("AND EXISTS (");
+    expect(recoveredVapiMappingMigration).toContain("FROM public.businesses");
+    expect(recoveredVapiMappingMigration).toContain(
+      `SELECT id, 'vapi', '28a85bd5-5ccb-4605-a330-b62560e90aff', true`,
+    );
+    expect(recoveredVapiMappingMigration).not.toContain(
+      `VALUES ('45bf00ff-b5f2-43c8-aaaa-18298b85a2a9'`,
+    );
+  });
+});
+
 const twilioIdempotencyMigration = readFileSync(
   resolve(process.cwd(), "supabase/migrations/20260723120000_twilio_missed_call_idempotency.sql"),
   "utf8",

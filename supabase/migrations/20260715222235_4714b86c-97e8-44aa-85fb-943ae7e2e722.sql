@@ -11,7 +11,15 @@ UPDATE public.business_ai_receptionist_settings
  WHERE business_id = '45bf00ff-b5f2-43c8-aaaa-18298b85a2a9';
 
 DELETE FROM public.ai_provider_mappings
- WHERE provider='vapi' AND provider_assistant_id='28a85bd5-5ccb-4605-a330-b62560e90aff';
+ WHERE provider='vapi'
+   AND provider_assistant_id='28a85bd5-5ccb-4605-a330-b62560e90aff'
+   AND EXISTS (
+     SELECT 1
+       FROM public.businesses
+      WHERE id = '45bf00ff-b5f2-43c8-aaaa-18298b85a2a9'
+   );
 
 INSERT INTO public.ai_provider_mappings (business_id, provider, provider_assistant_id, active)
-VALUES ('45bf00ff-b5f2-43c8-aaaa-18298b85a2a9','vapi','28a85bd5-5ccb-4605-a330-b62560e90aff', true);
+SELECT id, 'vapi', '28a85bd5-5ccb-4605-a330-b62560e90aff', true
+  FROM public.businesses
+ WHERE id = '45bf00ff-b5f2-43c8-aaaa-18298b85a2a9';
