@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  analyzeSmsEncoding,
   CallHandlingModeSchema,
   selectInboundWorkflow,
   type InboundWorkflow,
@@ -231,6 +232,33 @@ export async function dispatchTextLinkRecovery(input: {
   const destinationPhone =
     claim.action === "reconcile" && claim.toNumber ? claim.toNumber : input.callerPhone;
   const smsBody = claim.action === "reconcile" && claim.smsBody ? claim.smsBody : renderedSmsBody;
+  const encoding = analyzeSmsEncoding(smsBody);
+  if (claim.action !== "reconcile" && encoding.segments !== 1) {
+    await rpcWithDeadline(
+      supabaseAdmin,
+      "fail_text_link_dispatch",
+      {
+        _provider: input.provider,
+        _provider_event_id: input.providerEventId,
+        _claim_token: claim.claimToken,
+        _failure_kind: "pre_send",
+        _error_message: `Text Link SMS exceeds one ${encoding.encoding} segment`,
+        _provider_message_sid: null,
+        _provider_status: null,
+        _to_number: destinationPhone,
+        _from_number: process.env.TWILIO_FROM_NUMBER ?? "UNCONFIGURED",
+        _sms_body: smsBody,
+      },
+      input.deadlineAt,
+    );
+    return {
+      outcome: "failed",
+      deduped: claim.action !== "send",
+      missedCallId: claim.missedCallId,
+      smsEventId: claim.smsEventId,
+      providerMessageSid: null,
+    };
+  }
   const config = getTwilioSmsConfiguration();
   if (!config) {
     await rpcWithDeadline(
@@ -291,35 +319,8 @@ export async function dispatchTextLinkRecovery(input: {
       timeoutMs: budget,
     });
     if (reconciliation.kind === "found") {
-      if (
-        ["failed", "undelivered", "canceled"].includes(reconciliation.providerStatus.toLowerCase())
-      ) {
-        const { error } = await rpcWithDeadline(
-          supabaseAdmin,
-          "fail_text_link_dispatch",
-          {
-            _provider: input.provider,
-            _provider_event_id: input.providerEventId,
-            _claim_token: claim.claimToken,
-            _failure_kind: "provider_rejected",
-            _error_message: `Twilio reconciled terminal status: ${reconciliation.providerStatus}`,
-            _provider_message_sid: reconciliation.sid,
-            _provider_status: reconciliation.providerStatus,
-            _to_number: destinationPhone,
-            _from_number: dispatchConfig.fromNumber,
-            _sms_body: smsBody,
-          },
-          input.deadlineAt,
-        );
-        if (error) throw new Error(`Text Link failure persistence failed: ${error.message}`);
-        return {
-          outcome: "failed",
-          deduped: true,
-          missedCallId: claim.missedCallId,
-          smsEventId: claim.smsEventId,
-          providerMessageSid: reconciliation.sid,
-        };
-      }
+      // A Twilio message SID proves the create request was accepted. Later
+      // delivery outcomes, including undelivered, do not reverse provider cost.
       try {
         const completed = await complete(reconciliation.sid, reconciliation.providerStatus);
         return {

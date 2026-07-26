@@ -1,9 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { renderSmsTemplate } from "@/lib/missed-call.functions";
-import { sendSms } from "@/lib/sms";
 import { validateTwilioSignature } from "@/lib/twilio-webhook";
-import { buildNonBillableSmsUsage } from "@/lib/call-handling";
-import { markForwardingVerified } from "@/lib/call-handling.server";
+import { dispatchTextLinkRecovery, markForwardingVerified } from "@/lib/call-handling.server";
 
 const MISSED_STATUSES = new Set(["busy", "failed", "no-answer", "canceled"]);
 
@@ -70,18 +67,6 @@ export async function handleTwilioMissedCall(request: Request, slug: string): Pr
     return Response.json({ ok: true, ignored: true, reason: "text_link_routing_inactive" });
   }
 
-  const source = `twilio:${callSid}`;
-  const { data: existing, error: existingError } = await supabaseAdmin
-    .from("missed_calls")
-    .select("id,sms_sent")
-    .eq("business_id", business.id)
-    .eq("source", source)
-    .maybeSingle();
-  if (existingError) return Response.json({ error: "Database error" }, { status: 500 });
-  if (existing) return Response.json({ ok: true, deduped: true, missedCallId: existing.id });
-
-  const missedCallId = crypto.randomUUID();
-  const recoveryLink = `${publicBase}/b/${business.slug}/request?source=missed_call&mcid=${missedCallId}`;
   const { data: settings, error: settingsError } = await supabaseAdmin
     .from("business_missed_call_settings")
     .select("enabled,recovery_sms_enabled,sms_template,mode")
@@ -92,57 +77,41 @@ export async function handleTwilioMissedCall(request: Request, slug: string): Pr
     return Response.json({ ok: true, ignored: true, reason: "recovery_disabled" });
   }
 
-  const smsBody = renderSmsTemplate(settings.sms_template, {
-    business_name: business.name,
-    recovery_link: recoveryLink,
-    public_phone: business.public_phone,
-  });
-  const { error: insertError } = await supabaseAdmin.from("missed_calls").insert({
-    id: missedCallId,
-    caller_phone: callerPhone,
-    sms_sent: false,
-    source,
-    business_id: business.id,
-  });
-  if (insertError) {
-    if (/duplicate/i.test(insertError.message)) {
-      return Response.json({ ok: true, deduped: true });
-    }
-    return Response.json({ error: "Database error" }, { status: 500 });
-  }
-
-  const result = await sendSms(callerPhone, smsBody, business.id);
-  if (result.status !== "sent") {
-    return Response.json({ error: "SMS delivery failed", missedCallId }, { status: 502 });
-  }
-  const { error: updateError } = await supabaseAdmin
-    .from("missed_calls")
-    .update({ sms_sent: true, sms_event_id: result.id })
-    .eq("id", missedCallId)
-    .eq("business_id", business.id);
-  if (updateError)
-    return Response.json({ error: "SMS sent but persistence failed" }, { status: 500 });
-  const { error: usageError } = await supabaseAdmin.from("billing_usage_events").insert(
-    buildNonBillableSmsUsage({
+  const result = await dispatchTextLinkRecovery({
+    tenant: {
       businessId: business.id,
-      provider: "twilio",
-      providerEventId: result.twilioSid ?? null,
-      externalCallId: callSid,
-      smsEventId: result.id,
-    }) as never,
-  );
-  if (
-    usageError &&
-    !/duplicate key|billing_usage_events_provider_call_uk/i.test(usageError.message)
-  ) {
+      mode: "text_link",
+      forwardingStatus: "verified",
+      businessName: business.name,
+      businessSlug: business.slug,
+      publicPhone: business.public_phone,
+      assistantId: null,
+      smsTemplate: settings.sms_template,
+      textLinkEntitled: true,
+      aiReceptionistEntitled: false,
+    },
+    provider: "twilio",
+    providerEventId: callSid,
+    callerPhone,
+    publicBaseUrl: publicBase,
+  });
+  if (result.outcome === "failed") {
     return Response.json(
-      { error: "SMS sent but usage persistence failed", missedCallId },
-      { status: 500 },
+      { error: "SMS delivery failed", missedCallId: result.missedCallId },
+      { status: 502 },
     );
   }
   await markForwardingVerified(business.id, callSid);
 
-  return Response.json({ ok: true, missedCallId });
+  return Response.json(
+    {
+      ok: true,
+      pending: result.outcome === "pending",
+      deduped: result.deduped,
+      missedCallId: result.missedCallId,
+    },
+    { status: result.outcome === "pending" ? 202 : 200 },
+  );
 }
 
 export const Route = createFileRoute("/api/public/webhooks/twilio-missed-call/$slug")({

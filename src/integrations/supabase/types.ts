@@ -152,9 +152,11 @@ export type Database = {
           business_id: string
           created_at: string
           customer_rate: number | null
+          customer_rate_minor: number | null
           customer_rate_currency: string
           ended_at: string | null
           estimated_customer_charge: number | null
+          estimated_customer_charge_minor: number | null
           external_call_id: string | null
           id: string
           metadata: Json
@@ -182,9 +184,11 @@ export type Database = {
           business_id: string
           created_at?: string
           customer_rate?: number | null
+          customer_rate_minor?: number | null
           customer_rate_currency?: string
           ended_at?: string | null
           estimated_customer_charge?: number | null
+          estimated_customer_charge_minor?: number | null
           external_call_id?: string | null
           id?: string
           metadata?: Json
@@ -212,9 +216,11 @@ export type Database = {
           business_id?: string
           created_at?: string
           customer_rate?: number | null
+          customer_rate_minor?: number | null
           customer_rate_currency?: string
           ended_at?: string | null
           estimated_customer_charge?: number | null
+          estimated_customer_charge_minor?: number | null
           external_call_id?: string | null
           id?: string
           metadata?: Json

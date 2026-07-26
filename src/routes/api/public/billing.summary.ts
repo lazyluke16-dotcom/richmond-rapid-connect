@@ -3,6 +3,7 @@ import {
   extractBearerToken,
   requireAuthAndBusiness,
   computeAlertThresholds,
+  sumUsageChargesMinor,
 } from "@/lib/billing.server";
 import { PLAN_BASE_PRICE_CENTS } from "@/lib/stripe.server";
 import { GRACE_USAGE_CAP_AUD } from "@/lib/billing-types";
@@ -85,7 +86,7 @@ export const Route = createFileRoute("/api/public/billing/summary")({
         let usageQuery = supabaseAdmin
           .from("billing_usage_events")
           .select(
-            "usage_type, quantity, billable, estimated_customer_charge, billable_seconds, stripe_meter_event_status",
+            "usage_type, quantity, billable, estimated_customer_charge, estimated_customer_charge_minor, billable_seconds, stripe_meter_event_status",
           )
           .eq("business_id", businessId);
 
@@ -99,6 +100,7 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           quantity?: number | null;
           billable?: boolean;
           estimated_customer_charge?: number | null;
+          estimated_customer_charge_minor?: number | null;
           billable_seconds?: number | null;
           stripe_meter_event_status?: string | null;
         }[];
@@ -110,10 +112,8 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           (sum, row) => sum + (Number(row.billable_seconds) || 0),
           0,
         );
-        const estimatedChargeAud = billableVoiceRows.reduce(
-          (sum, row) => sum + (Number(row.estimated_customer_charge) || 0),
-          0,
-        );
+        const billableRows = rows.filter((row) => row.billable);
+        const estimatedChargeAud = sumUsageChargesMinor(billableRows) / 100;
         const smsMessages = rows
           .filter((row) => row.usage_type === "outbound_sms")
           .reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
@@ -130,16 +130,16 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           const graceRows = ((
             await supabaseAdmin
               .from("billing_usage_events")
-              .select("estimated_customer_charge")
+              .select("estimated_customer_charge, estimated_customer_charge_minor")
               .eq("business_id", businessId)
               .eq("billable", true)
               .gte("created_at", bb.grace_started_at)
-          ).data ?? []) as { estimated_customer_charge?: number | null }[];
+          ).data ?? []) as {
+            estimated_customer_charge?: number | null;
+            estimated_customer_charge_minor?: number | null;
+          }[];
 
-          const graceTotal = graceRows.reduce(
-            (s, r) => s + (Number(r.estimated_customer_charge) || 0),
-            0,
-          );
+          const graceTotal = sumUsageChargesMinor(graceRows) / 100;
           withinGraceCap = graceTotal < GRACE_USAGE_CAP_AUD;
         }
 
@@ -167,7 +167,7 @@ export const Route = createFileRoute("/api/public/billing/summary")({
               totalBillableSeconds,
               estimatedChargeAud,
               smsMessages,
-              smsBillable: false,
+              smsBillable: true,
               pendingMeterEvents,
               alertThresholds,
               withinGraceCap,

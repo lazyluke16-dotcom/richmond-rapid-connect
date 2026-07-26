@@ -4,6 +4,7 @@ import { CreditCard, ExternalLink, Loader2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { useMyTenantBrand } from "@/hooks/use-my-tenant-brand";
 import { supabase } from "@/integrations/supabase/client";
+import { TEXT_LINK_SMS_UNIT_PRICE_MINOR } from "@/lib/call-handling";
 
 type BillingSummary = {
   billing: {
@@ -20,7 +21,7 @@ type BillingSummary = {
     totalBillableSeconds: number;
     estimatedChargeAud: number;
     smsMessages: number;
-    smsBillable: false;
+    smsBillable: true;
     pendingMeterEvents: number;
     withinGraceCap: boolean;
   };
@@ -196,8 +197,9 @@ function BillingPage() {
             <p className="text-xs text-muted-foreground">
               Subscription changes and cancellation are handled in Stripe’s secure customer portal.
               Access continues according to the displayed billing state and any stated grace period.
-              Recovery SMS usage is recorded but remains non-billable until an SMS customer price is
-              explicitly approved.
+              Each Twilio-accepted recovery SMS is A$
+              {(TEXT_LINK_SMS_UNIT_PRICE_MINOR / 100).toFixed(2)} excluding GST. GST is applied by
+              the invoicing and tax layer.
             </p>
           </div>
         )}

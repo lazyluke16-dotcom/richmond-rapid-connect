@@ -20,7 +20,7 @@ import {
   updateMyCustomerPhone,
   type CallHandlingContext,
 } from "@/lib/call-handling.functions";
-import type { CallHandlingMode } from "@/lib/call-handling";
+import { TEXT_LINK_SMS_UNIT_PRICE_MINOR, type CallHandlingMode } from "@/lib/call-handling";
 
 export const Route = createFileRoute("/_authenticated/call-handling")({
   head: () => ({
@@ -351,8 +351,9 @@ function CallHandlingPage() {
               <b>{context.usage.smsMessages.toLocaleString()}</b>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              SMS is recorded for visibility and remains non-billable until a customer SMS price is
-              explicitly approved.
+              Each Twilio-accepted recovery SMS is A$
+              {(TEXT_LINK_SMS_UNIT_PRICE_MINOR / 100).toFixed(2)} excluding GST. It is separate from
+              AI voice and lead usage.
             </p>
           </section>
         </div>

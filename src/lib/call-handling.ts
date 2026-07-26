@@ -9,6 +9,63 @@ export interface ServiceEntitlements {
   aiReceptionist: boolean;
 }
 
+export const TEXT_LINK_SMS_UNIT_PRICE_MINOR = 25;
+export const TEXT_LINK_SMS_CURRENCY = "AUD";
+export const DEFAULT_TEXT_LINK_SMS_TEMPLATE =
+  "{{business_name}} missed your call. Tell us what you need: {{recovery_link}}";
+
+const GSM_7_BASIC =
+  "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
+const GSM_7_EXTENDED = "^{}\\[~]|€";
+
+export interface SmsEncodingAnalysis {
+  encoding: "gsm-7" | "ucs-2";
+  units: number;
+  segments: number;
+  singleSegmentLimit: number;
+}
+
+/**
+ * Deterministically measure the encoded SMS payload.
+ *
+ * GSM-7 extension-table characters consume two septets. Messages containing
+ * any other character use UCS-2 limits. The dispatcher rejects a new Text
+ * Link send that would exceed one segment instead of silently truncating
+ * required customer information.
+ */
+export function analyzeSmsEncoding(message: string): SmsEncodingAnalysis {
+  let gsmUnits = 0;
+  let isGsm7 = true;
+
+  for (const character of message) {
+    if (GSM_7_BASIC.includes(character)) {
+      gsmUnits += 1;
+    } else if (GSM_7_EXTENDED.includes(character)) {
+      gsmUnits += 2;
+    } else {
+      isGsm7 = false;
+      break;
+    }
+  }
+
+  if (isGsm7) {
+    return {
+      encoding: "gsm-7",
+      units: gsmUnits,
+      segments: gsmUnits <= 160 ? 1 : Math.ceil(gsmUnits / 153),
+      singleSegmentLimit: 160,
+    };
+  }
+
+  const units = message.length;
+  return {
+    encoding: "ucs-2",
+    units,
+    segments: units <= 70 ? 1 : Math.ceil(units / 67),
+    singleSegmentLimit: 70,
+  };
+}
+
 /**
  * Normalise an Australian business number to E.164.
  *
@@ -134,31 +191,4 @@ export function assertTenantMatch(expectedBusinessId: string, actualBusinessId: 
   if (!expectedBusinessId || expectedBusinessId !== actualBusinessId) {
     throw new Error("The resource does not belong to this business");
   }
-}
-
-export const SMS_NON_BILLABLE_REASON = "sms_retail_pricing_unapproved";
-
-export function buildNonBillableSmsUsage(input: {
-  businessId: string;
-  provider: string;
-  providerEventId: string | null;
-  externalCallId: string;
-  smsEventId: string;
-}) {
-  return {
-    business_id: input.businessId,
-    usage_type: "outbound_sms" as const,
-    provider: input.provider,
-    provider_event_id: input.providerEventId,
-    external_call_id: input.externalCallId,
-    quantity: 1,
-    unit: "message",
-    billable: false,
-    non_billable_reason: SMS_NON_BILLABLE_REASON,
-    customer_rate: null,
-    estimated_customer_charge: null,
-    stripe_meter_event_identifier: null,
-    stripe_meter_event_status: "skipped" as const,
-    metadata: { sms_event_id: input.smsEventId },
-  };
 }

@@ -33,7 +33,7 @@ export interface CallHandlingContext {
   usage: {
     aiVoiceSeconds: number;
     smsMessages: number;
-    smsBillable: false;
+    smsBillable: true;
   };
 }
 
@@ -151,7 +151,7 @@ export const getMyCallHandlingContext = createServerFn({ method: "GET" })
         smsMessages: usageRows
           .filter((row) => row.usage_type === "outbound_sms")
           .reduce((sum, row) => sum + Number(row.quantity || 0), 0),
-        smsBillable: false,
+        smsBillable: true,
       },
     };
   });

@@ -2,10 +2,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  SMS_NON_BILLABLE_REASON,
+  DEFAULT_TEXT_LINK_SMS_TEMPLATE,
+  TEXT_LINK_SMS_CURRENCY,
+  TEXT_LINK_SMS_UNIT_PRICE_MINOR,
+  analyzeSmsEncoding,
   assertModeEntitled,
   assertTenantMatch,
-  buildNonBillableSmsUsage,
   canCreateAiEndOfCallRecords,
   entitlementsForPlan,
   isLegacyModeConsistent,
@@ -157,22 +159,27 @@ describe("inbound workflow gating", () => {
 });
 
 describe("Text Link idempotency, tenant isolation and usage", () => {
-  it("records SMS usage explicitly as non-billable", () => {
-    const row = buildNonBillableSmsUsage({
-      businessId: "business-1",
-      provider: "twilio",
-      providerEventId: "SM1",
-      externalCallId: "CA1",
-      smsEventId: "sms-1",
+  it("uses the settled integer minor-unit SMS price", () => {
+    expect(TEXT_LINK_SMS_UNIT_PRICE_MINOR).toBe(25);
+    expect(TEXT_LINK_SMS_CURRENCY).toBe("AUD");
+  });
+
+  it("keeps the fixed recovery template within one GSM-7 segment", () => {
+    const body = DEFAULT_TEXT_LINK_SMS_TEMPLATE.replace("{{business_name}}", "Richmond Plumbing")
+      .replace(
+        "{{recovery_link}}",
+        "https://app.example/b/richmond-plumbing/request?source=missed_call&mcid=12345678",
+      )
+      .replace("{{public_phone}}", "+61390000000");
+    expect(analyzeSmsEncoding(body)).toMatchObject({
+      encoding: "gsm-7",
+      segments: 1,
     });
-    expect(row).toMatchObject({
-      usage_type: "outbound_sms",
-      quantity: 1,
-      billable: false,
-      non_billable_reason: SMS_NON_BILLABLE_REASON,
-      stripe_meter_event_status: "skipped",
-    });
-    expect(row).not.toHaveProperty("customer_rate", expect.any(Number));
+  });
+
+  it("detects payloads that exceed a single encoded segment", () => {
+    expect(analyzeSmsEncoding("x".repeat(161)).segments).toBe(2);
+    expect(analyzeSmsEncoding("😀".repeat(36)).segments).toBe(2);
   });
 
   it("rejects cross-tenant questionnaire or number ownership", () => {

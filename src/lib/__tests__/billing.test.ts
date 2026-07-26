@@ -6,7 +6,11 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 
-import { computeAlertThresholds, extractBearerToken } from "../billing.server";
+import {
+  computeAlertThresholds,
+  extractBearerToken,
+  sumUsageChargesMinor,
+} from "../billing.server";
 import {
   GRACE_USAGE_CAP_AUD,
   GRACE_PERIOD_HOURS,
@@ -22,6 +26,19 @@ import {
   stripeKeyMode,
 } from "../stripe.server";
 import { SAFE_METER_RETRY_HOURS } from "../billing-meter.server";
+
+describe("Minor-unit usage aggregation", () => {
+  it("adds repeated 25-cent SMS charges exactly and preserves legacy AI major-unit rows", () => {
+    expect(
+      sumUsageChargesMinor([
+        { estimated_customer_charge_minor: 25, estimated_customer_charge: 0.25 },
+        { estimated_customer_charge_minor: 25, estimated_customer_charge: 0.25 },
+        { estimated_customer_charge_minor: 25, estimated_customer_charge: 0.25 },
+        { estimated_customer_charge_minor: null, estimated_customer_charge: 1.2345 },
+      ]),
+    ).toBe(198);
+  });
+});
 
 describe("Price ID injection prevention", () => {
   const TEST_PRICES = {

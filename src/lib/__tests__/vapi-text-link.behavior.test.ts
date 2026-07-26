@@ -1,4 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  DEFAULT_TEXT_LINK_SMS_TEMPLATE,
+  TEXT_LINK_SMS_CURRENCY,
+  TEXT_LINK_SMS_UNIT_PRICE_MINOR,
+  analyzeSmsEncoding,
+} from "@/lib/call-handling";
 
 const supabaseMock = vi.hoisted(() => ({
   rpc: vi.fn(),
@@ -111,7 +117,7 @@ function makeTenant(mode: Mode, suffix: string, overrides: Partial<Tenant> = {})
     business_slug: `tenant-${suffix}`,
     public_phone: `+613900000${suffix}`,
     assistant_id: mode === "ai_receptionist" ? `assistant-${suffix}` : null,
-    sms_template: "{{business_name}}: {{recovery_link}} ({{public_phone}})",
+    sms_template: DEFAULT_TEXT_LINK_SMS_TEMPLATE,
     text_link_entitled: true,
     ai_receptionist_entitled: true,
     phone_id: `phone-${suffix}`,
@@ -273,7 +279,7 @@ function installFakeDatabase() {
         (row) =>
           row.provider === "twilio" &&
           row.usage_type === "outbound_sms" &&
-          row.external_call_id === providerEventId,
+          row.external_call_id === `${provider}:${providerEventId}`,
       );
       if (!usageExists) {
         usageRows.push({
@@ -281,11 +287,26 @@ function installFakeDatabase() {
           usage_type: "outbound_sms",
           provider: "twilio",
           provider_event_id: event.providerMessageSid,
-          external_call_id: providerEventId,
+          external_call_id: `${provider}:${providerEventId}`,
           quantity: 1,
-          billable: false,
-          non_billable_reason: "sms_retail_pricing_unapproved",
+          unit: "message",
+          billable: true,
+          non_billable_reason: null,
+          customer_rate: 0.25,
+          customer_rate_minor: TEXT_LINK_SMS_UNIT_PRICE_MINOR,
+          customer_rate_currency: TEXT_LINK_SMS_CURRENCY,
+          estimated_customer_charge: 0.25,
+          estimated_customer_charge_minor: TEXT_LINK_SMS_UNIT_PRICE_MINOR,
           stripe_meter_event_status: "skipped",
+          metadata: {
+            sms_event_id: event.smsEventId,
+            inbound_provider: provider,
+            inbound_provider_event_id: providerEventId,
+            provider_message_sid: event.providerMessageSid,
+            workflow: "text_link",
+            tax_behavior: "exclusive",
+            billing_collection: "invoice_aggregation",
+          },
         });
       }
       return {
@@ -425,6 +446,7 @@ describe("Vapi customer call-handling behavioural boundary", () => {
     expect(result.body.error).toMatch(/currently off/i);
     expect(providerPostCount).toBe(0);
     expect(providerEvents.size).toBe(0);
+    expect(usageRows).toHaveLength(0);
   });
 
   it("routes AI mode to the trusted tenant assistant without SMS", async () => {
@@ -434,9 +456,10 @@ describe("Vapi customer call-handling behavioural boundary", () => {
     expect(result.body).toEqual({ assistantId: tenant.assistant_id });
     expect(providerPostCount).toBe(0);
     expect(providerEvents.size).toBe(0);
+    expect(usageRows).toHaveLength(0);
   });
 
-  it("dispatches Text Link to the correct tenant questionnaire and records one non-billable usage", async () => {
+  it("charges one accepted Text Link SMS at 25 AUD cents for the correct tenant", async () => {
     const tenant = makeTenant("text_link", "03");
     tenants.push(tenant);
     const result = await webhook({
@@ -450,13 +473,31 @@ describe("Vapi customer call-handling behavioural boundary", () => {
       "https://app.example/b/tenant-03/request?source=missed_call&mcid=",
     );
     expect(providerMessages[0]?.body).toContain("Tenant 03");
+    expect(analyzeSmsEncoding(providerMessages[0]?.body ?? "").segments).toBe(1);
     expect(usageRows).toHaveLength(1);
     expect(usageRows[0]).toMatchObject({
       business_id: tenant.business_id,
       usage_type: "outbound_sms",
+      provider: "twilio",
+      provider_event_id: providerMessages[0]?.sid,
+      external_call_id: "vapi:CA-success",
       quantity: 1,
-      billable: false,
-      non_billable_reason: "sms_retail_pricing_unapproved",
+      unit: "message",
+      billable: true,
+      non_billable_reason: null,
+      customer_rate: 0.25,
+      customer_rate_minor: 25,
+      customer_rate_currency: "AUD",
+      estimated_customer_charge: 0.25,
+      estimated_customer_charge_minor: 25,
+      stripe_meter_event_status: "skipped",
+      metadata: {
+        provider_message_sid: providerMessages[0]?.sid,
+        inbound_provider: "vapi",
+        inbound_provider_event_id: "CA-success",
+        workflow: "text_link",
+        tax_behavior: "exclusive",
+      },
     });
     expect(leadRows).toHaveLength(0);
     expect(voiceUsageRows).toHaveLength(0);
@@ -495,6 +536,7 @@ describe("Vapi customer call-handling behavioural boundary", () => {
     expect(completed.body.error).toMatch(/have sent/i);
     expect(providerPostCount).toBe(1);
     expect(usageRows).toHaveLength(1);
+    expect(usageRows[0]?.estimated_customer_charge_minor).toBe(25);
   });
 
   it("recovers an expired pre-send claim without provider reconciliation", async () => {
@@ -525,6 +567,7 @@ describe("Vapi customer call-handling behavioural boundary", () => {
       sms_sent: false,
       business_id: tenant.business_id,
     });
+    expect(usageRows).toHaveLength(0);
 
     const result = await webhook({
       phoneId: tenant.phone_id,
@@ -533,6 +576,8 @@ describe("Vapi customer call-handling behavioural boundary", () => {
     expect(result.body.error).toMatch(/have sent/i);
     expect(providerPostCount).toBe(1);
     expect(providerGetCount).toBe(0);
+    expect(usageRows).toHaveLength(1);
+    expect(usageRows[0]?.estimated_customer_charge_minor).toBe(25);
   });
 
   it("reconciles a provider-accepted/persistence-interrupted send without blindly resending", async () => {
@@ -552,6 +597,8 @@ describe("Vapi customer call-handling behavioural boundary", () => {
     expect(event?.status).toBe("reconciling");
     if (!event) throw new Error("missing provider event");
     event.claimExpiresAt = Date.now() - 1;
+    if (!providerMessages[0]) throw new Error("missing accepted provider message");
+    providerMessages[0].status = "undelivered";
     tenant.sms_template = "A changed template must not alter an in-flight provider match";
 
     const recovered = await webhook({
@@ -563,8 +610,15 @@ describe("Vapi customer call-handling behavioural boundary", () => {
     expect(providerGetCount).toBe(1);
     expect(providerPostCount).toBe(1);
     expect(event.providerMessageSid).toBe(providerMessages[0]?.sid);
+    expect(event.providerStatus).toBe("undelivered");
     expect(smsEvents[0]?.twilio_sid).toBe(providerMessages[0]?.sid);
     expect(usageRows).toHaveLength(1);
+    expect(usageRows[0]).toMatchObject({
+      business_id: tenant.business_id,
+      provider_event_id: providerMessages[0]?.sid,
+      estimated_customer_charge_minor: 25,
+      billable: true,
+    });
 
     const finalDuplicate = await webhook({
       phoneId: tenant.phone_id,
@@ -589,7 +643,7 @@ describe("Vapi customer call-handling behavioural boundary", () => {
     expect(usageRows).toHaveLength(0);
   });
 
-  it("persists an uncertain provider outcome for reconciliation before returning", async () => {
+  it("does not charge an uncertain outcome until reconciliation confirms acceptance", async () => {
     const tenant = makeTenant("text_link", "11");
     tenants.push(tenant);
     providerOutcomeUncertain = true;
@@ -602,6 +656,36 @@ describe("Vapi customer call-handling behavioural boundary", () => {
     expect(providerEvents.get(eventKey("vapi", "CA-uncertain"))?.status).toBe("reconciling");
     expect(providerPostCount).toBe(1);
     expect(usageRows).toHaveLength(0);
+
+    const event = providerEvents.get(eventKey("vapi", "CA-uncertain"));
+    if (!event?.sendStartedAt || !event.toNumber || !event.fromNumber || !event.smsBody) {
+      throw new Error("missing uncertain dispatch audit state");
+    }
+    providerOutcomeUncertain = false;
+    event.claimExpiresAt = Date.now() - 1;
+    providerMessages.push({
+      sid: "SMuncertain000000000000000000000001",
+      status: "queued",
+      to: event.toNumber,
+      from: event.fromNumber,
+      body: event.smsBody,
+      date_created: event.sendStartedAt,
+      date_sent: event.sendStartedAt,
+    });
+
+    const reconciled = await webhook({
+      phoneId: tenant.phone_id,
+      callId: "CA-uncertain",
+    });
+    expect(reconciled.body.error).toMatch(/have sent/i);
+    expect(providerGetCount).toBe(1);
+    expect(providerPostCount).toBe(1);
+    expect(usageRows).toHaveLength(1);
+    expect(usageRows[0]).toMatchObject({
+      provider_event_id: "SMuncertain000000000000000000000001",
+      estimated_customer_charge_minor: 25,
+      billable: true,
+    });
   });
 
   it("rejects missing caller ID before creating dispatch state", async () => {
@@ -615,6 +699,7 @@ describe("Vapi customer call-handling behavioural boundary", () => {
     expect(result.body.error).toMatch(/identify your mobile number/i);
     expect(providerPostCount).toBe(0);
     expect(providerEvents.size).toBe(0);
+    expect(usageRows).toHaveLength(0);
   });
 
   it("rejects a replay resolved to another tenant", async () => {
@@ -631,5 +716,23 @@ describe("Vapi customer call-handling behavioural boundary", () => {
     expect(usageRows).toHaveLength(1);
     expect(usageRows[0]?.business_id).toBe(firstTenant.business_id);
     expect(usageRows.some((row) => row.business_id === secondTenant.business_id)).toBe(false);
+  });
+
+  it("rejects an over-segment recovery template before Twilio and creates no charge", async () => {
+    const tenant = makeTenant("text_link", "12", {
+      sms_template: `${DEFAULT_TEXT_LINK_SMS_TEMPLATE} ${"x".repeat(161)}`,
+    });
+    tenants.push(tenant);
+    const result = await webhook({
+      phoneId: tenant.phone_id,
+      callId: "CA-over-segment",
+    });
+    expect(result.body.error).toMatch(/could not send/i);
+    expect(providerPostCount).toBe(0);
+    expect(usageRows).toHaveLength(0);
+    expect(providerEvents.get(eventKey("vapi", "CA-over-segment"))).toMatchObject({
+      status: "failed",
+      failureKind: "pre_send",
+    });
   });
 });
