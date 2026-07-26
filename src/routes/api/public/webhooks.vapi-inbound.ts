@@ -17,6 +17,9 @@ import { canCreateAiEndOfCallRecords } from "@/lib/call-handling";
 
 // A$0.59 / 60 sec. Kept as a fallback if billing_config is unreachable.
 const AI_VOICE_FALLBACK_RATE_AUD_PER_SEC = 0.00983333;
+// Vapi's assistant-request limit is 7.5 seconds end-to-end. Keep explicit
+// headroom for network jitter and the response trip back to Vapi.
+export const VAPI_ASSISTANT_REQUEST_BUDGET_MS = 6_000;
 
 /**
  * Best-effort authoritative duration extraction from an end-of-call payload.
@@ -58,10 +61,11 @@ function extractProviderCost(msg: Record<string, unknown>): {
   return { amount: null, currency: null };
 }
 
-export const Route = createFileRoute("/api/public/webhooks/vapi-inbound")({
+const vapiRouteConfig = {
   server: {
     handlers: {
-      POST: async ({ request }) => {
+      POST: async ({ request }: { request: Request }): Promise<Response> => {
+        const assistantRequestDeadlineAt = Date.now() + VAPI_ASSISTANT_REQUEST_BUDGET_MS;
         // Validate x-vapi-secret header against VAPI_SERVER_SECRET env var
         // Fail closed: refuse when the secret is unavailable in this runtime.
         const expected = process.env.VAPI_SERVER_SECRET ?? "";
@@ -124,7 +128,23 @@ export const Route = createFileRoute("/api/public/webhooks/vapi-inbound")({
         const providerCallId = call.id ?? null;
 
         if (msg.type === "assistant-request") {
-          const tenant = await resolveInboundTenant({ provider: "vapi", phoneId, phoneNumber });
+          let tenant;
+          try {
+            tenant = await resolveInboundTenant({
+              provider: "vapi",
+              phoneId,
+              phoneNumber,
+              deadlineAt: assistantRequestDeadlineAt,
+            });
+          } catch (error) {
+            console.error("[vapi-inbound] tenant resolution failed", error);
+            return new Response(
+              JSON.stringify({
+                error: "Call handling is temporarily unavailable. Please call again.",
+              }),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+          }
           if (!tenant) {
             return new Response(JSON.stringify({ error: "This number is not allocated." }), {
               status: 404,
@@ -137,7 +157,21 @@ export const Route = createFileRoute("/api/public/webhooks/vapi-inbound")({
               headers: { "Content-Type": "application/json" },
             });
           }
-          await markForwardingVerified(tenant.businessId, providerCallId);
+          try {
+            await markForwardingVerified(
+              tenant.businessId,
+              providerCallId,
+              assistantRequestDeadlineAt,
+            );
+          } catch (error) {
+            console.error("[vapi-inbound] forwarding verification failed", error);
+            return new Response(
+              JSON.stringify({
+                error: "Call handling is temporarily unavailable. Please call again.",
+              }),
+              { status: 200, headers: { "Content-Type": "application/json" } },
+            );
+          }
           const workflow = workflowForTenant(tenant);
           if (workflow.kind === "off") {
             return new Response(
@@ -174,13 +208,31 @@ export const Route = createFileRoute("/api/public/webhooks/vapi-inbound")({
             );
           }
           try {
-            await dispatchTextLinkRecovery({
+            const result = await dispatchTextLinkRecovery({
               tenant,
               provider: "vapi",
               providerEventId: providerCallId,
               callerPhone,
               publicBaseUrl: publicBase,
+              deadlineAt: assistantRequestDeadlineAt,
             });
+            if (result.outcome === "pending") {
+              return new Response(
+                JSON.stringify({
+                  error:
+                    "We are confirming your text request now. If the link does not arrive shortly, please call the business directly.",
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+              );
+            }
+            if (result.outcome === "failed") {
+              return new Response(
+                JSON.stringify({
+                  error: "We could not send the text link. Please call the business directly.",
+                }),
+                { status: 200, headers: { "Content-Type": "application/json" } },
+              );
+            }
             return new Response(
               JSON.stringify({
                 error:
@@ -706,4 +758,10 @@ export const Route = createFileRoute("/api/public/webhooks/vapi-inbound")({
       },
     },
   },
-});
+};
+
+export function handleVapiInbound(request: Request): Promise<Response> {
+  return vapiRouteConfig.server.handlers.POST({ request });
+}
+
+export const Route = createFileRoute("/api/public/webhooks/vapi-inbound")(vapiRouteConfig);
