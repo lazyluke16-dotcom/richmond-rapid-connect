@@ -73,11 +73,13 @@ The questionnaire still resolves the tenant from the public business slug. A Tex
 Recovery SMS creates `outbound_sms` usage with:
 
 - quantity `1`;
-- `billable=false`;
-- `non_billable_reason='sms_retail_pricing_unapproved'`;
-- Stripe meter status `skipped`.
+- `billable=true`;
+- customer unit price and estimated base charge `25` integer AUD cents (`0.25` in the existing major-unit compatibility fields);
+- GST-exclusive tax metadata so the invoicing/tax layer applies GST;
+- the tenant, Twilio SID, SMS audit ID, and durable provider-event identity;
+- Stripe meter status `skipped`, because the existing meter is AI voice-seconds-only and this phase does not trigger customer billing.
 
-Billing and Call Handling views expose SMS counts without inventing a customer SMS price. Existing AI usage behavior remains unchanged behind the new gate.
+Billing and Call Handling views expose the settled A$0.25 excluding GST price. SMS invoice aggregation sums integer minor units, while existing AI usage behavior remains separate and unchanged behind the AI gate.
 
 ### Customer UI
 
@@ -101,15 +103,19 @@ Hardening migration:
 
 `supabase/migrations-pending/20260726120000_text_link_dispatch_hardening.sql`
 
-Both are intentionally unapplied. The stable-record backfill contains no hard-coded production tenant, assistant, phone, call, lead, or billing-event ID.
+SMS pricing migration:
 
-The second migration adds atomic claim, begin-send, reconciliation, retry, failure, and completion transitions. Completion persists the provider SID, SMS audit, missed-call state, and exactly one non-billable usage row in one transaction. Leases permit stale pre-send recovery; uncertain provider outcomes must reconcile by the original destination, sender, unique body, and send time before a resend is allowed.
+`supabase/migrations-pending/20260727120000_text_link_sms_billable.sql`
+
+All three are intentionally unapplied. The stable-record backfill contains no hard-coded production tenant, assistant, phone, call, lead, or billing-event ID.
+
+The second migration adds atomic claim, begin-send, reconciliation, retry, failure, and completion transitions. The third replaces the provisional non-billable policy: completion now persists the provider SID, SMS audit, missed-call state, and exactly one billable 25-cent AUD usage row in one transaction. Leases permit stale pre-send recovery; uncertain provider outcomes must reconcile by the original destination, sender, unique body, and send time before a resend is allowed. A reconciled Twilio SID proves provider acceptance even if its later delivery status is `undelivered`, so the incurred provider-cost event remains chargeable.
 
 ## Verification checkpoint
 
 Current source verification:
 
-- full Vitest suite: 289 tests passing across 17 files;
+- full Vitest suite: 293 tests passing across 17 files;
 - TypeScript `tsc --noEmit`: passing;
 - production Vite/Nitro build: passing with `LOCAL_BUILD_DISABLE_MCP_PLUGIN=1` on the Windows linked worktree;
 - changed-file ESLint and Prettier checks: passing;
@@ -121,10 +127,12 @@ The environment flag bypasses only `@lovable.dev/mcp-js` route generation on Win
 
 Local database verification was completed on 2026-07-26 with WSL 2.7.11, Docker Desktop 4.83.0 / Engine 29.6.2, PostgreSQL 17.6.1.143, and the project-pinned Supabase CLI 2.109.1.
 
-- Fresh replay: all 23 committed migrations plus both pending call-handling migrations applied to an empty disposable database (25 total). The hardening migration reapplied successfully as an idempotency check.
-- Upgrade replay: the 23-migration baseline was seeded with trusted AI, live Text Link, and untrusted AI fixtures before applying migration 24 and migration 25 separately with `supabase migration up --local`. AI and Text Link were preserved correctly; the untrusted fixture failed closed to Off; legacy provider states were upgraded and an existing Twilio SID was preserved.
-- Database assertions exercised active duplicate claims, stale pre-send recovery, uncertain-send reconciliation, provider SID preservation, transactional missed-call/SMS completion, cross-tenant rejection, and exactly-once non-billable SMS usage.
-- Behavioural Vitest coverage invokes the real Vapi webhook and dispatch/provider code with controlled database and Twilio boundaries. It covers Off, Text Link, AI routing, successful dispatch, concurrent duplicates, stale claims, post-provider persistence interruption, provider rejection, uncertain network outcome, missing caller ID, tenant-specific links, cross-tenant replay rejection, usage isolation, and no Text Link AI lead/voice usage.
+The settled billable SMS policy was verified on 2026-07-27 using the same local toolchain. No customer invoice, Stripe meter event, or live provider operation was triggered.
+
+- Fresh replay: all 23 committed migrations plus all three pending call-handling migrations applied to an empty disposable database (26 total). The pricing migration reapplied successfully as an idempotency check. Direct completion assertions produced two exactly-once accepted SMS rows totalling 50 integer AUD cents.
+- Upgrade replay: the 23-migration baseline was seeded with trusted AI, live Text Link, and Off fixtures before applying migrations 24, 25, and 26 separately with `supabase migration up --local`. AI, Text Link, and Off were preserved correctly. An in-flight reconciled Text Link event completed after migration 26 as one billable 25-cent row.
+- Database assertions exercised duplicate completion, reconciled `undelivered` acceptance, provider SID/status preservation, transactional missed-call/SMS completion, integer minor-unit aggregation, exact tenant attribution, tax-exclusive metadata, and exactly-once billable SMS usage.
+- Behavioural Vitest coverage invokes the real Vapi webhook and dispatch/provider code with controlled database and Twilio boundaries. It covers Off, Text Link, AI routing, successful 25-cent dispatch, concurrent duplicates, stale claims, post-provider persistence interruption, provider rejection, uncertain outcome without charge, reconciliation-confirmed charge, missing caller ID, tenant-specific links, cross-tenant replay rejection, single-segment enforcement, usage isolation, and no Text Link AI lead/voice usage.
 - Signup phone continuity uses validated same-tab `sessionStorage` first and otherwise validated authenticated JWT metadata. Existing tenant-scoped business data remains authoritative on resume; malformed metadata is ignored.
 - The first fresh replay exposed an older recovered migration that unconditionally inserted a production-specific Vapi mapping. That migration is now guarded by the existence of its historical business row, preserving its behavior for the intended row while making clean replays safe.
 - Both local stacks used distinct project IDs under `C:\tmp`. Their containers and database volumes were discarded after verification. No Supabase login, link, pull, push, hosted database, Lovable, Vapi, Twilio, or Stripe operation was used.

@@ -126,7 +126,7 @@ Use a dedicated certification tenant and a new caller number. Run in this order:
 8. Make a new missed/forwarded call.
 9. Confirm exactly one SMS contains the tenant questionnaire link.
 10. Complete the questionnaire and confirm the job card appears only in that tenant’s Job Centre.
-11. Confirm one `outbound_sms` usage row has `billable=false`, `non_billable_reason='sms_retail_pricing_unapproved'`, and no Stripe meter event.
+11. Confirm one `outbound_sms` usage row has `billable=true`, `customer_rate_minor=25`, `estimated_customer_charge_minor=25`, `customer_rate_currency='AUD'`, the Twilio SID and tenant linkage, GST-exclusive metadata, and no Stripe meter event.
 
 ### AI Receptionist
 
@@ -142,7 +142,7 @@ Replay the same Twilio/Vapi provider event under controlled conditions. Confirm 
 
 ### Billing
 
-Confirm AI usage is billed only when the effective billing state and live mode permit it. Confirm billing-exempt tests skip Stripe. Confirm SMS remains visible and non-billable. Confirm the live Stripe webhook and customer portal remain healthy without making an unnecessary charge.
+Confirm AI usage is billed only when the effective billing state and live mode permit it. Confirm billing-exempt AI tests skip Stripe. Confirm every Twilio-accepted Text Link SMS creates exactly one A$0.25 excluding GST invoice-aggregation event, while rejected or unresolved attempts create none. Confirm GST is added only by the invoicing/tax layer. Confirm the live Stripe webhook and customer portal remain healthy without submitting SMS events to the AI voice meter.
 
 ## 9. Rollback
 
