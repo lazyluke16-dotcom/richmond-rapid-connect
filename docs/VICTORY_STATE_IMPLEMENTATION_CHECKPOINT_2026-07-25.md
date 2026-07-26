@@ -103,14 +103,26 @@ It is intentionally unapplied. Its stable-record backfill contains no hard-coded
 
 Current source verification:
 
-- full Vitest suite: 269 tests passing across 15 files;
+- full Vitest suite: 270 tests passing across 15 files;
 - TypeScript `tsc --noEmit`: passing;
 - production Vite/Nitro build: passing with `LOCAL_BUILD_DISABLE_MCP_PLUGIN=1` on the Windows linked worktree;
-- changed-file lint and final Git checks: to be recorded before publication.
+- changed-file ESLint and Prettier checks: passing;
+- `git diff --check`: passing.
+
+The repository-wide `npm run lint` remains blocked by 2,798 pre-existing Prettier errors in recovered, untouched source files. The Windows line-ending false positives were removed by setting Prettier `endOfLine` to `auto`, but the remaining quote, semicolon, and wrapping differences would require a broad unrelated reformat. No such reformat was included in this hardening change.
 
 The environment flag bypasses only `@lovable.dev/mcp-js` route generation on Windows because version 0.24.0 compares mixed slash styles before Vite starts. The committed MCP routes remain present, and normal Lovable/Linux builds retain the plugin.
 
-No local PostgreSQL runtime was available, so the migration has static regression coverage but has not been executed against a local database. Controlled staging migration execution is an external prerequisite.
+Local database verification was completed on 2026-07-26 with WSL 2.7.11, Docker Desktop 4.83.0 / Engine 29.6.2, PostgreSQL 17.6.1.143, and the project-pinned Supabase CLI 2.109.1.
+
+- Fresh replay: all 23 committed migrations plus `20260725160000_customer_call_handling.sql` applied to an empty disposable database. The call-handling migration also reapplied successfully as an idempotency check.
+- Upgrade replay: the 23-migration baseline was seeded with trusted AI, live Text Link, and untrusted AI fixtures before applying the call-handling migration with `supabase migration up --local`. AI and Text Link were preserved correctly; the untrusted AI fixture failed closed to Off; legacy split-brain writes were rejected.
+- The first fresh replay exposed an older recovered migration that unconditionally inserted a production-specific Vapi mapping. That migration is now guarded by the existence of its historical business row, preserving its behavior for the intended row while making clean replays safe.
+- Both local stacks used distinct project IDs under `C:\tmp`. Their containers and database volumes were discarded after verification. No Supabase login, link, pull, push, hosted database, Lovable, Vapi, Twilio, or Stripe operation was used.
+
+Controlled staging migration execution and live backfill verification remain external prerequisites; local verification does not certify hosted state.
+
+The 2026-07-26 read-only production dependency audit reports four unresolved advisories (one low, three moderate). The actionable chains are Windows-specific local tooling in `@lovable.dev/mcp-js`: `@hono/node-server` static-file traversal and esbuild development-server file reads. The latest Lovable MCP release remains 0.24.0 and constrains both dependencies below their fixed major/minor versions, so no compatible upstream fix is currently available. No forced override or automatic audit fix was applied. Local Supabase and Vite services must remain unexposed, and these advisories must be rechecked before release.
 
 ## Differences from the preserved functional documents
 
@@ -123,7 +135,7 @@ No local PostgreSQL runtime was available, so the migration has static regressio
 
 ## Remaining external prerequisites
 
-1. Review and execute the pending migration in a controlled database environment.
+1. Review and execute the pending migration in a controlled staging database environment.
 2. Verify the guarded backfill preserves the proven voice tenant.
 3. Populate approved spare Australian voice-and-SMS numbers in inventory without changing existing assignments.
 4. Configure those spare Vapi phone resources for dynamic `assistant-request`.
