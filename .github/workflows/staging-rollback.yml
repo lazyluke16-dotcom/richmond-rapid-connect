@@ -39,13 +39,28 @@ jobs:
       url: ${{ vars.CERTIFICATION_BASE_URL }}
 
     steps:
-      - name: Check out rollback controls
+      - name: Check out exact release rollback controls
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_release_sha }}
+          fetch-depth: 0
 
       - name: Use Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      - name: Verify exact immutable release
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+        run: |
+          if ! [[ "$EXPECTED_RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "expected_release_sha must be an exact lowercase 40-character Git SHA" >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$EXPECTED_RELEASE_SHA"
+          git fetch --no-tags origin feat/customer-call-handling-reconstructed
+          git merge-base --is-ancestor "$EXPECTED_RELEASE_SHA" origin/feat/customer-call-handling-reconstructed
 
       - name: Validate staging target and immutable identifiers
         env:
