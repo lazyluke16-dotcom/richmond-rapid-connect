@@ -67,6 +67,15 @@ The Stripe adapter:
 - uses stable idempotency keys for both draft and item creation; and
 - never finalizes, pays, or charges the invoice.
 
+The release candidate exposes that adapter only through the authenticated
+staging certification route `/api/public/process-sms-invoice`. The route is
+disabled unless the application has an explicit non-production staging
+identity, the staging execution confirmation, Stripe test mode, and a
+dedicated processor key. Each request repeats the exact environment identity
+and selects one UUID tenant and one canonical UTC period of at most 32 days.
+Production-like targets, malformed periods, wrong tenants, missing keys, and
+raw provider errors fail closed.
+
 If provider acceptance succeeds but local completion is interrupted, the batch remains reconcilable. A retry uses the same idempotency keys. Failed provider creation can also be retried without selecting new lines. Provider invoice, customer, batch, period, tenant, usage event, and Twilio SID remain linked.
 
 SMS events never enter `ai_voice_seconds` or the `ai_voice_seconds` Stripe meter. AI voice and lead events do not satisfy SMS invoice eligibility. Existing subscription, grace, union-coupon, payment-webhook, and voice-meter paths are unchanged. The repository has no existing automatic SMS credit/reversal convention; this release candidate does not silently mutate or negate accepted usage. Any future adjustment must be an append-only, separately approved and auditable convention.
@@ -80,6 +89,11 @@ npm run certify:local
 ```
 
 This executes manifest integrity, durable webhook/Text Link behaviour, onboarding phone continuity, and commercial invoice behaviour. The full release gate additionally runs all tests, TypeScript, the production build, changed-file lint/format checks, migration replays, schema comparison, diff/credential scans, and dependency audit.
+
+GitHub Actions repeats the source gates on every release-candidate branch push
+and publishes the exact `.output` Cloudflare build as an immutable,
+SHA-addressed artifact. The workflow has read-only repository permissions and
+contains no deployment or hosted-provider step.
 
 Local tests cover accepted, rejected, uncertain and reconciled provider outcomes; later undelivered status; Off/Text Link/AI routing; duplicate and cross-tenant webhooks; missing caller ID; questionnaire tenant selection; usage and audit linkage; one and four-message invoice aggregation; GST; concurrency; provider and persistence interruption; fixed cutoff; late arrival; AI exclusion; and same/new-tab onboarding continuity.
 

@@ -37,11 +37,17 @@ Webhook cases additionally use:
 - `CERTIFICATION_CALLER_E164`
 
 Stripe draft certification additionally requires `STRIPE_MODE=test`, a test secret key, and `STRIPE_SMS_GST_TAX_RATE_ID` for a preconfigured 10% exclusive Australian GST rate.
+The guarded invoice endpoint additionally requires a unique
+`SMS_INVOICE_PROCESSOR_KEY` of at least 32 characters, stored only in the
+staging secret store. The operator must supply the same key ephemerally along
+with `CERTIFICATION_INVOICE_BUSINESS_ID`, `CERTIFICATION_PERIOD_START`, and
+`CERTIFICATION_PERIOD_END`.
 
 Run the no-network validation:
 
 ```text
 npm run certify:staging -- --preflight --environment-id <exact-staging-id>
+npm run certify:staging -- --preflight-invoice --environment-id <exact-staging-id>
 ```
 
 The harness rejects HTTP, hostname mismatch, missing identifiers, mismatched Supabase project references, and production-like/live targets. It never prints credential values.
@@ -74,6 +80,23 @@ npm run certify:staging -- --execute-webhook text_link_accepted --environment-id
 Supported webhook commands are `off`, `text_link_accepted`, `ai_receptionist`, `duplicate_webhook`, `provider_rejected`, `provider_uncertain`, `reconciliation_accepted`, `later_undelivered`, `missing_caller_id`, and `cross_tenant_replay`.
 
 For the four controlled provider outcomes, set `CERTIFICATION_PROVIDER_SCENARIO` to the exact case only after confirming the matching staging provider fixture is active. The harness refuses otherwise. Output contains only call ID, HTTP status, response key names, and booleans—not secrets or raw provider responses.
+
+After Text Link usage evidence exists, invoke the guarded invoice endpoint for
+one fixed UTC period:
+
+```text
+npm run certify:staging -- --execute-invoice --environment-id <exact-staging-id>
+```
+
+The application route remains unavailable unless the deployment itself has
+`STAGING_CERTIFICATION_ENABLED=true`,
+`STAGING_CERTIFICATION_EXECUTE=I_UNDERSTAND_STAGING_ONLY`, the exact staging
+environment identity, Stripe test credentials, and the processor key. The
+request must repeat the environment identity and authenticate with that key.
+The route accepts one UUID tenant and a canonical UTC period no longer than 32
+days. It can create only an unfinalized Stripe test draft through the existing
+test-only provider guard. It returns safe status and audit identifiers, never
+the processor key or raw provider errors.
 
 ## 5. Evidence assertions
 
