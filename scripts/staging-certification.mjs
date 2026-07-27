@@ -20,6 +20,7 @@ export const certificationCases = [
   { id: "invoice_exactly_once", group: "billing", execution: "operator_assertion" },
   { id: "gst_once", group: "billing", execution: "operator_assertion" },
   { id: "sms_excluded_from_ai_meter", group: "billing", execution: "operator_assertion" },
+  { id: "invoice_draft", group: "billing", execution: "guarded_invoice_endpoint" },
   { id: "signup_same_tab", group: "onboarding", execution: "browser" },
   { id: "signup_new_tab", group: "onboarding", execution: "browser" },
   { id: "job_enrichment_recovery", group: "job_card", execution: "operator_assertion" },
@@ -67,7 +68,6 @@ export function assertStagingTarget(env = process.env, suppliedEnvironmentId) {
     throw new Error("Staging Supabase URL does not match the explicit staging project reference");
   }
   required(env, "STAGING_SUPABASE_SERVICE_ROLE_KEY");
-  required(env, "VAPI_SERVER_SECRET");
   return { environmentId, baseUrl, projectRef };
 }
 
@@ -184,6 +184,69 @@ async function executeWebhookCase(caseId, env, target) {
   return { caseId, callId, evidence };
 }
 
+function canonicalUtc(env, name) {
+  const value = required(env, name);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString() !== value) {
+    throw new Error(`${name} must be a canonical UTC timestamp`);
+  }
+  return value;
+}
+
+function invoiceInput(env) {
+  const businessId = required(env, "CERTIFICATION_INVOICE_BUSINESS_ID");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(businessId)) {
+    throw new Error("CERTIFICATION_INVOICE_BUSINESS_ID must be a UUID");
+  }
+  const periodStart = canonicalUtc(env, "CERTIFICATION_PERIOD_START");
+  const periodEnd = canonicalUtc(env, "CERTIFICATION_PERIOD_END");
+  const duration = new Date(periodEnd).getTime() - new Date(periodStart).getTime();
+  if (duration <= 0 || duration > 32 * 24 * 60 * 60 * 1000) {
+    throw new Error("Certification invoice period must be positive and no longer than 32 days");
+  }
+  return { businessId, periodStart, periodEnd };
+}
+
+function assertInvoicePreflight(env) {
+  const processorKey = required(env, "SMS_INVOICE_PROCESSOR_KEY");
+  if (processorKey.length < 32) {
+    throw new Error("SMS_INVOICE_PROCESSOR_KEY must contain at least 32 characters");
+  }
+  if (env.STRIPE_MODE !== "test" || !env.STRIPE_SECRET_KEY?.startsWith("sk_test_")) {
+    throw new Error("Invoice certification requires Stripe test mode");
+  }
+  if (!/^txr_[A-Za-z0-9]+$/.test(required(env, "STRIPE_SMS_GST_TAX_RATE_ID"))) {
+    throw new Error("Invoice certification requires a staging GST tax-rate ID");
+  }
+  return { processorKey, input: invoiceInput(env) };
+}
+
+async function executeInvoiceCase(env, target) {
+  const { processorKey, input } = assertInvoicePreflight(env);
+  const response = await fetch(new URL("/api/public/process-sms-invoice", target.baseUrl), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-certification-environment-id": target.environmentId,
+      "x-sms-invoice-processor-key": processorKey,
+    },
+    body: JSON.stringify(input),
+  });
+  let body = {};
+  try {
+    body = await response.json();
+  } catch {
+    body = {};
+  }
+  return {
+    status: response.status,
+    outcome: typeof body.status === "string" ? body.status : "invalid_response",
+    batchId: typeof body.batchId === "string" ? body.batchId : null,
+    providerInvoiceId: typeof body.providerInvoiceId === "string" ? body.providerInvoiceId : null,
+    credentialsLogged: false,
+  };
+}
+
 export async function main(args = process.argv.slice(2), env = process.env) {
   if (args.length === 0 || args.includes("--plan")) {
     process.stdout.write(
@@ -199,6 +262,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
   const suppliedEnvironmentId = argumentValue(args, "--environment-id");
   const target = assertStagingTarget(env, suppliedEnvironmentId);
   if (args.includes("--preflight")) {
+    required(env, "VAPI_SERVER_SECRET");
     process.stdout.write(
       `${JSON.stringify({
         status: "staging_preflight_passed",
@@ -211,8 +275,46 @@ export async function main(args = process.argv.slice(2), env = process.env) {
     return;
   }
 
+  if (args.includes("--preflight-invoice")) {
+    assertInvoicePreflight(env);
+    process.stdout.write(
+      `${JSON.stringify({
+        status: "staging_invoice_preflight_passed",
+        environmentId: target.environmentId,
+        projectRef: target.projectRef,
+        credentialsLogged: false,
+        networkAccess: false,
+      })}\n`,
+    );
+    return;
+  }
+
+  if (args.includes("--execute-invoice")) {
+    if (
+      env.STAGING_CERTIFICATION_EXECUTE !== EXECUTION_CONFIRMATION ||
+      suppliedEnvironmentId !== target.environmentId
+    ) {
+      throw new Error(
+        "Hosted execution is disabled until the exact environment ID and staging-only confirmation are supplied",
+      );
+    }
+    const result = await executeInvoiceCase(env, target);
+    process.stdout.write(
+      `${JSON.stringify({
+        ...result,
+        caseId: "invoice_draft",
+        environmentId: target.environmentId,
+      })}\n`,
+    );
+    return;
+  }
+
   const caseId = argumentValue(args, "--execute-webhook");
-  if (!caseId) throw new Error("Use --plan, --preflight, or --execute-webhook <case>");
+  if (!caseId) {
+    throw new Error(
+      "Use --plan, --preflight, --preflight-invoice, --execute-webhook <case>, or --execute-invoice",
+    );
+  }
   if (
     env.STAGING_CERTIFICATION_EXECUTE !== EXECUTION_CONFIRMATION ||
     suppliedEnvironmentId !== target.environmentId

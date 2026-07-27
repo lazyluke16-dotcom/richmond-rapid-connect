@@ -37,6 +37,7 @@ import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[
 import { Route as ApiDashboardVerifyPinRouteImport } from './routes/api/dashboard.verify-pin'
 import { Route as ApiDemoTriggerSmsRouteImport } from './routes/api/demo.trigger-sms'
 import { Route as ApiPublicProcessEnrichmentJobsRouteImport } from './routes/api/public/process-enrichment-jobs'
+import { Route as ApiPublicProcessSmsInvoiceRouteImport } from './routes/api/public/process-sms-invoice'
 import { Route as ApiWebhooksAiPhoneLeadRouteImport } from './routes/api/webhooks.ai-phone-lead'
 import { Route as BSlugIndexRouteImport } from './routes/b.$slug.index'
 import { Route as BSlugChatRouteImport } from './routes/b.$slug.chat'
@@ -196,6 +197,12 @@ const ApiPublicProcessEnrichmentJobsRoute =
     path: '/api/public/process-enrichment-jobs',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicProcessSmsInvoiceRoute =
+  ApiPublicProcessSmsInvoiceRouteImport.update({
+    id: '/api/public/process-sms-invoice',
+    path: '/api/public/process-sms-invoice',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiWebhooksAiPhoneLeadRoute = ApiWebhooksAiPhoneLeadRouteImport.update({
   id: '/api/webhooks/ai-phone-lead',
   path: '/api/webhooks/ai-phone-lead',
@@ -289,6 +296,7 @@ export interface FileRoutesByFullPath {
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
+  '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/webhooks/ai-phone-lead': typeof ApiWebhooksAiPhoneLeadRoute
   '/b/$slug/chat': typeof BSlugChatRoute
   '/b/$slug/confirmation': typeof BSlugConfirmationRoute
@@ -329,6 +337,7 @@ export interface FileRoutesByTo {
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
+  '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/webhooks/ai-phone-lead': typeof ApiWebhooksAiPhoneLeadRoute
   '/b/$slug/chat': typeof BSlugChatRoute
   '/b/$slug/confirmation': typeof BSlugConfirmationRoute
@@ -372,6 +381,7 @@ export interface FileRoutesById {
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
+  '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/webhooks/ai-phone-lead': typeof ApiWebhooksAiPhoneLeadRoute
   '/b/$slug/chat': typeof BSlugChatRoute
   '/b/$slug/confirmation': typeof BSlugConfirmationRoute
@@ -415,6 +425,7 @@ export interface FileRouteTypes {
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/process-enrichment-jobs'
+    | '/api/public/process-sms-invoice'
     | '/api/webhooks/ai-phone-lead'
     | '/b/$slug/chat'
     | '/b/$slug/confirmation'
@@ -455,6 +466,7 @@ export interface FileRouteTypes {
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/process-enrichment-jobs'
+    | '/api/public/process-sms-invoice'
     | '/api/webhooks/ai-phone-lead'
     | '/b/$slug/chat'
     | '/b/$slug/confirmation'
@@ -497,6 +509,7 @@ export interface FileRouteTypes {
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/process-enrichment-jobs'
+    | '/api/public/process-sms-invoice'
     | '/api/webhooks/ai-phone-lead'
     | '/b/$slug/chat'
     | '/b/$slug/confirmation'
@@ -533,6 +546,7 @@ export interface RootRouteChildren {
   ApiDashboardVerifyPinRoute: typeof ApiDashboardVerifyPinRoute
   ApiDemoTriggerSmsRoute: typeof ApiDemoTriggerSmsRoute
   ApiPublicProcessEnrichmentJobsRoute: typeof ApiPublicProcessEnrichmentJobsRoute
+  ApiPublicProcessSmsInvoiceRoute: typeof ApiPublicProcessSmsInvoiceRoute
   ApiWebhooksAiPhoneLeadRoute: typeof ApiWebhooksAiPhoneLeadRoute
   ApiPublicBillingCheckoutRoute: typeof ApiPublicBillingCheckoutRoute
   ApiPublicBillingPortalRoute: typeof ApiPublicBillingPortalRoute
@@ -740,6 +754,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicProcessEnrichmentJobsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/process-sms-invoice': {
+      id: '/api/public/process-sms-invoice'
+      path: '/api/public/process-sms-invoice'
+      fullPath: '/api/public/process-sms-invoice'
+      preLoaderRoute: typeof ApiPublicProcessSmsInvoiceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/webhooks/ai-phone-lead': {
       id: '/api/webhooks/ai-phone-lead'
       path: '/api/webhooks/ai-phone-lead'
@@ -891,6 +912,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDashboardVerifyPinRoute: ApiDashboardVerifyPinRoute,
   ApiDemoTriggerSmsRoute: ApiDemoTriggerSmsRoute,
   ApiPublicProcessEnrichmentJobsRoute: ApiPublicProcessEnrichmentJobsRoute,
+  ApiPublicProcessSmsInvoiceRoute: ApiPublicProcessSmsInvoiceRoute,
   ApiWebhooksAiPhoneLeadRoute: ApiWebhooksAiPhoneLeadRoute,
   ApiPublicBillingCheckoutRoute: ApiPublicBillingCheckoutRoute,
   ApiPublicBillingPortalRoute: ApiPublicBillingPortalRoute,
