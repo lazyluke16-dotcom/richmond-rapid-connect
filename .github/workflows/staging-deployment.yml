@@ -1,0 +1,239 @@
+name: Deploy isolated staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact 40-character release-candidate SHA
+        required: true
+        type: string
+      environment_id:
+        description: Exact staging environment ID
+        required: true
+        default: staging-commercial-rc
+        type: string
+      apply_migrations:
+        description: Apply frozen migrations after a successful dry run
+        required: true
+        default: true
+        type: boolean
+      confirmation:
+        description: Type DEPLOY_STAGING_ONLY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: isolated-staging-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy-staging:
+    if: ${{ inputs.confirmation == 'DEPLOY_STAGING_ONLY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment:
+      name: staging
+      url: ${{ vars.CERTIFICATION_BASE_URL }}
+
+    steps:
+      - name: Check out exact requested release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify exact immutable release
+        env:
+          REQUESTED_SHA: ${{ inputs.release_sha }}
+        run: |
+          if ! [[ "$REQUESTED_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "release_sha must be an exact lowercase 40-character Git SHA" >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$REQUESTED_SHA"
+          git fetch --no-tags origin feat/customer-call-handling-reconstructed
+          git merge-base --is-ancestor "$REQUESTED_SHA" origin/feat/customer-call-handling-reconstructed
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate staging target and secret inventory
+        env:
+          DEPLOYMENT_TARGET: staging
+          DEPLOYMENT_CONFIRMATION: ${{ inputs.confirmation }}
+          CERTIFICATION_ENVIRONMENT_ID: ${{ inputs.environment_id }}
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          CERTIFICATION_STAGING_HOSTNAME: ${{ vars.CERTIFICATION_STAGING_HOSTNAME }}
+          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          DEPLOYED_RELEASE_SHA: ${{ inputs.release_sha }}
+          PUBLIC_JOB_REQUEST_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          SMS_MODE: twilio
+          STRIPE_MODE: test
+          STAGING_CERTIFICATION_ENABLED: "true"
+          STAGING_CERTIFICATION_EXECUTE: I_UNDERSTAND_STAGING_ONLY
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          STAGING_SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+          STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+          VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
+          VAPI_SERVER_SECRET: ${{ secrets.VAPI_SERVER_SECRET }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_SMS_GST_TAX_RATE_ID: ${{ secrets.STRIPE_SMS_GST_TAX_RATE_ID }}
+          STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
+          STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
+          STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          SMS_INVOICE_PROCESSOR_KEY: ${{ secrets.SMS_INVOICE_PROCESSOR_KEY }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          DASHBOARD_PIN: ${{ secrets.DASHBOARD_PIN }}
+        run: >-
+          node scripts/staging-deployment.mjs
+          --preflight
+          --environment-id "${{ inputs.environment_id }}"
+
+      - name: Run complete release gates
+        run: |
+          npm run verify:migrations
+          npm test
+          npx tsc --noEmit
+          npm audit --omit=dev --audit-level=high
+
+      - name: Build exact Cloudflare artifact with staging client configuration
+        env:
+          LOCAL_BUILD_DISABLE_MCP_PLUGIN: "1"
+          VITE_SMS_MODE: twilio
+          VITE_SUPABASE_PROJECT_ID: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          VITE_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm run build
+
+      - name: Link isolated Supabase staging project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+        run: >-
+          npx supabase link
+          --project-ref "$STAGING_SUPABASE_PROJECT_REF"
+          --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Dry-run frozen staging migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+        run: npx supabase db push --linked --dry-run --include-all --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Apply frozen staging migrations
+        if: ${{ inputs.apply_migrations }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+        run: npx supabase db push --linked --include-all --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Refuse code deployment when migrations are dry-run only
+        if: ${{ inputs.apply_migrations == false }}
+        run: |
+          echo "Migration dry run passed. Worker deployment intentionally stopped." >&2
+          exit 1
+
+      - name: Prepare permission-restricted runtime secrets
+        env:
+          SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+          VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
+          VAPI_SERVER_SECRET: ${{ secrets.VAPI_SERVER_SECRET }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_SMS_GST_TAX_RATE_ID: ${{ secrets.STRIPE_SMS_GST_TAX_RATE_ID }}
+          STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
+          STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
+          STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          SMS_INVOICE_PROCESSOR_KEY: ${{ secrets.SMS_INVOICE_PROCESSOR_KEY }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          DASHBOARD_PIN: ${{ secrets.DASHBOARD_PIN }}
+        run: >-
+          node scripts/staging-deployment.mjs
+          --write-cloudflare-secrets
+          --out "${{ runner.temp }}/rapid-connect-staging-secrets.json"
+
+      - name: Deploy only the staging-named Cloudflare Worker
+        id: cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.114.0"
+          command: >-
+            deploy
+            --config .output/server/wrangler.json
+            --name ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+            --var DEPLOYMENT_TARGET:staging
+            --var CERTIFICATION_ENVIRONMENT_ID:${{ inputs.environment_id }}
+            --var DEPLOYED_RELEASE_SHA:${{ inputs.release_sha }}
+            --var PUBLIC_JOB_REQUEST_URL:${{ vars.CERTIFICATION_BASE_URL }}
+            --var SMS_MODE:twilio
+            --var STRIPE_MODE:test
+            --var STAGING_CERTIFICATION_ENABLED:true
+            --var STAGING_CERTIFICATION_EXECUTE:I_UNDERSTAND_STAGING_ONLY
+            --secrets-file ${{ runner.temp }}/rapid-connect-staging-secrets.json
+
+      - name: Remove ephemeral runtime secrets
+        if: ${{ always() }}
+        run: >-
+          node scripts/staging-deployment.mjs
+          --remove-cloudflare-secrets
+          --out "${{ runner.temp }}/rapid-connect-staging-secrets.json"
+
+      - name: Verify exact hosted release identity
+        env:
+          DEPLOYMENT_TARGET: staging
+          DEPLOYMENT_CONFIRMATION: DEPLOY_STAGING_ONLY
+          STAGING_DEPLOYMENT_EXECUTE: I_UNDERSTAND_STAGING_ONLY
+          CERTIFICATION_ENVIRONMENT_ID: ${{ inputs.environment_id }}
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          CERTIFICATION_STAGING_HOSTNAME: ${{ vars.CERTIFICATION_STAGING_HOSTNAME }}
+          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          DEPLOYED_RELEASE_SHA: ${{ inputs.release_sha }}
+          PUBLIC_JOB_REQUEST_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          SMS_MODE: twilio
+          STRIPE_MODE: test
+          STAGING_CERTIFICATION_ENABLED: "true"
+          STAGING_CERTIFICATION_EXECUTE: I_UNDERSTAND_STAGING_ONLY
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+        run: >-
+          node scripts/staging-deployment.mjs
+          --verify-hosted
+          --environment-id "${{ inputs.environment_id }}"
+          --evidence-out staging-deployment-evidence.json
+
+      - name: Upload non-secret deployment evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-deployment-${{ inputs.release_sha }}
+          path: staging-deployment-evidence.json
+          if-no-files-found: error
+          retention-days: 30

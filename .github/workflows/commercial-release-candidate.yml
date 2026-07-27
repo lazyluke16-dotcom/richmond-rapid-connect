@@ -44,19 +44,30 @@ jobs:
       - name: Check release-critical formatting and lint
         run: |
           npx prettier --check \
+            .github/workflows/staging-deployment.yml \
+            .github/workflows/staging-rollback.yml \
             scripts/staging-certification.mjs \
+            scripts/staging-deployment.d.mts \
+            scripts/staging-deployment.mjs \
             src/lib/sms-invoice-certification.server.ts \
             src/lib/sms-invoice-stripe.server.ts \
             src/lib/sms-invoicing.server.ts \
+            src/lib/staging-release.server.ts \
             src/lib/__tests__/sms-invoice-certification-route.behavior.test.ts \
-            src/routes/api/public/process-sms-invoice.ts
+            src/lib/__tests__/staging-deployment.behavior.test.ts \
+            src/routes/api/public/process-sms-invoice.ts \
+            src/routes/api/public/staging-release.ts
           npx eslint \
             scripts/staging-certification.mjs \
+            scripts/staging-deployment.mjs \
             src/lib/sms-invoice-certification.server.ts \
             src/lib/sms-invoice-stripe.server.ts \
             src/lib/sms-invoicing.server.ts \
+            src/lib/staging-release.server.ts \
             src/lib/__tests__/sms-invoice-certification-route.behavior.test.ts \
-            src/routes/api/public/process-sms-invoice.ts
+            src/lib/__tests__/staging-deployment.behavior.test.ts \
+            src/routes/api/public/process-sms-invoice.ts \
+            src/routes/api/public/staging-release.ts
 
       - name: Build Cloudflare production artifact
         env:

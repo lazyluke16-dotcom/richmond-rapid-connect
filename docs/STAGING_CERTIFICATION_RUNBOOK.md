@@ -2,6 +2,12 @@
 
 This runbook is staging-only. It does not authorize production access, deployment, provider changes, invoice finalization, or customer charging.
 
+The guarded hosted deployment path is defined in
+`docs/STAGING_DEPLOYMENT_AUTOMATION.md`. Complete that workflow successfully
+before running provider or browser certification cases. The deployment
+workflow verifies the exact hosted release SHA but deliberately does not send
+an SMS, place a call, create fixtures, or invoke Stripe certification.
+
 ## 1. Local checks first
 
 From the exact release-candidate checkout:

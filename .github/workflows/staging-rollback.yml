@@ -1,0 +1,100 @@
+name: Roll back isolated staging Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_id:
+        description: Exact Cloudflare Worker version UUID to restore
+        required: true
+        type: string
+      expected_release_sha:
+        description: Exact release SHA reported by that version
+        required: true
+        type: string
+      environment_id:
+        description: Exact staging environment ID
+        required: true
+        default: staging-commercial-rc
+        type: string
+      confirmation:
+        description: Type ROLLBACK_STAGING_ONLY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: isolated-staging-deployment
+  cancel-in-progress: false
+
+jobs:
+  rollback-staging:
+    if: ${{ inputs.confirmation == 'ROLLBACK_STAGING_ONLY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: staging
+      url: ${{ vars.CERTIFICATION_BASE_URL }}
+
+    steps:
+      - name: Check out rollback controls
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Validate staging target and immutable identifiers
+        env:
+          VERSION_ID: ${{ inputs.version_id }}
+          EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+          DEPLOYMENT_TARGET: staging
+          DEPLOYMENT_CONFIRMATION: DEPLOY_STAGING_ONLY
+          CERTIFICATION_ENVIRONMENT_ID: ${{ inputs.environment_id }}
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          CERTIFICATION_STAGING_HOSTNAME: ${{ vars.CERTIFICATION_STAGING_HOSTNAME }}
+          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          DEPLOYED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+          PUBLIC_JOB_REQUEST_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          SMS_MODE: twilio
+          STRIPE_MODE: test
+          STAGING_CERTIFICATION_ENABLED: "true"
+          STAGING_CERTIFICATION_EXECUTE: I_UNDERSTAND_STAGING_ONLY
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+        run: |
+          node scripts/staging-deployment.mjs --preflight-public --environment-id "${{ inputs.environment_id }}"
+          node -e 'if (!/^[0-9a-f-]{36}$/i.test(process.env.VERSION_ID) || !/^[a-f0-9]{40}$/.test(process.env.EXPECTED_RELEASE_SHA)) process.exit(1)'
+
+      - name: Roll back only the staging-named Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.114.0"
+          command: >-
+            rollback ${{ inputs.version_id }}
+            --name ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+            -y
+
+      - name: Verify restored release identity
+        env:
+          DEPLOYMENT_TARGET: staging
+          DEPLOYMENT_CONFIRMATION: DEPLOY_STAGING_ONLY
+          STAGING_DEPLOYMENT_EXECUTE: I_UNDERSTAND_STAGING_ONLY
+          CERTIFICATION_ENVIRONMENT_ID: ${{ inputs.environment_id }}
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          CERTIFICATION_STAGING_HOSTNAME: ${{ vars.CERTIFICATION_STAGING_HOSTNAME }}
+          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          DEPLOYED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+          PUBLIC_JOB_REQUEST_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          SMS_MODE: twilio
+          STRIPE_MODE: test
+          STAGING_CERTIFICATION_ENABLED: "true"
+          STAGING_CERTIFICATION_EXECUTE: I_UNDERSTAND_STAGING_ONLY
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+        run: node scripts/staging-deployment.mjs --verify-hosted

@@ -1,0 +1,98 @@
+# Isolated staging deployment automation
+
+Status: source-controlled and locally testable. No hosted service is changed until an authorized operator manually dispatches the workflow with a complete `staging` GitHub Environment.
+
+## What the workflow does
+
+`.github/workflows/staging-deployment.yml` accepts an exact 40-character release SHA and performs one serialized staging deployment:
+
+1. checks out that immutable commit;
+2. verifies it is an ancestor of `feat/customer-call-handling-reconstructed`;
+3. verifies all frozen migration hashes;
+4. runs the complete tests, TypeScript and production dependency gate;
+5. builds the Cloudflare artifact with staging client configuration;
+6. links only the declared staging Supabase project;
+7. runs `supabase db push --dry-run` before any database mutation;
+8. applies the frozen additive migrations only when the explicit boolean gate remains enabled;
+9. deploys only a Worker whose name contains `staging` and contains no production-like token;
+10. checks `/api/public/staging-release` for the exact environment ID and release SHA; and
+11. retains a non-secret evidence artifact for 30 days.
+
+The workflow is manual-only. It is not triggered by a push, pull request, schedule, or merge.
+
+## GitHub Environment contract
+
+Create one GitHub Environment named exactly `staging`. The deployment workflow reads the following non-secret environment variables:
+
+- `CERTIFICATION_BASE_URL` — HTTPS origin with a hostname containing `staging`;
+- `CERTIFICATION_STAGING_HOSTNAME` — exact hostname from that origin;
+- `CLOUDFLARE_STAGING_WORKER_NAME` — lowercase Worker name containing `staging`;
+- `STAGING_SUPABASE_PROJECT_REF` — dedicated, non-production project reference; and
+- `STAGING_SUPABASE_URL` — `https://<project-ref>.supabase.co`.
+
+The Environment must contain these encrypted secrets:
+
+- Cloudflare: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`;
+- Supabase deployment: `SUPABASE_ACCESS_TOKEN`, `STAGING_SUPABASE_DB_PASSWORD`;
+- Supabase runtime: `STAGING_SUPABASE_SERVICE_ROLE_KEY`, `STAGING_SUPABASE_PUBLISHABLE_KEY`;
+- Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`;
+- Vapi: `VAPI_API_KEY`, `VAPI_SERVER_SECRET`;
+- Stripe test mode: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SMS_GST_TAX_RATE_ID`, `STRIPE_PRICE_MCR_BASE`, `STRIPE_PRICE_AIR_BASE`, `STRIPE_PRICE_AIR_USAGE`;
+- application controls: `SMS_INVOICE_PROCESSOR_KEY`, `WEBHOOK_SECRET`, `DASHBOARD_PIN`.
+
+The preflight checks presence without printing values. It also rejects a non-test Stripe key, a short invoice processor key, inconsistent URLs, mismatched Supabase references, production-like identifiers, an unqualified Worker name, or a release that is not an exact SHA.
+
+Immediately before Cloudflare deployment, the runner writes only the allowlisted
+Worker secrets to an owner-readable (`0600`) file inside GitHub's ephemeral
+runner directory. That file is passed to the same Wrangler command that names
+the staging Worker, then removed even if deployment fails. It is never uploaded
+as an artifact or printed in logs.
+
+## Dispatch contract
+
+Run `Deploy isolated staging` from the feature branch and supply:
+
+- `release_sha`: the exact certified SHA;
+- `environment_id`: the exact ID beginning `staging-` or `staging_`;
+- `apply_migrations`: `true`; and
+- `confirmation`: `DEPLOY_STAGING_ONLY`.
+
+Selecting `false` for migrations performs the migration dry run and then deliberately fails before Worker deployment. This makes the dry-run path useful without allowing an application/schema mismatch.
+
+The deployment creates or updates only an unfinalized Stripe test-invoice capability. It does not run certification calls, send an SMS, finalize an invoice, charge a customer, create a production resource, or modify production configuration.
+
+## Release identity
+
+`GET /api/public/staging-release` exists only when all of these are true:
+
+- `DEPLOYMENT_TARGET=staging`;
+- `STAGING_CERTIFICATION_ENABLED=true`;
+- the environment ID is an explicit non-production staging ID; and
+- `DEPLOYED_RELEASE_SHA` is an exact Git commit SHA.
+
+The endpoint returns only target, environment ID and release SHA with `cache-control: no-store`. It returns 404 when the staging identity is incomplete or production-like.
+
+## Rollback
+
+`.github/workflows/staging-rollback.yml` restores one exact Cloudflare Worker version after validating:
+
+- `ROLLBACK_STAGING_ONLY`;
+- the staging environment ID;
+- the staging Worker name;
+- a Cloudflare version UUID; and
+- the expected release SHA reported by the restored Worker.
+
+The workflow then verifies the restored release identity. It does not reverse Supabase migrations. The release migrations are additive, and database rollback remains a separately reviewed recovery operation because destructive remote schema rollback is intentionally not automated.
+
+## Evidence boundary
+
+Successful deployment evidence contains only:
+
+- exact release SHA;
+- exact staging environment ID;
+- staging target;
+- verification timestamp;
+- Nitro preset and compatibility date; and
+- a digest of the generated non-secret deployment metadata.
+
+Credentials, provider payloads, database rows, phone numbers and customer information are never written to the evidence artifact.
