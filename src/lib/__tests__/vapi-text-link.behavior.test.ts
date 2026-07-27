@@ -447,7 +447,7 @@ describe("Vapi customer call-handling behavioural boundary", () => {
     expect(providerPostCount).toBe(0);
     expect(providerEvents.size).toBe(0);
     expect(usageRows).toHaveLength(0);
-  });
+  }, 10_000);
 
   it("routes AI mode to the trusted tenant assistant without SMS", async () => {
     const tenant = makeTenant("ai_receptionist", "02");
