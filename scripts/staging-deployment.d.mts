@@ -1,6 +1,5 @@
 export const stagingDeploymentSteps: string[];
 export const requiredSecretNames: string[];
-export const cloudflareRuntimeSecretNames: string[];
 
 export interface StagingDeploymentConfig {
   environmentId: string;
@@ -30,8 +29,3 @@ export function verifyHostedRelease(
   env?: NodeJS.ProcessEnv,
   fetchImpl?: typeof fetch,
 ): Promise<HostedReleaseIdentity>;
-
-export function writeCloudflareRuntimeSecrets(
-  path: string,
-  env?: NodeJS.ProcessEnv,
-): Promise<{ secretCount: number; valuesPrinted: false }>;

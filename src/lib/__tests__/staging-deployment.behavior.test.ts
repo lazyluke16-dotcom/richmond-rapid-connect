@@ -1,14 +1,9 @@
-import { mkdtemp, readFile, rmdir, stat, unlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
-  cloudflareRuntimeSecretNames,
   requiredSecretNames,
   validateStagingDeploymentConfig,
   verifyHostedRelease,
-  writeCloudflareRuntimeSecrets,
 } from "../../../scripts/staging-deployment.mjs";
 import { stagingReleaseIdentity } from "../staging-release.server";
 
@@ -92,25 +87,11 @@ describe("staging deployment boundary", () => {
     ).rejects.toThrow("does not match");
   });
 
-  it("writes only the allowlisted runtime secrets with owner-only permissions", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "rapid-connect-staging-"));
-    const path = join(directory, "secrets.json");
-    const env = Object.fromEntries(
-      cloudflareRuntimeSecretNames.map((name) => [name, `value-for-${name}`]),
-    );
-    try {
-      const result = await writeCloudflareRuntimeSecrets(path, env);
-      const contents = JSON.parse(await readFile(path, "utf8"));
-      expect(Object.keys(contents).sort()).toEqual([...cloudflareRuntimeSecretNames].sort());
-      expect(result).toEqual({
-        secretCount: cloudflareRuntimeSecretNames.length,
-        valuesPrinted: false,
-      });
-      expect((await stat(path)).mode & 0o777).toBe(0o600);
-    } finally {
-      await unlink(path);
-      await rmdir(directory);
-    }
+  it("requires the complete encrypted GitHub staging secret contract", () => {
+    expect(requiredSecretNames).toHaveLength(20);
+    expect(new Set(requiredSecretNames).size).toBe(requiredSecretNames.length);
+    expect(requiredSecretNames).toContain("STAGING_SUPABASE_DB_PASSWORD");
+    expect(requiredSecretNames).toContain("SMS_INVOICE_PROCESSOR_KEY");
   });
 });
 

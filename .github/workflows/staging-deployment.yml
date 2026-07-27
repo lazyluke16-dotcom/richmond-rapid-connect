@@ -131,23 +131,20 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
           STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
-        run: >-
-          npx supabase link
-          --project-ref "$STAGING_SUPABASE_PROJECT_REF"
-          --password "$SUPABASE_DB_PASSWORD"
+        run: npx supabase link --project-ref "$STAGING_SUPABASE_PROJECT_REF"
 
       - name: Dry-run frozen staging migrations
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
-        run: npx supabase db push --linked --dry-run --include-all --password "$SUPABASE_DB_PASSWORD"
+        run: npx supabase db push --linked --dry-run --include-all
 
       - name: Apply frozen staging migrations
         if: ${{ inputs.apply_migrations }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
-        run: npx supabase db push --linked --include-all --password "$SUPABASE_DB_PASSWORD"
+        run: npx supabase db push --linked --include-all
 
       - name: Refuse code deployment when migrations are dry-run only
         if: ${{ inputs.apply_migrations == false }}
@@ -155,7 +152,44 @@ jobs:
           echo "Migration dry run passed. Worker deployment intentionally stopped." >&2
           exit 1
 
-      - name: Prepare permission-restricted runtime secrets
+      - name: Deploy only the staging-named Cloudflare Worker
+        id: cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.114.0"
+          secrets: |
+            SUPABASE_URL
+            SUPABASE_SERVICE_ROLE_KEY
+            SUPABASE_PUBLISHABLE_KEY
+            TWILIO_ACCOUNT_SID
+            TWILIO_AUTH_TOKEN
+            TWILIO_FROM_NUMBER
+            VAPI_API_KEY
+            VAPI_SERVER_SECRET
+            STRIPE_SECRET_KEY
+            STRIPE_WEBHOOK_SECRET
+            STRIPE_SMS_GST_TAX_RATE_ID
+            STRIPE_PRICE_MCR_BASE
+            STRIPE_PRICE_AIR_BASE
+            STRIPE_PRICE_AIR_USAGE
+            SMS_INVOICE_PROCESSOR_KEY
+            WEBHOOK_SECRET
+            DASHBOARD_PIN
+          command: >-
+            deploy
+            --config .output/server/wrangler.json
+            --name ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+            --var DEPLOYMENT_TARGET:staging
+            --var CERTIFICATION_TARGET:staging
+            --var CERTIFICATION_ENVIRONMENT_ID:${{ inputs.environment_id }}
+            --var DEPLOYED_RELEASE_SHA:${{ inputs.release_sha }}
+            --var PUBLIC_JOB_REQUEST_URL:${{ vars.CERTIFICATION_BASE_URL }}
+            --var SMS_MODE:twilio
+            --var STRIPE_MODE:test
+            --var STAGING_CERTIFICATION_ENABLED:true
+            --var STAGING_CERTIFICATION_EXECUTE:I_UNDERSTAND_STAGING_ONLY
         env:
           SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
@@ -174,38 +208,6 @@ jobs:
           SMS_INVOICE_PROCESSOR_KEY: ${{ secrets.SMS_INVOICE_PROCESSOR_KEY }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           DASHBOARD_PIN: ${{ secrets.DASHBOARD_PIN }}
-        run: >-
-          node scripts/staging-deployment.mjs
-          --write-cloudflare-secrets
-          --out "${{ runner.temp }}/rapid-connect-staging-secrets.json"
-
-      - name: Deploy only the staging-named Cloudflare Worker
-        id: cloudflare
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4.114.0"
-          command: >-
-            deploy
-            --config .output/server/wrangler.json
-            --name ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
-            --var DEPLOYMENT_TARGET:staging
-            --var CERTIFICATION_ENVIRONMENT_ID:${{ inputs.environment_id }}
-            --var DEPLOYED_RELEASE_SHA:${{ inputs.release_sha }}
-            --var PUBLIC_JOB_REQUEST_URL:${{ vars.CERTIFICATION_BASE_URL }}
-            --var SMS_MODE:twilio
-            --var STRIPE_MODE:test
-            --var STAGING_CERTIFICATION_ENABLED:true
-            --var STAGING_CERTIFICATION_EXECUTE:I_UNDERSTAND_STAGING_ONLY
-            --secrets-file ${{ runner.temp }}/rapid-connect-staging-secrets.json
-
-      - name: Remove ephemeral runtime secrets
-        if: ${{ always() }}
-        run: >-
-          node scripts/staging-deployment.mjs
-          --remove-cloudflare-secrets
-          --out "${{ runner.temp }}/rapid-connect-staging-secrets.json"
 
       - name: Verify exact hosted release identity
         env:

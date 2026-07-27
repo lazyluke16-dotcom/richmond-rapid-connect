@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { chmod, readFile, unlink, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 
@@ -29,26 +29,6 @@ export const requiredSecretNames = [
   "STAGING_SUPABASE_DB_PASSWORD",
   "STAGING_SUPABASE_SERVICE_ROLE_KEY",
   "STAGING_SUPABASE_PUBLISHABLE_KEY",
-  "TWILIO_ACCOUNT_SID",
-  "TWILIO_AUTH_TOKEN",
-  "TWILIO_FROM_NUMBER",
-  "VAPI_API_KEY",
-  "VAPI_SERVER_SECRET",
-  "STRIPE_SECRET_KEY",
-  "STRIPE_WEBHOOK_SECRET",
-  "STRIPE_SMS_GST_TAX_RATE_ID",
-  "STRIPE_PRICE_MCR_BASE",
-  "STRIPE_PRICE_AIR_BASE",
-  "STRIPE_PRICE_AIR_USAGE",
-  "SMS_INVOICE_PROCESSOR_KEY",
-  "WEBHOOK_SECRET",
-  "DASHBOARD_PIN",
-];
-
-export const cloudflareRuntimeSecretNames = [
-  "SUPABASE_URL",
-  "SUPABASE_SERVICE_ROLE_KEY",
-  "SUPABASE_PUBLISHABLE_KEY",
   "TWILIO_ACCOUNT_SID",
   "TWILIO_AUTH_TOKEN",
   "TWILIO_FROM_NUMBER",
@@ -214,18 +194,6 @@ export async function verifyHostedRelease(env = process.env, fetchImpl = fetch) 
   };
 }
 
-export async function writeCloudflareRuntimeSecrets(path, env = process.env) {
-  const secrets = Object.fromEntries(
-    cloudflareRuntimeSecretNames.map((name) => [name, required(env, name)]),
-  );
-  await writeFile(resolve(path), `${JSON.stringify(secrets)}\n`, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
-  await chmod(resolve(path), 0o600);
-  return { secretCount: cloudflareRuntimeSecretNames.length, valuesPrinted: false };
-}
-
 async function main(args = process.argv.slice(2), env = process.env) {
   if (args.includes("--plan")) {
     console.log(
@@ -284,27 +252,7 @@ async function main(args = process.argv.slice(2), env = process.env) {
     return;
   }
 
-  const secretsFile = argumentValue(args, "--out");
-  if (args.includes("--write-cloudflare-secrets")) {
-    if (!secretsFile) throw new Error("--out is required for the ephemeral secrets file");
-    console.log(JSON.stringify(await writeCloudflareRuntimeSecrets(secretsFile, env)));
-    return;
-  }
-
-  if (args.includes("--remove-cloudflare-secrets")) {
-    if (!secretsFile) throw new Error("--out is required for the ephemeral secrets file");
-    try {
-      await unlink(resolve(secretsFile));
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-    }
-    console.log(JSON.stringify({ removed: true }));
-    return;
-  }
-
-  throw new Error(
-    "Use --plan, --preflight, --preflight-public, --verify-hosted, --write-cloudflare-secrets, or --remove-cloudflare-secrets",
-  );
+  throw new Error("Use --plan, --preflight, --preflight-public, or --verify-hosted");
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;

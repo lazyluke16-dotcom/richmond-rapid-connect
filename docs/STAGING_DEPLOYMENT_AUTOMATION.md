@@ -42,11 +42,11 @@ The Environment must contain these encrypted secrets:
 
 The preflight checks presence without printing values. It also rejects a non-test Stripe key, a short invoice processor key, inconsistent URLs, mismatched Supabase references, production-like identifiers, an unqualified Worker name, or a release that is not an exact SHA.
 
-Immediately before Cloudflare deployment, the runner writes only the allowlisted
-Worker secrets to an owner-readable (`0600`) file inside GitHub's ephemeral
-runner directory. That file is passed to the same Wrangler command that names
-the staging Worker, then removed even if deployment fails. It is never uploaded
-as an artifact or printed in logs.
+Cloudflare runtime secrets remain GitHub Environment secrets and are passed by
+name through the Cloudflare action's encrypted-secret channel. The workflow
+does not put secret values in command arguments or create a plaintext secrets
+file. Supabase deployment authentication likewise uses the CLI's documented
+environment variables rather than password arguments.
 
 ## Dispatch contract
 
@@ -60,6 +60,10 @@ Run `Deploy isolated staging` from the feature branch and supply:
 Selecting `false` for migrations performs the migration dry run and then deliberately fails before Worker deployment. This makes the dry-run path useful without allowing an application/schema mismatch.
 
 The deployment creates or updates only an unfinalized Stripe test-invoice capability. It does not run certification calls, send an SMS, finalize an invoice, charge a customer, create a production resource, or modify production configuration.
+
+The deployed Worker explicitly receives `CERTIFICATION_TARGET=staging`; the
+guarded invoice route remains unavailable if this or any other staging-only
+execution control is absent.
 
 ## Release identity
 
