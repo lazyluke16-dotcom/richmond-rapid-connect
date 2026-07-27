@@ -17,7 +17,7 @@ import {
 } from "@/lib/call-handling";
 
 const migration = readFileSync(
-  resolve(process.cwd(), "supabase/migrations-pending/20260725160000_customer_call_handling.sql"),
+  resolve(process.cwd(), "supabase/migrations/20260725160000_customer_call_handling.sql"),
   "utf8",
 );
 const recoveredVapiMappingMigration = readFileSync(
