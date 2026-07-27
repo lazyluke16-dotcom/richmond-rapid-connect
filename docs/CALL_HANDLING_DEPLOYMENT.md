@@ -8,13 +8,17 @@ Publish only `feat/customer-call-handling-reconstructed` to the connected GitHub
 
 The application commit and this runbook must remain synchronized. Record the selected commit SHA in the deployment ticket before any database or provider action.
 
-## 2. Apply the database migration first
+## 2. Apply the frozen database chain first
 
-Apply:
+Verify `supabase/migration-manifest.json` with `npm run verify:migrations`.
+Apply the manifest's complete ordered chain to a fresh staging database. For
+an upgrade, apply every manifest migration not already recorded by the target.
+Never execute a removed or superseded `migrations-pending` artifact.
 
-`supabase/migrations-pending/20260725160000_customer_call_handling.sql`
-
-The migration must complete before the application is deployed. It adds:
+The call-handling migration
+`supabase/migrations/20260725160000_customer_call_handling.sql` must complete
+before its dependent dispatch, billable-SMS, and commercial-invoice
+migrations. It adds:
 
 - the authoritative `off`, `text_link`, and `ai_receptionist` mode;
 - database enforcement preventing two customer workflows from being active;

@@ -95,19 +95,30 @@ The Text Link and AI pages remain configuration surfaces but no longer expose in
 
 ## Database change
 
-Pending migration:
+Call-handling migration:
 
-`supabase/migrations-pending/20260725160000_customer_call_handling.sql`
+`supabase/migrations/20260725160000_customer_call_handling.sql`
 
 Hardening migration:
 
-`supabase/migrations-pending/20260726120000_text_link_dispatch_hardening.sql`
+`supabase/migrations/20260726120000_text_link_dispatch_hardening.sql`
 
 SMS pricing migration:
 
-`supabase/migrations-pending/20260727120000_text_link_sms_billable.sql`
+`supabase/migrations/20260727120000_text_link_sms_billable.sql`
 
-All three are intentionally unapplied. The stable-record backfill contains no hard-coded production tenant, assistant, phone, call, lead, or billing-event ID.
+Onboarding continuity migration:
+
+`supabase/migrations/20260728100000_onboarding_step.sql`
+
+Commercial invoice migration:
+
+`supabase/migrations/20260728120000_commercial_sms_invoicing.sql`
+
+The complete 28-file deployment order and hashes are frozen in
+`supabase/migration-manifest.json`. No hosted migration was applied. The
+stable-record backfill contains no hard-coded production tenant, assistant,
+phone, call, lead, or billing-event ID.
 
 The second migration adds atomic claim, begin-send, reconciliation, retry, failure, and completion transitions. The third replaces the provisional non-billable policy: completion now persists the provider SID, SMS audit, missed-call state, and exactly one billable 25-cent AUD usage row in one transaction. Leases permit stale pre-send recovery; uncertain provider outcomes must reconcile by the original destination, sender, unique body, and send time before a resend is allowed. A reconciled Twilio SID proves provider acceptance even if its later delivery status is `undelivered`, so the incurred provider-cost event remains chargeable.
 
@@ -115,7 +126,7 @@ The second migration adds atomic claim, begin-send, reconciliation, retry, failu
 
 Current source verification:
 
-- full Vitest suite: 293 tests passing across 17 files;
+- full Vitest suite: 311 tests passing across 20 files;
 - TypeScript `tsc --noEmit`: passing;
 - production Vite/Nitro build: passing with `LOCAL_BUILD_DISABLE_MCP_PLUGIN=1` on the Windows linked worktree;
 - changed-file ESLint and Prettier checks: passing;
@@ -129,17 +140,18 @@ Local database verification was completed on 2026-07-26 with WSL 2.7.11, Docker 
 
 The settled billable SMS policy was verified on 2026-07-27 using the same local toolchain. No customer invoice, Stripe meter event, or live provider operation was triggered.
 
-- Fresh replay: all 23 committed migrations plus all three pending call-handling migrations applied to an empty disposable database (26 total). The pricing migration reapplied successfully as an idempotency check. Direct completion assertions produced two exactly-once accepted SMS rows totalling 50 integer AUD cents.
-- Upgrade replay: the 23-migration baseline was seeded with trusted AI, live Text Link, and Off fixtures before applying migrations 24, 25, and 26 separately with `supabase migration up --local`. AI, Text Link, and Off were preserved correctly. An in-flight reconciled Text Link event completed after migration 26 as one billable 25-cent row.
-- Database assertions exercised duplicate completion, reconciled `undelivered` acceptance, provider SID/status preservation, transactional missed-call/SMS completion, integer minor-unit aggregation, exact tenant attribution, tax-exclusive metadata, and exactly-once billable SMS usage.
+- Fresh replay: all 28 frozen migrations applied to an empty disposable database.
+- Upgrade replay: the 23-migration baseline was seeded with trusted AI, live Text Link, and Off fixtures before migrations 24 through 28 were applied by `supabase migration up --local`. AI, Text Link, and Off were preserved correctly.
+- Fresh and upgraded schemas produced the same 1,135-component semantic fingerprint, `80c4edd480b13442d60e0c3842669fa8`, covering columns, constraints, functions, grants, indexes, policies, relations, triggers, and views.
+- Database assertions exercised concurrent claim exclusion, frozen retry identity, one and four-message aggregation, 25-cent AUD lines, aggregate GST, deterministic cut-off, late carry-forward, provider SID preservation, exact tenant attribution, AI-meter exclusion, rejected/unresolved exclusion, and exactly-once invoice linkage.
 - Behavioural Vitest coverage invokes the real Vapi webhook and dispatch/provider code with controlled database and Twilio boundaries. It covers Off, Text Link, AI routing, successful 25-cent dispatch, concurrent duplicates, stale claims, post-provider persistence interruption, provider rejection, uncertain outcome without charge, reconciliation-confirmed charge, missing caller ID, tenant-specific links, cross-tenant replay rejection, single-segment enforcement, usage isolation, and no Text Link AI lead/voice usage.
 - Signup phone continuity uses validated same-tab `sessionStorage` first and otherwise validated authenticated JWT metadata. Existing tenant-scoped business data remains authoritative on resume; malformed metadata is ignored.
 - The first fresh replay exposed an older recovered migration that unconditionally inserted a production-specific Vapi mapping. That migration is now guarded by the existence of its historical business row, preserving its behavior for the intended row while making clean replays safe.
-- Both local stacks used distinct project IDs under `C:\tmp`. Their containers and database volumes were discarded after verification. No Supabase login, link, pull, push, hosted database, Lovable, Vapi, Twilio, or Stripe operation was used.
+- No Supabase login, link, pull, push, hosted database, Lovable, Vapi, Twilio, or Stripe operation was used.
 
 Controlled staging migration execution, real Vapi deadline observation, Twilio reconciliation observation, and live backfill verification remain external prerequisites. Local source and disposable-database verification do not certify hosted or provider state.
 
-The 2026-07-26 read-only production dependency audit reports four unresolved advisories (one low, three moderate). The actionable chains are Windows-specific local tooling in `@lovable.dev/mcp-js`: `@hono/node-server` static-file traversal and esbuild development-server file reads. The latest Lovable MCP release remains 0.24.0 and constrains both dependencies below their fixed major/minor versions, so no compatible upstream fix is currently available. No forced override or automatic audit fix was applied. Local Supabase and Vite services must remain unexposed, and these advisories must be rechecked before release.
+The 2026-07-27 read-only production dependency audit reports four existing advisories (one low, three moderate) in the unchanged `@lovable.dev/mcp-js` chain: `@hono/node-server`, `@modelcontextprotocol/sdk`, and esbuild. The full audit additionally reports five high development-only findings through the unchanged ESLint/minimatch/brace-expansion chain. This release candidate changes no dependency or lockfile entry, so it introduces zero new dependency findings. No forced override or automatic audit fix was applied. Local Supabase and Vite services must remain unexposed, and these advisories must be rechecked before release.
 
 ## Differences from the preserved functional documents
 
@@ -152,7 +164,7 @@ The 2026-07-26 read-only production dependency audit reports four unresolved adv
 
 ## Remaining external prerequisites
 
-1. Review and execute the pending migration in a controlled staging database environment.
+1. Verify and execute the complete frozen migration manifest in a controlled staging database environment.
 2. Verify the guarded backfill preserves the proven voice tenant.
 3. Populate approved spare Australian voice-and-SMS numbers in inventory without changing existing assignments.
 4. Configure those spare Vapi phone resources for dynamic `assistant-request`.
