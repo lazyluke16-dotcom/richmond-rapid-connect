@@ -35,6 +35,9 @@ jobs:
       - name: Verify frozen migrations
         run: npm run verify:migrations
 
+      - name: Verify critical visual assets
+        run: npm run verify:assets
+
       - name: Run complete behavioural suite
         run: npm test
 
