@@ -169,12 +169,14 @@ describe("acquisition experience source", () => {
     expect(landing).toContain("fixed inset-x-3 bottom-3");
   });
 
-  it("uses a viewport demo with completion tracking and replay", () => {
+  it("uses a viewport demo with completion tracking and a persistent final call to action", () => {
     expect(demo).toContain("fixed inset-0");
     expect(demo).toContain('"demo_completed"');
+    expect(demo).toContain("Set up my receptionist");
     expect(demo).toContain("Watch again");
     expect(demo).toContain("document.exitFullscreen()");
     expect(demo).toContain("onClose()");
+    expect(demo).not.toContain("}, 1800)");
   });
 
   it("uses Stripe for card collection and does not collect card fields locally", () => {

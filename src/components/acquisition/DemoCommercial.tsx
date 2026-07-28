@@ -119,15 +119,6 @@ export function DemoCommercial({
   }, [elapsed, onTrack, open]);
 
   useEffect(() => {
-    if (!open || elapsed < TOTAL_DURATION) return;
-    const timer = window.setTimeout(() => {
-      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
-      onClose();
-    }, 1800);
-    return () => window.clearTimeout(timer);
-  }, [elapsed, onClose, open]);
-
-  useEffect(() => {
     if (!open) return;
     const previousFocus =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
