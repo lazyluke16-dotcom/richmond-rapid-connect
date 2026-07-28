@@ -60,6 +60,7 @@ export function AcquisitionWizard({
   const [error, setError] = useState<string | null>(null);
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
   const resumeAttempted = useRef(false);
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => setDraft(initialDraft), [initialDraft]);
 
@@ -67,6 +68,12 @@ export function AcquisitionWizard({
     if (!open) return;
     onTrack("wizard_step_viewed", { plan: draft.plan, wizardStep: draft.step });
   }, [draft.plan, draft.step, onTrack, open]);
+
+  useEffect(() => {
+    if (!open || confirmationEmail) return;
+    const frame = window.requestAnimationFrame(() => stepHeadingRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [confirmationEmail, draft.step, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -283,13 +290,26 @@ export function AcquisitionWizard({
               <div className="text-xs font-black uppercase tracking-[0.2em] text-primary">
                 Get Rapid Connect
               </div>
-              <h2 className="mt-1 text-2xl font-black">{STEP_TITLES[draft.step]}</h2>
+              <h2
+                ref={stepHeadingRef}
+                tabIndex={-1}
+                className="mt-1 text-2xl font-black outline-none"
+              >
+                {STEP_TITLES[draft.step]}
+              </h2>
             </div>
             <div className="text-xs font-bold text-muted-foreground">
               Step {draft.step + 1} of 5
             </div>
           </div>
-          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            role="progressbar"
+            aria-label="Signup progress"
+            aria-valuemin={1}
+            aria-valuemax={5}
+            aria-valuenow={draft.step + 1}
+            className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted"
+          >
             <div
               className="h-full rounded-full bg-primary transition-all"
               style={{ width: `${progress}%` }}
@@ -316,7 +336,10 @@ export function AcquisitionWizard({
           )}
 
           {error && (
-            <div className="mt-5 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <div
+              role="alert"
+              className="mt-5 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+            >
               {error}
             </div>
           )}
@@ -420,9 +443,59 @@ async function continueAuthenticatedSignup(
 }
 
 function WizardFrame({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])",
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-[90] overflow-y-auto bg-background text-foreground">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Rapid Connect signup"
+      className="acquisition-experience fixed inset-0 z-[90] overflow-y-auto bg-background text-foreground"
+    >
       <button
+        ref={closeButtonRef}
         type="button"
         onClick={onClose}
         className="fixed right-4 top-4 z-10 grid h-11 w-11 place-items-center rounded-full border border-border bg-card shadow-lg"

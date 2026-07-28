@@ -67,6 +67,11 @@ export function DemoCommercial({
   const [elapsed, setElapsed] = useState(0);
   const [playing, setPlaying] = useState(true);
   const milestones = useRef(new Set<number>());
+  const elapsedRef = useRef(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  elapsedRef.current = elapsed;
 
   const sceneState = useMemo(() => {
     let cursor = 0;
@@ -83,7 +88,7 @@ export function DemoCommercial({
   useEffect(() => {
     if (!open) return;
     setElapsed(0);
-    setPlaying(true);
+    setPlaying(!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
     milestones.current.clear();
   }, [open]);
 
@@ -124,16 +129,51 @@ export function DemoCommercial({
 
   useEffect(() => {
     if (!open) return;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-      if (event.key === " ") {
+      if (event.key === "Escape") {
+        if (elapsedRef.current < TOTAL_DURATION) onTrack("demo_closed");
+        if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+        onClose();
+        return;
+      }
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const interactiveTarget = target?.closest(
+        "button, input, select, textarea, a[href], [contenteditable='true']",
+      );
+      if (event.key === " " && !interactiveTarget) {
         event.preventDefault();
         setPlaying((value) => !value);
       }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])",
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [open, onClose, onTrack]);
 
   if (!open) return null;
 
@@ -152,10 +192,11 @@ export function DemoCommercial({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Rapid Connect product demonstration"
-      className="fixed inset-0 z-[100] overflow-hidden bg-[#071018] text-white"
+      className="acquisition-experience fixed inset-0 z-[100] overflow-hidden bg-[#071018] text-white"
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(250,204,21,0.18),transparent_34%),radial-gradient(circle_at_80%_70%,rgba(14,165,233,0.16),transparent_38%)]" />
       <header className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4 sm:p-6">
@@ -171,6 +212,7 @@ export function DemoCommercial({
           </div>
         </div>
         <button
+          ref={closeButtonRef}
           type="button"
           onClick={close}
           className="grid h-11 w-11 place-items-center rounded-full border border-white/20 bg-black/30 text-white transition hover:bg-white/10"
@@ -225,22 +267,16 @@ export function DemoCommercial({
           >
             {playing ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
           </button>
-          <button
-            type="button"
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect();
-              const next = ((event.clientX - rect.left) / rect.width) * TOTAL_DURATION;
-              setElapsed(Math.max(0, Math.min(TOTAL_DURATION, next)));
-            }}
-            className="relative h-8 flex-1"
+          <input
+            type="range"
+            min={0}
+            max={TOTAL_DURATION}
+            step={0.1}
+            value={elapsed}
+            onChange={(event) => setElapsed(Number(event.currentTarget.value))}
+            className="h-8 flex-1 cursor-pointer accent-yellow-400"
             aria-label="Seek demo"
-          >
-            <span className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-white/15" />
-            <span
-              className="absolute left-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-yellow-400"
-              style={{ width: `${Math.min(100, (elapsed / TOTAL_DURATION) * 100)}%` }}
-            />
-          </button>
+          />
           <div className="w-20 text-right text-xs tabular-nums text-white/60">
             {formatTime(elapsed)} / {formatTime(TOTAL_DURATION)}
           </div>
