@@ -121,6 +121,12 @@ function OnboardingWizard() {
             );
             setPublicEmail(full.public_email ?? "");
             setShortDesc(full.short_description ?? "");
+            if (
+              full.selected_plan === "missed_call_recovery" ||
+              full.selected_plan === "ai_receptionist"
+            ) {
+              setPlan(full.selected_plan);
+            }
           }
           // Restore any previously-saved wizard data instead of clobbering it
           // with UI defaults on resume.

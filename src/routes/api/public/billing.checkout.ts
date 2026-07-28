@@ -98,6 +98,34 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
           );
         }
 
+        // Verify any setup-fee waiver before making the first Stripe write.
+        // A database/schema failure must not leave an orphaned Stripe customer.
+        const { data: acquisitionData, error: acquisitionError } = await supabaseAdmin
+          .from("businesses")
+          .select("promotion_code, setup_fee_waived_cents")
+          .eq("id", businessId)
+          .maybeSingle();
+        if (acquisitionError) {
+          return new Response(
+            JSON.stringify({
+              error: "Could not verify setup-fee status. No checkout session was created.",
+              code: "setup_fee_verification_failed",
+            }),
+            { status: 500, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const acquisition = acquisitionData as {
+          promotion_code?: string | null;
+          setup_fee_waived_cents?: number | null;
+        } | null;
+        const acquisitionMetadata: Record<string, string> =
+          acquisition?.promotion_code && acquisition.setup_fee_waived_cents != null
+            ? {
+                promotion_code: acquisition.promotion_code,
+                setup_fee_waived_cents: String(acquisition.setup_fee_waived_cents),
+              }
+            : {};
+
         const stripe = getStripe();
         const origin = resolveBillingReturnOrigin(request);
 
@@ -192,13 +220,13 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
           line_items: getCheckoutLineItems(plan),
           ...(checkoutDiscounts ? { discounts: checkoutDiscounts } : {}),
           subscription_data: {
-            metadata: { business_id: businessId, plan },
+            metadata: { business_id: businessId, plan, ...acquisitionMetadata },
           },
           customer_update: { address: "auto" },
           tax_id_collection: { enabled: false },
           success_url: `${origin}/dashboard?billing=success&session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${origin}/dashboard?billing=cancelled`,
-          metadata: { business_id: businessId, plan },
+          metadata: { business_id: businessId, plan, ...acquisitionMetadata },
         });
 
         return new Response(JSON.stringify({ url: session.url }), {

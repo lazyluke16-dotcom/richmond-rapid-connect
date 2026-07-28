@@ -159,6 +159,14 @@
         "20260716015328_0ac5e9de-b37d-4ca2-b036-c0ce1c0f61f8.sql",
         "20260727120000_text_link_sms_billable.sql"
       ]
+    },
+    {
+      "file": "20260728140000_acquisition_funnel.sql",
+      "sha256": "6f5ab906d0132898b81ffbaff3b4ea690ffe8156b3c8f75e1214fdfa690ed874",
+      "dependsOn": [
+        "20260715202410_c5a004e6-80a1-4ee7-a675-5d9f1959b2b6.sql",
+        "20260716015328_0ac5e9de-b37d-4ca2-b036-c0ce1c0f61f8.sql"
+      ]
     }
   ]
 }

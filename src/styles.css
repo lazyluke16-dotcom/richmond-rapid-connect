@@ -156,6 +156,17 @@
   50% { box-shadow: 0 0 0 10px rgba(250, 204, 21, 0); }
 }
 
+@keyframes demo-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @utility pulse-ring {
   animation: ring-pulse 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }

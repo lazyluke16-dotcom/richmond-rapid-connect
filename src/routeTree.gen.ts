@@ -17,6 +17,7 @@ import { Route as ChatRouteImport } from './routes/chat'
 import { Route as ConfirmationRouteImport } from './routes/confirmation'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MissedCallRouteImport } from './routes/missed-call'
+import { Route as PlumbersRouteImport } from './routes/plumbers'
 import { Route as RequestRouteImport } from './routes/request'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
@@ -36,6 +37,7 @@ import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 import { Route as ApiDashboardVerifyPinRouteImport } from './routes/api/dashboard.verify-pin'
 import { Route as ApiDemoTriggerSmsRouteImport } from './routes/api/demo.trigger-sms'
+import { Route as ApiPublicAcquisitionRouteImport } from './routes/api/public/acquisition'
 import { Route as ApiPublicProcessEnrichmentJobsRouteImport } from './routes/api/public/process-enrichment-jobs'
 import { Route as ApiPublicProcessSmsInvoiceRouteImport } from './routes/api/public/process-sms-invoice'
 import { Route as ApiPublicStagingReleaseRouteImport } from './routes/api/public/staging-release'
@@ -89,6 +91,11 @@ const McpRoute = McpRouteImport.update({
 const MissedCallRoute = MissedCallRouteImport.update({
   id: '/missed-call',
   path: '/missed-call',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlumbersRoute = PlumbersRouteImport.update({
+  id: '/plumbers',
+  path: '/plumbers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RequestRoute = RequestRouteImport.update({
@@ -192,6 +199,11 @@ const ApiDemoTriggerSmsRoute = ApiDemoTriggerSmsRouteImport.update({
   path: '/api/demo/trigger-sms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicAcquisitionRoute = ApiPublicAcquisitionRouteImport.update({
+  id: '/api/public/acquisition',
+  path: '/api/public/acquisition',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicProcessEnrichmentJobsRoute =
   ApiPublicProcessEnrichmentJobsRouteImport.update({
     id: '/api/public/process-enrichment-jobs',
@@ -282,6 +294,7 @@ export interface FileRoutesByFullPath {
   '/confirmation': typeof ConfirmationRoute
   '/mcp': typeof McpRoute
   '/missed-call': typeof MissedCallRoute
+  '/plumbers': typeof PlumbersRoute
   '/request': typeof RequestRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
@@ -301,6 +314,7 @@ export interface FileRoutesByFullPath {
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
+  '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
   '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
@@ -325,6 +339,7 @@ export interface FileRoutesByTo {
   '/confirmation': typeof ConfirmationRoute
   '/mcp': typeof McpRoute
   '/missed-call': typeof MissedCallRoute
+  '/plumbers': typeof PlumbersRoute
   '/request': typeof RequestRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
@@ -343,6 +358,7 @@ export interface FileRoutesByTo {
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
+  '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
   '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
@@ -369,6 +385,7 @@ export interface FileRoutesById {
   '/confirmation': typeof ConfirmationRoute
   '/mcp': typeof McpRoute
   '/missed-call': typeof MissedCallRoute
+  '/plumbers': typeof PlumbersRoute
   '/request': typeof RequestRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
@@ -388,6 +405,7 @@ export interface FileRoutesById {
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
+  '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
   '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
@@ -414,6 +432,7 @@ export interface FileRouteTypes {
     | '/confirmation'
     | '/mcp'
     | '/missed-call'
+    | '/plumbers'
     | '/request'
     | '/reset-password'
     | '/signup'
@@ -433,6 +452,7 @@ export interface FileRouteTypes {
     | '/.mcp/invoke-tool/$tool'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
+    | '/api/public/acquisition'
     | '/api/public/process-enrichment-jobs'
     | '/api/public/process-sms-invoice'
     | '/api/public/staging-release'
@@ -457,6 +477,7 @@ export interface FileRouteTypes {
     | '/confirmation'
     | '/mcp'
     | '/missed-call'
+    | '/plumbers'
     | '/request'
     | '/reset-password'
     | '/signup'
@@ -475,6 +496,7 @@ export interface FileRouteTypes {
     | '/.mcp/invoke-tool/$tool'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
+    | '/api/public/acquisition'
     | '/api/public/process-enrichment-jobs'
     | '/api/public/process-sms-invoice'
     | '/api/public/staging-release'
@@ -500,6 +522,7 @@ export interface FileRouteTypes {
     | '/confirmation'
     | '/mcp'
     | '/missed-call'
+    | '/plumbers'
     | '/request'
     | '/reset-password'
     | '/signup'
@@ -519,6 +542,7 @@ export interface FileRouteTypes {
     | '/.mcp/invoke-tool/$tool'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
+    | '/api/public/acquisition'
     | '/api/public/process-enrichment-jobs'
     | '/api/public/process-sms-invoice'
     | '/api/public/staging-release'
@@ -545,6 +569,7 @@ export interface RootRouteChildren {
   ConfirmationRoute: typeof ConfirmationRoute
   McpRoute: typeof McpRoute
   MissedCallRoute: typeof MissedCallRoute
+  PlumbersRoute: typeof PlumbersRoute
   RequestRoute: typeof RequestRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
@@ -557,6 +582,7 @@ export interface RootRouteChildren {
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
   ApiDashboardVerifyPinRoute: typeof ApiDashboardVerifyPinRoute
   ApiDemoTriggerSmsRoute: typeof ApiDemoTriggerSmsRoute
+  ApiPublicAcquisitionRoute: typeof ApiPublicAcquisitionRoute
   ApiPublicProcessEnrichmentJobsRoute: typeof ApiPublicProcessEnrichmentJobsRoute
   ApiPublicProcessSmsInvoiceRoute: typeof ApiPublicProcessSmsInvoiceRoute
   ApiPublicStagingReleaseRoute: typeof ApiPublicStagingReleaseRoute
@@ -625,6 +651,13 @@ declare module '@tanstack/react-router' {
       path: '/missed-call'
       fullPath: '/missed-call'
       preLoaderRoute: typeof MissedCallRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/plumbers': {
+      id: '/plumbers'
+      path: '/plumbers'
+      fullPath: '/plumbers'
+      preLoaderRoute: typeof PlumbersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/request': {
@@ -758,6 +791,13 @@ declare module '@tanstack/react-router' {
       path: '/api/demo/trigger-sms'
       fullPath: '/api/demo/trigger-sms'
       preLoaderRoute: typeof ApiDemoTriggerSmsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/acquisition': {
+      id: '/api/public/acquisition'
+      path: '/api/public/acquisition'
+      fullPath: '/api/public/acquisition'
+      preLoaderRoute: typeof ApiPublicAcquisitionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/process-enrichment-jobs': {
@@ -918,6 +958,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfirmationRoute: ConfirmationRoute,
   McpRoute: McpRoute,
   MissedCallRoute: MissedCallRoute,
+  PlumbersRoute: PlumbersRoute,
   RequestRoute: RequestRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
@@ -931,6 +972,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
   ApiDashboardVerifyPinRoute: ApiDashboardVerifyPinRoute,
   ApiDemoTriggerSmsRoute: ApiDemoTriggerSmsRoute,
+  ApiPublicAcquisitionRoute: ApiPublicAcquisitionRoute,
   ApiPublicProcessEnrichmentJobsRoute: ApiPublicProcessEnrichmentJobsRoute,
   ApiPublicProcessSmsInvoiceRoute: ApiPublicProcessSmsInvoiceRoute,
   ApiPublicStagingReleaseRoute: ApiPublicStagingReleaseRoute,
