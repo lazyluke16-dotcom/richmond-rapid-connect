@@ -2,6 +2,17 @@
 
 Status: implementation candidate on `feat/acquisition-funnel`
 
+## Visual asset provenance
+
+The responsive plumber hero photography was generated specifically for Richmond Rapid Connect on
+29 July 2026 using OpenAI image generation. It was not sourced from a third-party stock library and
+contains no external logo or watermark. The repository stores separately composed desktop and
+mobile masters as optimized AVIF and WebP files with JPEG fallbacks.
+
+`npm run verify:assets` parses every critical file, verifies its real encoded dimensions and format,
+enforces a non-empty size range, and rejects any empty raster file under `src/assets`. The
+commercial release workflow runs this check before the behavioural suite.
+
 ## Customer journey
 
 1. A permissioned outreach message links to `/plumbers` with campaign attribution.

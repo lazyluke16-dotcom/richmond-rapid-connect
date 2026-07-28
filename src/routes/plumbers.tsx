@@ -1,7 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, PhoneCall, Play, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import heroPlumberAvif from "@/assets/hero-plumber.avif";
 import heroPlumber from "@/assets/hero-plumber.jpg";
+import heroPlumberWebp from "@/assets/hero-plumber.webp";
+import heroPlumberMobileAvif from "@/assets/hero-plumber-mobile.avif";
+import heroPlumberMobile from "@/assets/hero-plumber-mobile.jpg";
+import heroPlumberMobileWebp from "@/assets/hero-plumber-mobile.webp";
 import { DemoCommercial } from "@/components/acquisition/DemoCommercial";
 import { AcquisitionWizard } from "@/components/acquisition/AcquisitionWizard";
 import {
@@ -138,7 +143,7 @@ function PlumberAcquisitionPage() {
   };
 
   return (
-    <main className="min-h-dvh overflow-x-hidden bg-[#091019] text-white">
+    <main className="acquisition-experience min-h-dvh overflow-x-hidden bg-[#091019] text-white">
       <header className="absolute inset-x-0 top-0 z-20">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between px-5 py-5 sm:px-8">
           <a href="/plumbers" className="flex items-center gap-3" aria-label="Rapid Connect home">
@@ -164,11 +169,22 @@ function PlumberAcquisitionPage() {
 
       <section className="grid min-h-dvh lg:grid-cols-2">
         <div className="relative flex min-h-[74vh] items-end overflow-hidden px-5 pb-12 pt-28 sm:px-10 sm:pb-16 lg:min-h-dvh lg:px-14 xl:px-20">
-          <img
-            src={heroPlumber}
-            alt=""
-            className="absolute inset-0 h-full w-full object-cover object-center"
-          />
+          <picture className="absolute inset-0">
+            <source media="(max-width: 767px)" srcSet={heroPlumberMobileAvif} type="image/avif" />
+            <source media="(max-width: 767px)" srcSet={heroPlumberMobileWebp} type="image/webp" />
+            <source media="(max-width: 767px)" srcSet={heroPlumberMobile} type="image/jpeg" />
+            <source srcSet={heroPlumberAvif} type="image/avif" />
+            <source srcSet={heroPlumberWebp} type="image/webp" />
+            <img
+              src={heroPlumber}
+              alt=""
+              width={1600}
+              height={900}
+              fetchPriority="high"
+              decoding="async"
+              className="h-full w-full object-cover object-center"
+            />
+          </picture>
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,10,16,0.32)_0%,rgba(5,10,16,0.58)_40%,rgba(5,10,16,0.97)_100%)] lg:bg-[linear-gradient(90deg,rgba(5,10,16,0.35)_0%,rgba(5,10,16,0.72)_70%,rgba(5,10,16,0.98)_100%)]" />
           <div className="absolute left-8 top-28 hidden h-24 w-24 rounded-full border border-yellow-300/20 bg-yellow-400/10 blur-2xl sm:block" />
 
