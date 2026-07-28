@@ -1,0 +1,36 @@
+{
+  "campaign": {
+    "code": "founding-plumbers-pilot",
+    "senderLegalName": "REPLACE WITH LEGAL SENDER NAME",
+    "senderContact": "REPLACE WITH WORKING CONTACT DETAILS",
+    "baseUrl": "https://staging.example.invalid",
+    "promotionCode": "FOUNDINGPLUMBER",
+    "templates": {
+      "sms": {
+        "body": "REPLACE WITH LEGAL SENDER NAME: See the 58-second Rapid Connect demo: {{campaign_link}}. Setup is $0 with FOUNDINGPLUMBER. Reply STOP",
+        "unsubscribeInstruction": "Reply STOP"
+      },
+      "email": {
+        "body": "REPLACE WITH LEGAL SENDER NAME\n\nSee the Rapid Connect demo: {{campaign_link}}\n\nUnsubscribe using this link: {{unsubscribe_link}}",
+        "unsubscribeInstruction": "Unsubscribe using this link: {{unsubscribe_link}}"
+      },
+      "social": {
+        "body": "REPLACE WITH LEGAL SENDER NAME: See the Rapid Connect demo: {{campaign_link}}. Reply no thanks to stop.",
+        "unsubscribeInstruction": "Reply no thanks to stop."
+      }
+    }
+  },
+  "recipients": [
+    {
+      "channel": "sms",
+      "businessName": "EXAMPLE PLUMBING BUSINESS — NOT A REAL RECIPIENT",
+      "contactName": "Example Person",
+      "contactValue": "0400000000",
+      "permissionBasis": "express",
+      "permissionSource": "Example only: recorded phone consent",
+      "permissionRecordedAt": "2026-07-01T00:00:00Z",
+      "permissionReviewedAt": "2026-07-02T00:00:00Z",
+      "permissionReviewedBy": "Example reviewer"
+    }
+  ]
+}

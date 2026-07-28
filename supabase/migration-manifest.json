@@ -167,6 +167,11 @@
         "20260715202410_c5a004e6-80a1-4ee7-a675-5d9f1959b2b6.sql",
         "20260716015328_0ac5e9de-b37d-4ca2-b036-c0ce1c0f61f8.sql"
       ]
+    },
+    {
+      "file": "20260728160000_outreach_compliance.sql",
+      "sha256": "cd1e30b1d47f4994e15fcc69e7c0f3819fdfad4ba916deee0e08468249b9c314",
+      "dependsOn": ["20260728140000_acquisition_funnel.sql"]
     }
   ]
 }
