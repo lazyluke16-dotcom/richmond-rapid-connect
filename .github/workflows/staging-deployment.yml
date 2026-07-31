@@ -61,8 +61,8 @@ jobs:
             exit 1
           fi
           test "$(git rev-parse HEAD)" = "$REQUESTED_SHA"
-          git fetch --no-tags origin feat/customer-call-handling-reconstructed
-          git merge-base --is-ancestor "$REQUESTED_SHA" origin/feat/customer-call-handling-reconstructed
+          git fetch --no-tags origin feat/acquisition-funnel
+          git merge-base --is-ancestor "$REQUESTED_SHA" origin/feat/acquisition-funnel
 
       - name: Install locked dependencies
         run: npm ci
