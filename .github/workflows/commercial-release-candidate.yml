@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  deployments: write
 
 concurrency:
   group: commercial-release-candidate-${{ github.ref }}
@@ -47,6 +48,7 @@ jobs:
       - name: Check release-critical formatting and lint
         run: |
           npx prettier --check \
+            .github/workflows/commercial-release-candidate.yml \
             .github/workflows/staging-deployment.yml \
             .github/workflows/staging-rollback.yml \
             scripts/staging-certification.mjs \
@@ -88,3 +90,18 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 14
+
+  deploy-pr-7-to-isolated-staging:
+    needs: verify-and-package
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 7 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'feat/acquisition-funnel'
+    uses: ./.github/workflows/staging-deployment.yml
+    with:
+      release_sha: ${{ github.event.pull_request.head.sha }}
+      environment_id: staging-commercial-rc
+      apply_migrations: true
+      confirmation: DEPLOY_STAGING_ONLY
+    secrets: inherit

@@ -1,6 +1,24 @@
 name: Deploy isolated staging
 
 on:
+  workflow_call:
+    inputs:
+      release_sha:
+        description: Exact 40-character release-candidate SHA
+        required: true
+        type: string
+      environment_id:
+        description: Exact staging environment ID
+        required: true
+        type: string
+      apply_migrations:
+        description: Apply frozen migrations after a successful dry run
+        required: true
+        type: boolean
+      confirmation:
+        description: Must equal DEPLOY_STAGING_ONLY
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       release_sha:

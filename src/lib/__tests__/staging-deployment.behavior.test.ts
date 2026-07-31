@@ -35,6 +35,40 @@ function stagingEnv(): NodeJS.ProcessEnv {
 }
 
 describe("staging deployment boundary", () => {
+  it("automatically deploys only the verified same-repository PR 7 acquisition head", () => {
+    const releaseWorkflow = readFileSync(
+      ".github/workflows/commercial-release-candidate.yml",
+      "utf8",
+    );
+    const automaticDeployment = releaseWorkflow.slice(
+      releaseWorkflow.indexOf("deploy-pr-7-to-isolated-staging:"),
+    );
+
+    expect(automaticDeployment).toContain("needs: verify-and-package");
+    expect(automaticDeployment).toContain("github.event_name == 'pull_request'");
+    expect(automaticDeployment).toContain("github.event.pull_request.number == 7");
+    expect(automaticDeployment).toContain(
+      "github.event.pull_request.head.repo.full_name == github.repository",
+    );
+    expect(automaticDeployment).toContain(
+      "github.event.pull_request.head.ref == 'feat/acquisition-funnel'",
+    );
+    expect(automaticDeployment).toContain("release_sha: ${{ github.event.pull_request.head.sha }}");
+    expect(automaticDeployment).toContain("environment_id: staging-commercial-rc");
+    expect(automaticDeployment).toContain("apply_migrations: true");
+    expect(automaticDeployment).toContain("confirmation: DEPLOY_STAGING_ONLY");
+    expect(automaticDeployment).toContain("secrets: inherit");
+  });
+
+  it("keeps manual staging dispatch and the shared staging/rollback exclusion lock", () => {
+    const workflow = readFileSync(".github/workflows/staging-deployment.yml", "utf8");
+
+    expect(workflow).toContain("workflow_call:");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("group: isolated-staging-deployment");
+    expect(workflow).toContain("cancel-in-progress: false");
+  });
+
   it("targets the configured staging Worker during bulk secret upload", () => {
     const workflow = readFileSync(".github/workflows/staging-deployment.yml", "utf8");
 
