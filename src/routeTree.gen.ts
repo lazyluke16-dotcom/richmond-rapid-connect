@@ -24,6 +24,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as UnsubscribeRouteImport } from './routes/unsubscribe'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
 import { Route as AuthenticatedAiReceptionistRouteImport } from './routes/_authenticated/ai-receptionist'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedCallHandlingRouteImport } from './routes/_authenticated/call-handling'
@@ -50,6 +51,7 @@ import { Route as BSlugConfirmationRouteImport } from './routes/b.$slug.confirma
 import { Route as BSlugMissedCallRouteImport } from './routes/b.$slug.missed-call'
 import { Route as BSlugRequestRouteImport } from './routes/b.$slug.request'
 import { Route as ApiPublicBillingCheckoutRouteImport } from './routes/api/public/billing.checkout'
+import { Route as ApiPublicBillingPlanRouteImport } from './routes/api/public/billing.plan'
 import { Route as ApiPublicBillingPortalRouteImport } from './routes/api/public/billing.portal'
 import { Route as ApiPublicBillingSummaryRouteImport } from './routes/api/public/billing.summary'
 import { Route as ApiPublicOutreachReportRouteImport } from './routes/api/public/outreach/report'
@@ -135,6 +137,11 @@ const Char91DotwellKnownChar93OauthProtectedResourceRoute =
     path: '/.well-known/oauth-protected-resource',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AuthenticatedAccountRoute = AuthenticatedAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAiReceptionistRoute =
   AuthenticatedAiReceptionistRouteImport.update({
     id: '/ai-receptionist',
@@ -273,6 +280,11 @@ const ApiPublicBillingCheckoutRoute =
     path: '/api/public/billing/checkout',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicBillingPlanRoute = ApiPublicBillingPlanRouteImport.update({
+  id: '/api/public/billing/plan',
+  path: '/api/public/billing/plan',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicBillingPortalRoute = ApiPublicBillingPortalRouteImport.update({
   id: '/api/public/billing/portal',
   path: '/api/public/billing/portal',
@@ -334,6 +346,7 @@ export interface FileRoutesByFullPath {
   '/unsubscribe': typeof UnsubscribeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/account': typeof AuthenticatedAccountRoute
   '/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/call-handling': typeof AuthenticatedCallHandlingRoute
@@ -360,6 +373,7 @@ export interface FileRoutesByFullPath {
   '/b/$slug/request': typeof BSlugRequestRoute
   '/b/$slug/': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
+  '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
   '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
@@ -384,6 +398,7 @@ export interface FileRoutesByTo {
   '/unsubscribe': typeof UnsubscribeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/account': typeof AuthenticatedAccountRoute
   '/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/call-handling': typeof AuthenticatedCallHandlingRoute
@@ -409,6 +424,7 @@ export interface FileRoutesByTo {
   '/b/$slug/request': typeof BSlugRequestRoute
   '/b/$slug': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
+  '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
   '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
@@ -435,6 +451,7 @@ export interface FileRoutesById {
   '/unsubscribe': typeof UnsubscribeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/_authenticated/account': typeof AuthenticatedAccountRoute
   '/_authenticated/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
   '/_authenticated/call-handling': typeof AuthenticatedCallHandlingRoute
@@ -461,6 +478,7 @@ export interface FileRoutesById {
   '/b/$slug/request': typeof BSlugRequestRoute
   '/b/$slug/': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
+  '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
   '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
@@ -487,6 +505,7 @@ export interface FileRouteTypes {
     | '/unsubscribe'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/account'
     | '/ai-receptionist'
     | '/billing'
     | '/call-handling'
@@ -513,6 +532,7 @@ export interface FileRouteTypes {
     | '/b/$slug/request'
     | '/b/$slug/'
     | '/api/public/billing/checkout'
+    | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
     | '/api/public/outreach/report'
@@ -537,6 +557,7 @@ export interface FileRouteTypes {
     | '/unsubscribe'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/account'
     | '/ai-receptionist'
     | '/billing'
     | '/call-handling'
@@ -562,6 +583,7 @@ export interface FileRouteTypes {
     | '/b/$slug/request'
     | '/b/$slug'
     | '/api/public/billing/checkout'
+    | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
     | '/api/public/outreach/report'
@@ -587,6 +609,7 @@ export interface FileRouteTypes {
     | '/unsubscribe'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/_authenticated/account'
     | '/_authenticated/ai-receptionist'
     | '/_authenticated/billing'
     | '/_authenticated/call-handling'
@@ -613,6 +636,7 @@ export interface FileRouteTypes {
     | '/b/$slug/request'
     | '/b/$slug/'
     | '/api/public/billing/checkout'
+    | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
     | '/api/public/outreach/report'
@@ -652,6 +676,7 @@ export interface RootRouteChildren {
   ApiPublicStagingReleaseRoute: typeof ApiPublicStagingReleaseRoute
   ApiWebhooksAiPhoneLeadRoute: typeof ApiWebhooksAiPhoneLeadRoute
   ApiPublicBillingCheckoutRoute: typeof ApiPublicBillingCheckoutRoute
+  ApiPublicBillingPlanRoute: typeof ApiPublicBillingPlanRoute
   ApiPublicBillingPortalRoute: typeof ApiPublicBillingPortalRoute
   ApiPublicBillingSummaryRoute: typeof ApiPublicBillingSummaryRoute
   ApiPublicOutreachReportRoute: typeof ApiPublicOutreachReportRoute
@@ -768,6 +793,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/.well-known/oauth-protected-resource'
       preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/account': {
+      id: '/_authenticated/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AuthenticatedAccountRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/ai-receptionist': {
       id: '/_authenticated/ai-receptionist'
@@ -951,6 +983,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicBillingCheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/billing/plan': {
+      id: '/api/public/billing/plan'
+      path: '/api/public/billing/plan'
+      fullPath: '/api/public/billing/plan'
+      preLoaderRoute: typeof ApiPublicBillingPlanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/billing/portal': {
       id: '/api/public/billing/portal'
       path: '/api/public/billing/portal'
@@ -1011,6 +1050,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAccountRoute: typeof AuthenticatedAccountRoute
   AuthenticatedAiReceptionistRoute: typeof AuthenticatedAiReceptionistRoute
   AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
   AuthenticatedCallHandlingRoute: typeof AuthenticatedCallHandlingRoute
@@ -1022,6 +1062,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAccountRoute: AuthenticatedAccountRoute,
   AuthenticatedAiReceptionistRoute: AuthenticatedAiReceptionistRoute,
   AuthenticatedBillingRoute: AuthenticatedBillingRoute,
   AuthenticatedCallHandlingRoute: AuthenticatedCallHandlingRoute,
@@ -1083,6 +1124,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicStagingReleaseRoute: ApiPublicStagingReleaseRoute,
   ApiWebhooksAiPhoneLeadRoute: ApiWebhooksAiPhoneLeadRoute,
   ApiPublicBillingCheckoutRoute: ApiPublicBillingCheckoutRoute,
+  ApiPublicBillingPlanRoute: ApiPublicBillingPlanRoute,
   ApiPublicBillingPortalRoute: ApiPublicBillingPortalRoute,
   ApiPublicBillingSummaryRoute: ApiPublicBillingSummaryRoute,
   ApiPublicOutreachReportRoute: ApiPublicOutreachReportRoute,

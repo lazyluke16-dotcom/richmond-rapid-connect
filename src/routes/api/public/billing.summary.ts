@@ -37,8 +37,18 @@ export const Route = createFileRoute("/api/public/billing/summary")({
         // Direct service-role queries scoped to verified businessId.
         // Do NOT use get_my_billing_detail() here — that RPC uses current_business_id()
         // which requires an auth.uid() context only available on user-scoped clients.
-        const [{ data: bizRow }, { data: billingRow }, effectiveStateResult] = await Promise.all([
-          supabaseAdmin.from("businesses").select("billing_exempt").eq("id", businessId).single(),
+        const [
+          { data: bizRow },
+          { data: billingRow },
+          effectiveStateResult,
+          { data: telephonyRow },
+          { data: aiRow },
+        ] = await Promise.all([
+          supabaseAdmin
+            .from("businesses")
+            .select("name,public_email,public_phone,billing_exempt")
+            .eq("id", businessId)
+            .single(),
           supabaseAdmin
             .from("business_billing")
             .select(
@@ -51,6 +61,16 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           supabaseAdmin.rpc("effective_billing_state", {
             _business_id: businessId,
           } as never),
+          supabaseAdmin
+            .from("business_telephony_settings")
+            .select("inbound_number,forwarding_setup_status")
+            .eq("business_id", businessId)
+            .maybeSingle(),
+          supabaseAdmin
+            .from("business_ai_receptionist_settings")
+            .select("provider_assistant_id,status")
+            .eq("business_id", businessId)
+            .maybeSingle(),
         ]);
 
         if (!billingRow) {
@@ -144,9 +164,27 @@ export const Route = createFileRoute("/api/public/billing/summary")({
         }
 
         const platformFeeAud = selectedPlan ? (PLAN_BASE_PRICE_CENTS[selectedPlan] ?? 0) / 100 : 0;
+        const business = (bizRow ?? {}) as {
+          name?: string;
+          public_email?: string | null;
+          public_phone?: string | null;
+        };
+        const telephony = (telephonyRow ?? {}) as {
+          inbound_number?: string | null;
+          forwarding_setup_status?: string | null;
+        };
+        const ai = (aiRow ?? {}) as {
+          provider_assistant_id?: string | null;
+          status?: string | null;
+        };
 
         return new Response(
           JSON.stringify({
+            account: {
+              businessName: business.name ?? "",
+              publicEmail: business.public_email ?? null,
+              publicPhone: business.public_phone ?? null,
+            },
             billing: {
               businessId,
               selectedPlan,
@@ -173,6 +211,14 @@ export const Route = createFileRoute("/api/public/billing/summary")({
               withinGraceCap,
             },
             platformFeeAud,
+            estimatedCurrentTotalAud: platformFeeAud + estimatedChargeAud,
+            connections: {
+              stripe: Boolean(bb.stripe_customer_id),
+              phoneNumber: telephony.inbound_number ?? null,
+              phoneStatus: telephony.forwarding_setup_status ?? "unallocated",
+              aiReceptionist: Boolean(ai.provider_assistant_id && ai.status === "active"),
+              sms: process.env.SMS_MODE === "twilio",
+            },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );

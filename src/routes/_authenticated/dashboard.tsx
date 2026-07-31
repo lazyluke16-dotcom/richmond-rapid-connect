@@ -17,6 +17,7 @@ import {
   LogOut,
   Settings,
   CreditCard,
+  CircleUserRound,
   Search,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -137,6 +138,12 @@ function Dashboard() {
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
             >
               <CreditCard className="h-3.5 w-3.5" /> Billing
+            </Link>
+            <Link
+              to="/account"
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/50 bg-primary/10 px-3 py-2 text-xs font-bold uppercase tracking-widest text-primary hover:bg-primary hover:text-primary-foreground"
+            >
+              <CircleUserRound className="h-3.5 w-3.5" /> Account
             </Link>
           </div>
         </div>
