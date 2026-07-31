@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -33,6 +35,15 @@ function stagingEnv(): NodeJS.ProcessEnv {
 }
 
 describe("staging deployment boundary", () => {
+  it("targets the configured staging Worker during bulk secret upload", () => {
+    const workflow = readFileSync(".github/workflows/staging-deployment.yml", "utf8");
+
+    expect(workflow).toContain("npx wrangler secret bulk");
+    expect(workflow).toContain("--config .output/server/wrangler.json");
+    expect(workflow).toContain('--name "$CLOUDFLARE_STAGING_WORKER_NAME"');
+    expect(workflow).not.toMatch(/wranglerVersion: "4\.114\.0"\n\s+secrets:/);
+  });
+
   it("accepts a complete staging-only configuration without printing secret values", () => {
     const result = validateStagingDeploymentConfig(stagingEnv(), {
       suppliedEnvironmentId: "staging-commercial-rc",
