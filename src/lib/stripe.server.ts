@@ -6,6 +6,13 @@ export type StripeMode = "test" | "live";
 
 export const STRIPE_API_VERSION = "2026-06-24.dahlia";
 
+export function stripeEnvValue(
+  name: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  return env[name]?.trim() || undefined;
+}
+
 export function stripeKeyMode(key: string): StripeMode | null {
   if (/^(?:sk|rk)_test_/.test(key)) return "test";
   if (/^(?:sk|rk)_live_/.test(key)) return "live";
@@ -56,7 +63,7 @@ export function assertStripeKeyMatchesMode(
 }
 
 function createStripeClient(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY;
+  const key = stripeEnvValue("STRIPE_SECRET_KEY");
   if (!key) {
     throw new Error(
       "[stripe] STRIPE_SECRET_KEY is not configured — set it in Lovable Project Settings → Environment Variables",
@@ -77,7 +84,7 @@ export function getStripe(): Stripe {
 }
 
 export function stripeConfigured(): boolean {
-  const key = process.env.STRIPE_SECRET_KEY ?? "";
+  const key = stripeEnvValue("STRIPE_SECRET_KEY") ?? "";
   try {
     assertStripeKeyMatchesMode(key);
     assertStripeContextAvailable(key);
@@ -94,7 +101,7 @@ export function stripeConfigured(): boolean {
 export function getStripePrices(): { MCR_BASE: string; AIR_BASE: string; AIR_USAGE: string } {
   const missing: string[] = [];
   const require = (name: string): string => {
-    const val = process.env[name];
+    const val = stripeEnvValue(name);
     if (!val) missing.push(name);
     return val ?? "";
   };
@@ -120,7 +127,7 @@ export function getStripePrices(): { MCR_BASE: string; AIR_BASE: string; AIR_USA
 //   - applies_to: { products: [MCR_PRODUCT_ID, AIR_BASE_PRODUCT_ID] }
 // Do not create or modify the Stripe coupon without WRITE MODE approval.
 export function getUnionCouponId(): string | null {
-  return process.env.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE ?? null;
+  return stripeEnvValue("STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE") ?? null;
 }
 
 export const STRIPE_METER_EVENT_NAME = "ai_voice_seconds";

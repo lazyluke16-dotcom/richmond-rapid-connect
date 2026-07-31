@@ -214,8 +214,16 @@ jobs:
             "WEBHOOK_SECRET",
             "DASHBOARD_PIN",
           ];
+          const stripeNames = new Set(names.filter((name) => name.startsWith("STRIPE_")));
           process.stdout.write(
-            JSON.stringify(Object.fromEntries(names.map((name) => [name, process.env[name]]))),
+            JSON.stringify(
+              Object.fromEntries(
+                names.map((name) => [
+                  name,
+                  stripeNames.has(name) ? process.env[name]?.trim() : process.env[name],
+                ]),
+              ),
+            ),
           );
           NODE
           npx wrangler secret bulk \

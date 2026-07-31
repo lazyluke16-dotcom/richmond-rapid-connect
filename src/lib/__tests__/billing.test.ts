@@ -19,6 +19,7 @@ import {
 import {
   getStripePrices,
   getUnionCouponId,
+  stripeEnvValue,
   PLAN_BASE_PRICE_CENTS,
   getCheckoutLineItems,
   assertStripeContextAvailable,
@@ -263,6 +264,19 @@ describe("Duplicate Stripe webhook handling", () => {
 });
 
 describe("Stripe client security guards", () => {
+  it("normalizes whitespace at the runtime binding boundary", () => {
+    expect(
+      stripeEnvValue("STRIPE_SECRET_KEY", {
+        STRIPE_SECRET_KEY: "  sk_test_XXXXXXXX\r\n",
+      } as NodeJS.ProcessEnv),
+    ).toBe("sk_test_XXXXXXXX");
+    expect(
+      stripeEnvValue("STRIPE_SECRET_KEY", {
+        STRIPE_SECRET_KEY: " \r\n",
+      } as NodeJS.ProcessEnv),
+    ).toBeUndefined();
+  });
+
   it.each([
     ["sk_test_XXXXXXXX", "test"],
     ["rk_test_XXXXXXXX", "test"],
@@ -382,7 +396,7 @@ describe("Union offer uses Stripe coupon (not negative invoice item)", () => {
   });
 
   it("getUnionCouponId returns the coupon ID from env var", () => {
-    process.env.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE = "coupon_test_union_xyz";
+    process.env.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE = "  coupon_test_union_xyz\r\n";
     expect(getUnionCouponId()).toBe("coupon_test_union_xyz");
   });
 
@@ -436,9 +450,9 @@ describe("Missing Stripe price configuration fails closed", () => {
   });
 
   it("succeeds and returns env var values when all required vars are set", () => {
-    process.env.STRIPE_PRICE_MCR_BASE = "price_test_mcr";
-    process.env.STRIPE_PRICE_AIR_BASE = "price_test_air";
-    process.env.STRIPE_PRICE_AIR_USAGE = "price_test_usage";
+    process.env.STRIPE_PRICE_MCR_BASE = "  price_test_mcr";
+    process.env.STRIPE_PRICE_AIR_BASE = "price_test_air  ";
+    process.env.STRIPE_PRICE_AIR_USAGE = "\r\nprice_test_usage\r\n";
     const prices = getStripePrices();
     expect(prices.MCR_BASE).toBe("price_test_mcr");
     expect(prices.AIR_BASE).toBe("price_test_air");

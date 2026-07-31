@@ -84,6 +84,8 @@ describe("staging deployment boundary", () => {
     expect(workflow).toContain("npx wrangler secret bulk");
     expect(workflow).toContain("--config .output/server/wrangler.json");
     expect(workflow).toContain('--name "$CLOUDFLARE_STAGING_WORKER_NAME"');
+    expect(workflow).toContain('name.startsWith("STRIPE_")');
+    expect(workflow).toContain("process.env[name]?.trim()");
     expect(workflow).not.toMatch(/wranglerVersion: "4\.114\.0"\n\s+secrets:/);
   });
 
