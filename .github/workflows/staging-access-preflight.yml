@@ -1,0 +1,144 @@
+name: Inspect isolated staging access
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/staging-access-preflight.yml
+  pull_request:
+    paths:
+      - .github/workflows/staging-access-preflight.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-staging-access:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: staging
+
+    env:
+      CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+      CERTIFICATION_STAGING_HOSTNAME: ${{ vars.CERTIFICATION_STAGING_HOSTNAME }}
+      CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+      STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+      VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
+      VAPI_SERVER_SECRET: ${{ secrets.VAPI_SERVER_SECRET }}
+      STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+      STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+      STRIPE_SMS_GST_TAX_RATE_ID: ${{ secrets.STRIPE_SMS_GST_TAX_RATE_ID }}
+      STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
+      STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
+      STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+      SMS_INVOICE_PROCESSOR_KEY: ${{ secrets.SMS_INVOICE_PROCESSOR_KEY }}
+      WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+      DASHBOARD_PIN: ${{ secrets.DASHBOARD_PIN }}
+
+    steps:
+      - name: Inventory configured names without revealing values
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { appendFileSync, writeFileSync } = require("node:fs");
+
+          const variableNames = [
+            "CERTIFICATION_BASE_URL",
+            "CERTIFICATION_STAGING_HOSTNAME",
+            "CLOUDFLARE_STAGING_WORKER_NAME",
+            "STAGING_SUPABASE_PROJECT_REF",
+            "STAGING_SUPABASE_URL",
+          ];
+          const secretNames = [
+            "CLOUDFLARE_ACCOUNT_ID",
+            "CLOUDFLARE_API_TOKEN",
+            "SUPABASE_ACCESS_TOKEN",
+            "STAGING_SUPABASE_DB_PASSWORD",
+            "STAGING_SUPABASE_SERVICE_ROLE_KEY",
+            "STAGING_SUPABASE_PUBLISHABLE_KEY",
+            "TWILIO_ACCOUNT_SID",
+            "TWILIO_AUTH_TOKEN",
+            "TWILIO_FROM_NUMBER",
+            "VAPI_API_KEY",
+            "VAPI_SERVER_SECRET",
+            "STRIPE_SECRET_KEY",
+            "STRIPE_WEBHOOK_SECRET",
+            "STRIPE_SMS_GST_TAX_RATE_ID",
+            "STRIPE_PRICE_MCR_BASE",
+            "STRIPE_PRICE_AIR_BASE",
+            "STRIPE_PRICE_AIR_USAGE",
+            "SMS_INVOICE_PROCESSOR_KEY",
+            "WEBHOOK_SECRET",
+            "DASHBOARD_PIN",
+          ];
+
+          const missingVariables = variableNames.filter((name) => !process.env[name]?.trim());
+          const missingSecrets = secretNames.filter((name) => !process.env[name]?.trim());
+          const report = {
+            target: "staging",
+            ready: missingVariables.length === 0 && missingSecrets.length === 0,
+            configuredVariableCount: variableNames.length - missingVariables.length,
+            requiredVariableCount: variableNames.length,
+            configuredSecretCount: secretNames.length - missingSecrets.length,
+            requiredSecretCount: secretNames.length,
+            missingVariables,
+            missingSecrets,
+            valuesInspected: false,
+          };
+
+          writeFileSync("staging-access-inventory.json", `${JSON.stringify(report, null, 2)}\n`, {
+            mode: 0o600,
+          });
+
+          const summary = [
+            "# Isolated staging access inventory",
+            "",
+            `Ready: **${report.ready ? "yes" : "no"}**`,
+            `Configured variables: **${report.configuredVariableCount}/${report.requiredVariableCount}**`,
+            `Configured secrets: **${report.configuredSecretCount}/${report.requiredSecretCount}**`,
+            "",
+            "## Missing variables",
+            "",
+            ...(missingVariables.length ? missingVariables.map((name) => `- \`${name}\``) : ["- None"]),
+            "",
+            "## Missing secrets",
+            "",
+            ...(missingSecrets.length ? missingSecrets.map((name) => `- \`${name}\``) : ["- None"]),
+            "",
+            "No credential values were printed, stored in the report, or transmitted elsewhere.",
+          ].join("\n");
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+          console.log(
+            JSON.stringify({
+              ready: report.ready,
+              configuredVariableCount: report.configuredVariableCount,
+              requiredVariableCount: report.requiredVariableCount,
+              configuredSecretCount: report.configuredSecretCount,
+              requiredSecretCount: report.requiredSecretCount,
+              missingVariables,
+              missingSecrets,
+              valuesPrinted: false,
+            }),
+          );
+          NODE
+
+      - name: Upload non-secret access inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-access-inventory
+          path: staging-access-inventory.json
+          if-no-files-found: error
+          retention-days: 7
