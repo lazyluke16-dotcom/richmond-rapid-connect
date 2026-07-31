@@ -204,3 +204,42 @@ export function acquisitionUserMetadata(draft: AcquisitionSignupDraft) {
     current_answering_arrangement: draft.currentArrangement,
   };
 }
+
+export function recoverAcquisitionDraftFromUser(
+  user: { email?: string | null; user_metadata?: Record<string, unknown> } | null | undefined,
+  fallback: AcquisitionSignupDraft,
+): AcquisitionSignupDraft | null {
+  const metadata = user?.user_metadata;
+  const plan = AcquisitionPlanSchema.safeParse(metadata?.acquisition_plan);
+  const promoCode = normalizePromoCode(
+    typeof metadata?.acquisition_promo_code === "string" ? metadata.acquisition_promo_code : "",
+  );
+  if (!user || !metadata || !plan.success || !promoCode) return null;
+
+  const value = (key: string, fallbackValue: string) =>
+    typeof metadata[key] === "string" ? metadata[key] : fallbackValue;
+  const nullableValue = (key: string, fallbackValue: string | null) =>
+    typeof metadata[key] === "string" ? metadata[key] : fallbackValue;
+
+  const recovered = AcquisitionSignupDraftSchema.safeParse({
+    ...fallback,
+    businessName: value("business_name", fallback.businessName),
+    firstName: value("first_name", fallback.firstName),
+    lastName: value("last_name", fallback.lastName),
+    email: user.email ?? fallback.email,
+    mobile: value("contact_mobile_e164", fallback.mobile),
+    businessPhone: value("business_phone_e164", fallback.businessPhone),
+    plan: plan.data,
+    promoCode,
+    handlingTiming: value("call_handling_timing", fallback.handlingTiming),
+    currentArrangement: value("current_answering_arrangement", fallback.currentArrangement),
+    attribution: {
+      source: nullableValue("acquisition_source", fallback.attribution.source),
+      medium: nullableValue("acquisition_medium", fallback.attribution.medium),
+      campaign: nullableValue("acquisition_campaign", fallback.attribution.campaign),
+      content: nullableValue("acquisition_content", fallback.attribution.content),
+      referralCode: nullableValue("referral_code", fallback.attribution.referralCode),
+    },
+  });
+  return recovered.success ? recovered.data : null;
+}
