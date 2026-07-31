@@ -44,6 +44,26 @@ describe("staging deployment boundary", () => {
     expect(workflow).not.toMatch(/wranglerVersion: "4\.114\.0"\n\s+secrets:/);
   });
 
+  it("keeps public Supabase bindings out of encrypted secret upload", () => {
+    const workflow = readFileSync(".github/workflows/staging-deployment.yml", "utf8");
+    const uploadStep = workflow.slice(
+      workflow.indexOf("- name: Upload secrets only"),
+      workflow.indexOf("- name: Deploy only"),
+    );
+    const deployStep = workflow.slice(
+      workflow.indexOf("- name: Deploy only"),
+      workflow.indexOf("- name: Verify exact hosted"),
+    );
+
+    expect(uploadStep).not.toContain('"SUPABASE_URL"');
+    expect(uploadStep).not.toContain('"SUPABASE_PUBLISHABLE_KEY"');
+    expect(uploadStep).toContain('"SUPABASE_SERVICE_ROLE_KEY"');
+    expect(deployStep).toContain("--var SUPABASE_URL:${{ vars.STAGING_SUPABASE_URL }}");
+    expect(deployStep).toContain(
+      "--var SUPABASE_PUBLISHABLE_KEY:${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}",
+    );
+  });
+
   it("accepts a complete staging-only configuration without printing secret values", () => {
     const result = validateStagingDeploymentConfig(stagingEnv(), {
       suppliedEnvironmentId: "staging-commercial-rc",

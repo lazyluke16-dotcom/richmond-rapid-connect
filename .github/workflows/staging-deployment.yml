@@ -157,9 +157,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
-          SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
@@ -177,9 +175,7 @@ jobs:
         run: |
           node - <<'NODE' |
           const names = [
-            "SUPABASE_URL",
             "SUPABASE_SERVICE_ROLE_KEY",
-            "SUPABASE_PUBLISHABLE_KEY",
             "TWILIO_ACCOUNT_SID",
             "TWILIO_AUTH_TOKEN",
             "TWILIO_FROM_NUMBER",
@@ -219,6 +215,8 @@ jobs:
             --var CERTIFICATION_ENVIRONMENT_ID:${{ inputs.environment_id }}
             --var DEPLOYED_RELEASE_SHA:${{ inputs.release_sha }}
             --var PUBLIC_JOB_REQUEST_URL:${{ vars.CERTIFICATION_BASE_URL }}
+            --var SUPABASE_URL:${{ vars.STAGING_SUPABASE_URL }}
+            --var SUPABASE_PUBLISHABLE_KEY:${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
             --var SMS_MODE:twilio
             --var STRIPE_MODE:test
             --var STAGING_CERTIFICATION_ENABLED:true
