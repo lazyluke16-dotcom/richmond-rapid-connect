@@ -14,7 +14,16 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 
 type BillingCheckoutFailure = {
   status: number;
-  code: "billing_configuration_error" | "stripe_request_failed" | "billing_checkout_failed";
+  code:
+    | "stripe_secret_not_configured"
+    | "stripe_secret_invalid"
+    | "stripe_context_not_configured"
+    | "stripe_mode_invalid"
+    | "stripe_mode_mismatch"
+    | "stripe_prices_not_configured"
+    | "billing_return_url_invalid"
+    | "stripe_request_failed"
+    | "billing_checkout_failed";
   error: string;
 };
 
@@ -27,12 +36,35 @@ export function classifyBillingCheckoutFailure(error: unknown): BillingCheckoutF
   const message = error instanceof Error ? error.message : "";
   const name = error instanceof Error ? error.name : "";
   const providerType = typeof record.type === "string" ? record.type : "";
-  const isConfigurationFailure =
-    message.startsWith("[stripe]") || message === "Billing return URL must use HTTPS";
-  if (isConfigurationFailure) {
+
+  const configurationCode = (() => {
+    if (message.includes("STRIPE_SECRET_KEY is not configured")) {
+      return "stripe_secret_not_configured" as const;
+    }
+    if (message.includes("STRIPE_SECRET_KEY must be a Stripe")) {
+      return "stripe_secret_invalid" as const;
+    }
+    if (message.includes("STRIPE_CONTEXT is required")) {
+      return "stripe_context_not_configured" as const;
+    }
+    if (message.includes('STRIPE_MODE must be either "test" or "live"')) {
+      return "stripe_mode_invalid" as const;
+    }
+    if (message.includes("does not match the configured")) {
+      return "stripe_mode_mismatch" as const;
+    }
+    if (message.includes("Missing required Stripe price configuration")) {
+      return "stripe_prices_not_configured" as const;
+    }
+    if (message === "Billing return URL must use HTTPS") {
+      return "billing_return_url_invalid" as const;
+    }
+    return null;
+  })();
+  if (configurationCode) {
     return {
       status: 503,
-      code: "billing_configuration_error",
+      code: configurationCode,
       error: "Billing is temporarily unavailable. Please try again shortly.",
     };
   }

@@ -15,7 +15,7 @@ describe("billing checkout failure responses", () => {
     );
     expect(failure).toEqual({
       status: 503,
-      code: "billing_configuration_error",
+      code: "stripe_prices_not_configured",
       error: "Billing is temporarily unavailable. Please try again shortly.",
     });
 
@@ -27,10 +27,36 @@ describe("billing checkout failure responses", () => {
     expect(response.headers.get("content-type")).toBe("application/json");
     expect(await response.json()).toEqual({
       error: "Billing is temporarily unavailable. Please try again shortly.",
-      code: "billing_configuration_error",
+      code: "stripe_prices_not_configured",
     });
     expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining("SECRET_DETAIL"));
     consoleError.mockRestore();
+  });
+
+  it.each([
+    [
+      "[stripe] STRIPE_SECRET_KEY is not configured — configure it in the server runtime",
+      "stripe_secret_not_configured",
+    ],
+    [
+      "[stripe] STRIPE_SECRET_KEY must be a Stripe account, restricted, or organization secret key",
+      "stripe_secret_invalid",
+    ],
+    [
+      "[stripe] STRIPE_CONTEXT is required when STRIPE_SECRET_KEY is an organization API key",
+      "stripe_context_not_configured",
+    ],
+    ['[stripe] STRIPE_MODE must be either "test" or "live"', "stripe_mode_invalid"],
+    [
+      "[stripe] STRIPE_MODE=test does not match the configured live-mode key",
+      "stripe_mode_mismatch",
+    ],
+    ["Billing return URL must use HTTPS", "billing_return_url_invalid"],
+  ])("classifies %s without exposing configuration values", (message, code) => {
+    expect(classifyBillingCheckoutFailure(new Error(message))).toMatchObject({
+      status: 503,
+      code,
+    });
   });
 
   it("maps Stripe SDK failures without leaking provider messages", async () => {
