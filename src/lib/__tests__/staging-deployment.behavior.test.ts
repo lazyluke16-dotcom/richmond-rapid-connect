@@ -68,11 +68,14 @@ describe("staging deployment boundary", () => {
 
   it("keeps manual staging dispatch and the shared staging/rollback exclusion lock", () => {
     const workflow = readFileSync(".github/workflows/staging-deployment.yml", "utf8");
+    const accessWorkflow = readFileSync(".github/workflows/staging-access-preflight.yml", "utf8");
 
     expect(workflow).toContain("workflow_call:");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("group: isolated-staging-deployment");
     expect(workflow).toContain("cancel-in-progress: false");
+    expect(accessWorkflow).toContain("workflow_dispatch:");
+    expect(accessWorkflow).not.toContain("pull_request:");
   });
 
   it("targets the configured staging Worker during bulk secret upload", () => {

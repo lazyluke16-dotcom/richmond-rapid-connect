@@ -6,9 +6,6 @@ on:
       - main
     paths:
       - .github/workflows/staging-access-preflight.yml
-  pull_request:
-    paths:
-      - .github/workflows/staging-access-preflight.yml
   workflow_dispatch:
 
 permissions:
