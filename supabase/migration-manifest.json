@@ -172,6 +172,11 @@
       "file": "20260728160000_outreach_compliance.sql",
       "sha256": "cd1e30b1d47f4994e15fcc69e7c0f3819fdfad4ba916deee0e08468249b9c314",
       "dependsOn": ["20260728140000_acquisition_funnel.sql"]
+    },
+    {
+      "file": "20260731120000_acquisition_account_recovery.sql",
+      "sha256": "fce7898efa1adb3d805a2791105237ab8df2368ec3173cb9d5f5b7d3ebc6b2fb",
+      "dependsOn": ["20260728140000_acquisition_funnel.sql"]
     }
   ]
 }

@@ -1,6 +1,8 @@
 // Server-side billing state helpers — grace periods, suspension, usage alerts.
 // Never import from client-side code.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import {
   GRACE_PERIOD_HOURS,
   GRACE_USAGE_CAP_AUD,
@@ -66,6 +68,30 @@ export async function requireAuthAndBusiness(
   }
 
   return { userId: user.id, businessId: (biz as { id: string }).id };
+}
+
+// Recover the narrow acquisition-only state where email confirmation succeeded
+// but the browser never completed business onboarding. The database function
+// reads identity and acquisition values from the signed JWT and is idempotent.
+export async function recoverAcquisitionBusiness(token: string): Promise<void> {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+  if (!supabaseUrl || !publishableKey) {
+    throw Object.assign(new Error("Account recovery is not configured"), { status: 500 });
+  }
+
+  const userClient = createClient<Database>(supabaseUrl, publishableKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: {
+      storage: undefined,
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  });
+  const { error } = await userClient.rpc("recover_my_acquisition_business" as never);
+  if (error) {
+    throw Object.assign(new Error(error.message), { status: 404 });
+  }
 }
 
 // ─── Grace period ────────────────────────────────────────────────────────────

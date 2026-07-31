@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   extractBearerToken,
   requireAuthAndBusiness,
+  recoverAcquisitionBusiness,
   computeAlertThresholds,
   sumUsageChargesMinor,
 } from "@/lib/billing.server";
@@ -28,10 +29,26 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           ({ businessId } = await requireAuthAndBusiness(token, supabaseAdmin));
         } catch (e) {
           const err = e as { status?: number; message?: string };
-          return new Response(JSON.stringify({ error: err.message ?? "Auth failed" }), {
-            status: err.status ?? 401,
-            headers: { "Content-Type": "application/json" },
-          });
+          if (err.status === 404) {
+            try {
+              await recoverAcquisitionBusiness(token);
+              ({ businessId } = await requireAuthAndBusiness(token, supabaseAdmin));
+            } catch (recoveryCause) {
+              const recoveryError = recoveryCause as { status?: number; message?: string };
+              return new Response(
+                JSON.stringify({ error: recoveryError.message ?? "No active business found" }),
+                {
+                  status: recoveryError.status ?? 404,
+                  headers: { "Content-Type": "application/json" },
+                },
+              );
+            }
+          } else {
+            return new Response(JSON.stringify({ error: err.message ?? "Auth failed" }), {
+              status: err.status ?? 401,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
         }
 
         // Direct service-role queries scoped to verified businessId.

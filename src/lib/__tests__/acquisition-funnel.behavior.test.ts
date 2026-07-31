@@ -214,6 +214,41 @@ describe("acquisition database boundary", () => {
   });
 });
 
+describe("confirmed acquisition account recovery", () => {
+  const recoveryMigration = readFileSync(
+    resolve("supabase/migrations/20260731120000_acquisition_account_recovery.sql"),
+    "utf8",
+  );
+  const billingServer = readFileSync(resolve("src/lib/billing.server.ts"), "utf8");
+  const billingSummary = readFileSync(resolve("src/routes/api/public/billing.summary.ts"), "utf8");
+
+  it("serializes and idempotently recovers only the signed-in acquisition user", () => {
+    expect(recoveryMigration).toContain("uid uuid := auth.uid()");
+    expect(recoveryMigration).toContain("auth.jwt() -> 'user_metadata'");
+    expect(recoveryMigration).toContain("pg_advisory_xact_lock");
+    expect(recoveryMigration).toContain("IF bid IS NOT NULL THEN");
+    expect(recoveryMigration).toContain("public.create_business_for_current_user");
+    expect(recoveryMigration).toContain("public.redeem_acquisition_offer");
+    expect(recoveryMigration).not.toMatch(/_user_id|_business_id/);
+  });
+
+  it("rejects unrelated accounts without complete acquisition metadata", () => {
+    expect(recoveryMigration).toContain("business_name IS NULL");
+    expect(recoveryMigration).toContain(
+      "acquisition_plan NOT IN ('missed_call_recovery', 'ai_receptionist')",
+    );
+    expect(recoveryMigration).toContain("promotion_code !~ '^[A-Z0-9_-]{3,64}$'");
+    expect(recoveryMigration).toContain("No recoverable acquisition signup found");
+  });
+
+  it("retries the billing lookup after server-side recovery", () => {
+    expect(billingServer).toContain("recover_my_acquisition_business");
+    expect(billingSummary).toContain("if (err.status === 404)");
+    expect(billingSummary).toContain("await recoverAcquisitionBusiness(token)");
+    expect(billingSummary.match(/requireAuthAndBusiness\(token, supabaseAdmin\)/g)).toHaveLength(2);
+  });
+});
+
 describe("acquisition experience source", () => {
   const landing = readFileSync(resolve("src/routes/plumbers.tsx"), "utf8");
   const demo = readFileSync(resolve("src/components/acquisition/DemoCommercial.tsx"), "utf8");
