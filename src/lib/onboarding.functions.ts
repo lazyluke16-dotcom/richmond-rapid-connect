@@ -9,6 +9,7 @@ import {
   OnboardingStepSchema,
   deriveOnboardingStep,
   ONBOARDING_STEP_MAX,
+  resolveSignupPhoneContinuity,
 } from "./onboarding-validation";
 
 export interface OnboardingStatus {
@@ -126,6 +127,23 @@ export const getOnboardingStatus = createServerFn({ method: "GET" })
       name: data.name as string,
       step,
     };
+  });
+
+/**
+ * Recover the signup phone from the authenticated JWT metadata. This server
+ * boundary prevents a caller from reading another user's auth record; the
+ * value is validated before it is returned to the onboarding form.
+ */
+export const getMySignupPhone = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<string | null> => {
+    const claims = context.claims as unknown as {
+      user_metadata?: { business_phone_e164?: unknown };
+    };
+    return resolveSignupPhoneContinuity({
+      sessionPhone: null,
+      loadAuthenticatedMetadataPhone: async () => claims.user_metadata?.business_phone_e164 ?? null,
+    });
   });
 
 /**
@@ -441,7 +459,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { data: biz, error: businessError } = await context.supabase
       .from("businesses")
-      .select("id,name,selected_plan,hero_heading,hero_subheading")
+      .select("id,name,public_phone,selected_plan,hero_heading,hero_subheading")
       .limit(1)
       .maybeSingle();
     if (businessError) throw new Error(businessError.message);
@@ -465,6 +483,7 @@ export const completeOnboarding = createServerFn({ method: "POST" })
 
     const readinessFailures = getOnboardingReadinessFailures({
       businessName: biz.name as string | null,
+      publicPhone: biz.public_phone as string | null,
       servicesCount: servicesResult.data?.length ?? 0,
       areasCount: areasResult.data?.length ?? 0,
       hoursCount: hoursResult.data?.length ?? 0,

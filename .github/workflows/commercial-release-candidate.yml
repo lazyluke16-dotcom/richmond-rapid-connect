@@ -1,0 +1,87 @@
+name: Commercial release candidate
+
+on:
+  push:
+    branches:
+      - feat/customer-call-handling-reconstructed
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: commercial-release-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify frozen migrations
+        run: npm run verify:migrations
+
+      - name: Run complete behavioural suite
+        run: npm test
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Check release-critical formatting and lint
+        run: |
+          npx prettier --check \
+            .github/workflows/staging-deployment.yml \
+            .github/workflows/staging-rollback.yml \
+            scripts/staging-certification.mjs \
+            scripts/staging-deployment.d.mts \
+            scripts/staging-deployment.mjs \
+            src/lib/sms-invoice-certification.server.ts \
+            src/lib/sms-invoice-stripe.server.ts \
+            src/lib/sms-invoicing.server.ts \
+            src/lib/staging-release.server.ts \
+            src/lib/__tests__/sms-invoice-certification-route.behavior.test.ts \
+            src/lib/__tests__/staging-deployment.behavior.test.ts \
+            src/routes/api/public/process-sms-invoice.ts \
+            src/routes/api/public/staging-release.ts
+          npx eslint \
+            scripts/staging-certification.mjs \
+            scripts/staging-deployment.mjs \
+            src/lib/sms-invoice-certification.server.ts \
+            src/lib/sms-invoice-stripe.server.ts \
+            src/lib/sms-invoicing.server.ts \
+            src/lib/staging-release.server.ts \
+            src/lib/__tests__/sms-invoice-certification-route.behavior.test.ts \
+            src/lib/__tests__/staging-deployment.behavior.test.ts \
+            src/routes/api/public/process-sms-invoice.ts \
+            src/routes/api/public/staging-release.ts
+
+      - name: Build Cloudflare production artifact
+        env:
+          LOCAL_BUILD_DISABLE_MCP_PLUGIN: "1"
+        run: npm run build
+
+      - name: Reject high or critical production dependency findings
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Upload immutable deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: commercial-release-${{ github.sha }}
+          path: .output
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14

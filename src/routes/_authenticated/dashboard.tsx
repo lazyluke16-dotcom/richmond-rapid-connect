@@ -115,10 +115,16 @@ function Dashboard() {
               <LogOut className="h-3.5 w-3.5" /> Sign out
             </button>
             <Link
+              to="/call-handling"
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/50 bg-primary/10 px-3 py-2 text-xs font-bold uppercase tracking-widest text-primary hover:bg-primary hover:text-primary-foreground"
+            >
+              <PhoneCall className="h-3.5 w-3.5" /> Call Handling
+            </Link>
+            <Link
               to="/missed-call-settings"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
             >
-              <Settings className="h-3.5 w-3.5" /> Missed-call
+              <Settings className="h-3.5 w-3.5" /> Text Link
             </Link>
             <Link
               to="/ai-receptionist"

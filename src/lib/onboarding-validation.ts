@@ -6,6 +6,7 @@
  * trusts client-side validation.
  */
 import { z } from "zod";
+import { normalizeAustralianPhone } from "@/lib/call-handling";
 
 /** 8 wizard steps: Business, Branding, Services, Areas, Hours, Plan, Website, Finish. */
 export const ONBOARDING_STEP_MIN = 0;
@@ -16,6 +17,44 @@ export const OnboardingStepSchema = z
   .int()
   .min(ONBOARDING_STEP_MIN)
   .max(ONBOARDING_STEP_MAX);
+
+function validatedSignupPhone(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  try {
+    return normalizeAustralianPhone(value);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Preserve signup phone continuity across both same-tab signup and the
+ * email-confirmation/new-tab path. Browser storage is only a convenience:
+ * invalid storage is ignored and authenticated metadata is loaded from the
+ * server. Both sources pass through the same phone validator.
+ */
+export async function resolveSignupPhoneContinuity(input: {
+  sessionPhone: unknown;
+  loadAuthenticatedMetadataPhone: () => Promise<unknown>;
+}): Promise<string | null> {
+  const fromSession = validatedSignupPhone(input.sessionPhone);
+  if (fromSession) return fromSession;
+  return validatedSignupPhone(await input.loadAuthenticatedMetadataPhone());
+}
+
+export async function resolveOnboardingPhoneContinuity(input: {
+  hasExistingBusiness: boolean;
+  existingBusinessPhone: string | null;
+  sessionPhone: unknown;
+  loadAuthenticatedMetadataPhone: () => Promise<unknown>;
+}): Promise<string | null> {
+  if (input.hasExistingBusiness) {
+    // The tenant-scoped business row remains authoritative on resume. Signup
+    // storage and auth metadata must never overwrite an existing tenant.
+    return input.existingBusinessPhone;
+  }
+  return resolveSignupPhoneContinuity(input);
+}
 
 /** Clamp any incoming value into the allowed step range. */
 export function clampOnboardingStep(input: unknown): number {
@@ -47,6 +86,7 @@ export interface OnboardingProgressInput {
 
 export interface OnboardingReadinessInput {
   businessName?: string | null;
+  publicPhone?: string | null;
   servicesCount: number;
   areasCount: number;
   hoursCount: number;
@@ -63,6 +103,11 @@ export interface OnboardingReadinessInput {
 export function getOnboardingReadinessFailures(input: OnboardingReadinessInput): string[] {
   const failures: string[] = [];
   if ((input.businessName ?? "").trim().length < 2) failures.push("business profile");
+  try {
+    normalizeAustralianPhone(input.publicPhone ?? "");
+  } catch {
+    failures.push("an Australian business phone");
+  }
   if (input.servicesCount < 1) failures.push("at least one service");
   if (input.areasCount < 1) failures.push("at least one service area");
   if (input.hoursCount < 1) failures.push("business hours");
@@ -135,6 +180,21 @@ export const HoursPayloadSchema = z.object({
 export const PlanPayloadSchema = z.object({
   plan: z.enum(["missed_call_recovery", "ai_receptionist"]),
 });
+
+export const AustralianPhoneSchema = z
+  .string()
+  .trim()
+  .transform((value, context) => {
+    try {
+      return normalizeAustralianPhone(value);
+    } catch (error) {
+      context.addIssue({
+        code: "custom",
+        message: error instanceof Error ? error.message : "Enter a valid Australian phone number",
+      });
+      return z.NEVER;
+    }
+  });
 
 export type ServicesPayload = z.infer<typeof ServicesPayloadSchema>;
 export type AreasPayload = z.infer<typeof AreasPayloadSchema>;

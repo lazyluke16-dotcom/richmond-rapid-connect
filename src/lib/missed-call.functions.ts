@@ -72,9 +72,6 @@ export const getMyMissedCallContext = createServerFn({ method: "GET" })
 export type MissedCallUpdate = Partial<
   Pick<
     MissedCallSettings,
-    | "enabled"
-    | "mode"
-    | "recovery_sms_enabled"
     | "sms_template"
     | "plumber_alert_enabled"
     | "alert_method"
@@ -100,10 +97,6 @@ export const updateMyMissedCallSettings = createServerFn({ method: "POST" })
   .inputValidator((data: MissedCallUpdate) => data)
   .handler(async ({ data, context }) => {
     const patch: Record<string, unknown> = {};
-    if (data.enabled !== undefined) patch.enabled = !!data.enabled;
-    if (data.mode !== undefined) patch.mode = data.mode === "live" ? "live" : "demo";
-    if (data.recovery_sms_enabled !== undefined)
-      patch.recovery_sms_enabled = !!data.recovery_sms_enabled;
     if (data.plumber_alert_enabled !== undefined)
       patch.plumber_alert_enabled = !!data.plumber_alert_enabled;
     if (data.alert_method !== undefined)
@@ -122,23 +115,6 @@ export const updateMyMissedCallSettings = createServerFn({ method: "POST" })
       const clean = sanitizeTemplate(String(data.sms_template));
       if (clean.trim().length < 10) throw new Error("SMS template too short");
       patch.sms_template = clean;
-    }
-    // Plan gating for enabling
-    if (patch.enabled === true) {
-      const { data: biz } = await context.supabase
-        .from("businesses")
-        .select("id")
-        .limit(1)
-        .maybeSingle();
-      if (!biz) throw new Error("No business");
-      const { data: acc } = await context.supabase.rpc("has_missed_call_access", {
-        _business_id: biz.id,
-      });
-      if (!acc) throw new Error("Plan does not include missed-call recovery");
-    }
-    // Force live -> demo if SMS_MODE isn't twilio
-    if (patch.mode === "live" && process.env.SMS_MODE !== "twilio") {
-      patch.mode = "demo";
     }
     const { error } = await context.supabase
       .from("business_missed_call_settings")

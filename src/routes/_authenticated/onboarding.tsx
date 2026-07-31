@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   getOnboardingStatus,
+  getMySignupPhone,
   getMyOnboardingBundle,
   createMyBusiness,
   setMyServices,
@@ -12,12 +13,14 @@ import {
   setMyOnboardingStep,
   completeOnboarding,
 } from "@/lib/onboarding.functions";
+import { resolveOnboardingPhoneContinuity } from "@/lib/onboarding-validation";
 import {
   getMyBusiness,
   updateMyBusiness,
   type EditableBusiness,
 } from "@/lib/business-settings.functions";
 import { setMyCoverage } from "@/lib/business-settings.functions";
+import { normalizeAustralianPhone } from "@/lib/call-handling";
 import { CheckCircle2, ArrowRight, Plus, X, Sparkles, Bot, Info } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
@@ -108,7 +111,14 @@ function OnboardingWizard() {
           if (full) {
             setBiz(full);
             setBizName(full.name);
-            setPublicPhone(full.public_phone ?? "");
+            setPublicPhone(
+              (await resolveOnboardingPhoneContinuity({
+                hasExistingBusiness: true,
+                existingBusinessPhone: full.public_phone,
+                sessionPhone: sessionStorage.getItem("rc_business_phone"),
+                loadAuthenticatedMetadataPhone: getMySignupPhone,
+              })) ?? "",
+            );
             setPublicEmail(full.public_email ?? "");
             setShortDesc(full.short_description ?? "");
           }
@@ -164,6 +174,14 @@ function OnboardingWizard() {
           }
           // Server is authoritative about which step the wizard should resume at.
           setStep(Math.min(Math.max(status.step, 1), 7));
+        } else {
+          const signupPhone = await resolveOnboardingPhoneContinuity({
+            hasExistingBusiness: false,
+            existingBusinessPhone: null,
+            sessionPhone: sessionStorage.getItem("rc_business_phone"),
+            loadAuthenticatedMetadataPhone: getMySignupPhone,
+          });
+          if (signupPhone) setPublicPhone(signupPhone);
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -200,9 +218,17 @@ function OnboardingWizard() {
 
   const canNext = useMemo(() => {
     if (busy) return false;
-    if (step === 0) return bizName.trim().length >= 2;
+    if (step === 0) {
+      if (bizName.trim().length < 2) return false;
+      try {
+        normalizeAustralianPhone(publicPhone);
+        return true;
+      } catch {
+        return false;
+      }
+    }
     return true;
-  }, [step, bizName, busy]);
+  }, [step, bizName, publicPhone, busy]);
 
   const withBusy = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -246,6 +272,7 @@ function OnboardingWizard() {
       });
       const full = await getMyBusiness();
       if (full) setBiz(full);
+      sessionStorage.removeItem("rc_business_phone");
       await persistStep(1);
       setStep(1);
     });
@@ -439,7 +466,7 @@ function OnboardingWizard() {
                 placeholder="e.g. Harbour Plumbing Co"
               />
               <Field
-                label="Public phone"
+                label="Australian business phone *"
                 value={publicPhone}
                 onChange={setPublicPhone}
                 placeholder="0400 000 000"
@@ -731,6 +758,7 @@ function OnboardingWizard() {
                 title="AI Receptionist"
                 bullets={[
                   "Everything in Missed Call Recovery",
+                  "Both Text Link and AI included",
                   "AI phone receptionist",
                   "Phone-call job capture",
                   "AI call summary",

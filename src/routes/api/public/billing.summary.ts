@@ -1,35 +1,36 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute } from "@tanstack/react-router";
 import {
   extractBearerToken,
   requireAuthAndBusiness,
   computeAlertThresholds,
-} from '@/lib/billing.server';
-import { PLAN_BASE_PRICE_CENTS } from '@/lib/stripe.server';
-import { GRACE_USAGE_CAP_AUD } from '@/lib/billing-types';
-import type { EffectiveBillingState, SelectedPlan } from '@/lib/billing-types';
+  sumUsageChargesMinor,
+} from "@/lib/billing.server";
+import { PLAN_BASE_PRICE_CENTS } from "@/lib/stripe.server";
+import { GRACE_USAGE_CAP_AUD } from "@/lib/billing-types";
+import type { EffectiveBillingState, SelectedPlan } from "@/lib/billing-types";
 
-export const Route = createFileRoute('/api/public/billing/summary')({
+export const Route = createFileRoute("/api/public/billing/summary")({
   server: {
     handlers: {
       GET: async ({ request }) => {
         const token = extractBearerToken(request);
         if (!token) {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), {
             status: 401,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { "Content-Type": "application/json" },
           });
         }
 
-        const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         let businessId: string;
         try {
           ({ businessId } = await requireAuthAndBusiness(token, supabaseAdmin));
         } catch (e) {
           const err = e as { status?: number; message?: string };
-          return new Response(JSON.stringify({ error: err.message ?? 'Auth failed' }), {
+          return new Response(JSON.stringify({ error: err.message ?? "Auth failed" }), {
             status: err.status ?? 401,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { "Content-Type": "application/json" },
           });
         }
 
@@ -37,29 +38,25 @@ export const Route = createFileRoute('/api/public/billing/summary')({
         // Do NOT use get_my_billing_detail() here — that RPC uses current_business_id()
         // which requires an auth.uid() context only available on user-scoped clients.
         const [{ data: bizRow }, { data: billingRow }, effectiveStateResult] = await Promise.all([
+          supabaseAdmin.from("businesses").select("billing_exempt").eq("id", businessId).single(),
           supabaseAdmin
-            .from('businesses')
-            .select('billing_exempt')
-            .eq('id', businessId)
-            .single(),
-          supabaseAdmin
-            .from('business_billing')
+            .from("business_billing")
             .select(
-              'selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at, platform_fee_waiver_ends_at, current_period_start, current_period_end, grace_started_at, grace_expires_at, usage_limit_cents',
+              "selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at, platform_fee_waiver_ends_at, current_period_start, current_period_end, grace_started_at, grace_expires_at, usage_limit_cents",
             )
-            .eq('business_id', businessId)
+            .eq("business_id", businessId)
             .maybeSingle(),
           // Call effective_billing_state with explicit _business_id — this RPC
           // accepts a UUID parameter and does not depend on auth.uid().
-          supabaseAdmin.rpc('effective_billing_state', {
+          supabaseAdmin.rpc("effective_billing_state", {
             _business_id: businessId,
           } as never),
         ]);
 
         if (!billingRow) {
-          return new Response(JSON.stringify({ error: 'Billing record not found' }), {
+          return new Response(JSON.stringify({ error: "Billing record not found" }), {
             status: 404,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { "Content-Type": "application/json" },
           });
         }
 
@@ -78,52 +75,71 @@ export const Route = createFileRoute('/api/public/billing/summary')({
           usage_limit_cents?: number;
         };
 
-        const effectiveState = (effectiveStateResult.data as unknown as string) ?? 'unknown';
-        const billingExempt = Boolean((bizRow as { billing_exempt?: boolean } | null)?.billing_exempt);
+        const effectiveState = (effectiveStateResult.data as unknown as string) ?? "unknown";
+        const billingExempt = Boolean(
+          (bizRow as { billing_exempt?: boolean } | null)?.billing_exempt,
+        );
         const selectedPlan = (bb.selected_plan as SelectedPlan | null) ?? null;
         const periodStart = bb.current_period_start ? new Date(bb.current_period_start) : null;
 
         // ── Current-period usage ─────────────────────────────────────────────
         let usageQuery = supabaseAdmin
-          .from('billing_usage_events')
-          .select('estimated_customer_charge, billable_seconds, stripe_meter_event_status')
-          .eq('business_id', businessId)
-          .eq('billable', true);
+          .from("billing_usage_events")
+          .select(
+            "usage_type, quantity, billable, estimated_customer_charge, estimated_customer_charge_minor, billable_seconds, stripe_meter_event_status",
+          )
+          .eq("business_id", businessId);
 
         if (periodStart) {
-          usageQuery = usageQuery.gte('created_at', periodStart.toISOString());
+          usageQuery = usageQuery.gte("created_at", periodStart.toISOString());
         }
 
         const { data: usageRows } = await usageQuery;
         const rows = (usageRows ?? []) as {
+          usage_type?: string;
+          quantity?: number | null;
+          billable?: boolean;
           estimated_customer_charge?: number | null;
+          estimated_customer_charge_minor?: number | null;
           billable_seconds?: number | null;
           stripe_meter_event_status?: string | null;
         }[];
 
-        const totalBillableSeconds = rows.reduce((s, r) => s + (Number(r.billable_seconds) || 0), 0);
-        const estimatedChargeAud = rows.reduce((s, r) => s + (Number(r.estimated_customer_charge) || 0), 0);
+        const billableVoiceRows = rows.filter(
+          (row) => row.usage_type === "ai_voice_seconds" && row.billable,
+        );
+        const totalBillableSeconds = billableVoiceRows.reduce(
+          (sum, row) => sum + (Number(row.billable_seconds) || 0),
+          0,
+        );
+        const billableRows = rows.filter((row) => row.billable);
+        const estimatedChargeAud = sumUsageChargesMinor(billableRows) / 100;
+        const smsMessages = rows
+          .filter((row) => row.usage_type === "outbound_sms")
+          .reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
         const pendingMeterEvents = rows.filter(
-          (r) => r.stripe_meter_event_status === 'pending' || r.stripe_meter_event_status === 'failed',
+          (r) =>
+            r.stripe_meter_event_status === "pending" || r.stripe_meter_event_status === "failed",
         ).length;
 
         const alertThresholds = computeAlertThresholds(estimatedChargeAud);
 
         // ── Grace cap check ──────────────────────────────────────────────────
         let withinGraceCap = true;
-        if (effectiveState === 'past_due_grace' && bb.grace_started_at) {
-          const graceRows = (
-            (
-              await supabaseAdmin
-                .from('billing_usage_events')
-                .select('estimated_customer_charge')
-                .eq('business_id', businessId)
-                .eq('billable', true)
-                .gte('created_at', bb.grace_started_at)
-            ).data ?? []
-          ) as { estimated_customer_charge?: number | null }[];
+        if (effectiveState === "past_due_grace" && bb.grace_started_at) {
+          const graceRows = ((
+            await supabaseAdmin
+              .from("billing_usage_events")
+              .select("estimated_customer_charge, estimated_customer_charge_minor")
+              .eq("business_id", businessId)
+              .eq("billable", true)
+              .gte("created_at", bb.grace_started_at)
+          ).data ?? []) as {
+            estimated_customer_charge?: number | null;
+            estimated_customer_charge_minor?: number | null;
+          }[];
 
-          const graceTotal = graceRows.reduce((s, r) => s + (Number(r.estimated_customer_charge) || 0), 0);
+          const graceTotal = sumUsageChargesMinor(graceRows) / 100;
           withinGraceCap = graceTotal < GRACE_USAGE_CAP_AUD;
         }
 
@@ -134,7 +150,7 @@ export const Route = createFileRoute('/api/public/billing/summary')({
             billing: {
               businessId,
               selectedPlan,
-              billingStatus: bb.billing_status ?? 'setup',
+              billingStatus: bb.billing_status ?? "setup",
               effectiveState: effectiveState as EffectiveBillingState,
               billingExempt,
               unionOfferEligible: Boolean(bb.union_offer_eligible),
@@ -150,13 +166,15 @@ export const Route = createFileRoute('/api/public/billing/summary')({
               periodStart: periodStart?.toISOString() ?? null,
               totalBillableSeconds,
               estimatedChargeAud,
+              smsMessages,
+              smsBillable: true,
               pendingMeterEvents,
               alertThresholds,
               withinGraceCap,
             },
             platformFeeAud,
           }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
+          { status: 200, headers: { "Content-Type": "application/json" } },
         );
       },
     },

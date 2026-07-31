@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { UserPlus } from "lucide-react";
+import { normalizeAustralianPhone } from "@/lib/call-handling";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -25,6 +26,7 @@ function SignupPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [businessPhone, setBusinessPhone] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +48,15 @@ function SignupPage() {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
+    let normalizedPhone: string;
+    try {
+      normalizedPhone = normalizeAustralianPhone(businessPhone);
+    } catch (cause) {
+      setSubmitting(false);
+      setError(cause instanceof Error ? cause.message : "Enter a valid Australian phone number");
+      return;
+    }
+    sessionStorage.setItem("rc_business_phone", normalizedPhone);
     const { data, error: err } = await supabase.auth.signUp({
       email: email.trim(),
       password,
@@ -54,6 +65,7 @@ function SignupPage() {
         data: {
           first_name: firstName.trim(),
           last_name: lastName.trim(),
+          business_phone_e164: normalizedPhone,
           partner_code: partner ?? null,
           referral_code: ref ?? null,
         },
@@ -89,6 +101,14 @@ function SignupPage() {
               <Field label="First name" value={firstName} onChange={setFirstName} required />
               <Field label="Last name" value={lastName} onChange={setLastName} required />
             </div>
+            <Field
+              label="Australian business phone"
+              type="tel"
+              value={businessPhone}
+              onChange={setBusinessPhone}
+              required
+              autoComplete="tel"
+            />
             <Field
               label="Email"
               type="email"

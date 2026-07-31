@@ -183,8 +183,6 @@ export const createAiAssistantForBusiness = createServerFn({ method: "POST" })
           provider_assistant_id: created.id,
           status: "active",
           provider: "vapi",
-          enabled: true,
-          mode: "live",
           activated_at: new Date().toISOString(),
         } as never)
         .eq("business_id", data.businessId),
@@ -282,6 +280,11 @@ export const deactivateAiAssistantForBusiness = createServerFn({ method: "POST" 
   .inputValidator((d: { businessId: string }) => d)
   .handler(async ({ data, context }) => {
     await assertCallerCanProvision(context as unknown as ProvisioningContext, data.businessId);
+    const { error: modeError } = await context.supabase.rpc(
+      "set_my_call_handling_mode" as never,
+      { _mode: "off" } as never,
+    );
+    if (modeError) throw new Error(`Failed to turn call handling off: ${modeError.message}`);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: row } = await supabaseAdmin
       .from("business_ai_receptionist_settings")
@@ -301,7 +304,7 @@ export const deactivateAiAssistantForBusiness = createServerFn({ method: "POST" 
     await requireWrite(
       supabaseAdmin
         .from("business_ai_receptionist_settings")
-        .update({ enabled: false, status: "inactive" } as never)
+        .update({ status: "inactive" } as never)
         .eq("business_id", data.businessId),
       "Failed to deactivate assistant settings",
     );

@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "frozenAt": "2026-07-27",
+  "policy": {
+    "directory": "supabase/migrations",
+    "ordering": "lexicographic filename order",
+    "pendingDirectoryMustBeEmpty": true,
+    "allEntriesRequiredForFreshStaging": true
+  },
+  "pendingArtifactDispositions": [
+    {
+      "file": "20260722100000_phase2g1_onboarding_step.sql",
+      "disposition": "required_promoted",
+      "replacement": "20260728100000_onboarding_step.sql",
+      "reason": "The application persists onboarding_step but no committed migration added the column. It was promoted at a new timestamp so an upgrade never needs out-of-order migration execution."
+    },
+    {
+      "file": "20260722200000_phase1_coverage_and_licence.sql",
+      "disposition": "superseded_removed",
+      "replacement": "20260722201335_2f2ef531-beda-47b2-8745-979b1da71158.sql",
+      "reason": "The committed replacement already contains the coverage, licence, constraint, public-view, and grant changes. Replaying the pending artifact would add no required schema."
+    },
+    {
+      "file": "20260725160000_customer_call_handling.sql",
+      "disposition": "required_promoted",
+      "replacement": "20260725160000_customer_call_handling.sql",
+      "reason": "Introduces the authoritative tenant call-handling modes and provider-event identity required by the application."
+    },
+    {
+      "file": "20260726120000_text_link_dispatch_hardening.sql",
+      "disposition": "required_promoted",
+      "replacement": "20260726120000_text_link_dispatch_hardening.sql",
+      "reason": "Adds the durable Text Link provider dispatch and reconciliation state machine after the call-handling schema."
+    },
+    {
+      "file": "20260727120000_text_link_sms_billable.sql",
+      "disposition": "required_promoted",
+      "replacement": "20260727120000_text_link_sms_billable.sql",
+      "reason": "Makes Twilio-accepted Text Link SMS usage billable at 25 AUD cents after durable provider acceptance."
+    }
+  ],
+  "migrations": [
+    {
+      "file": "20260711045456_3cca7ee8-e722-4172-aaaf-15790bc18c91.sql",
+      "sha256": "041dd0074e8a2f5d04eb12e2017138e5655bc5f9eadb53b246161006d56e78c4"
+    },
+    {
+      "file": "20260715074344_624e3ef2-f240-4a59-b722-02eaaaa6416d.sql",
+      "sha256": "b705fed707dd02ffe27bd1066a03c83cb9f38c6aaddcf6aa8d20922e4716271c"
+    },
+    {
+      "file": "20260715083905_2022d648-7cac-440b-9eae-95402efd3989.sql",
+      "sha256": "2864f52574536ddf8f2a56e5d38a9e6fba31aa45f88999ed17937e2fac1d8a23"
+    },
+    {
+      "file": "20260715194440_787e0351-87f7-4286-be5b-6ede6a40adc3.sql",
+      "sha256": "dd907e2eb8d149651b402588721dbedbd8cf9554eae2552a4d19afe601498ea4"
+    },
+    {
+      "file": "20260715194507_428bf891-1df7-4604-a504-350b8f09cc28.sql",
+      "sha256": "2e00d2e6f2a7cab7d24cdae7517fc5af8117ed3d0974219f115a30afde44a673"
+    },
+    {
+      "file": "20260715195412_c5ba3ae6-7344-4c47-9080-cf1d237829f3.sql",
+      "sha256": "1048cb12ed51600ff54c09d6b37cc0ac87af09f25937c07cc5e9d02688a80531"
+    },
+    {
+      "file": "20260715195449_16bc49f2-7246-433a-8a72-983a2cfc349b.sql",
+      "sha256": "f4cd9f0ff3c7ed3c159b15ef1cfd1ea4286951ff2517ba170600e36564589412"
+    },
+    {
+      "file": "20260715195514_2ae1a5fe-fe14-4b96-9901-74ff169dfc27.sql",
+      "sha256": "1ed4e833b5d2459f0a323e53a192eac2e03863cc081ef3bf3a8431a91687da02"
+    },
+    {
+      "file": "20260715195607_1f33aa97-d09c-41d2-bd37-13335a1d6908.sql",
+      "sha256": "02b1512426fc57ad6547cf48035add6f39b8f06157e5dc6ede086574facff5b7"
+    },
+    {
+      "file": "20260715202410_c5a004e6-80a1-4ee7-a675-5d9f1959b2b6.sql",
+      "sha256": "f15723f8dcd95a88f067ac7ef8c12c67eb29da252b4b80f23a018880e2605141"
+    },
+    {
+      "file": "20260715203000_eec425d3-1563-4ebb-a266-df8c3a261f37.sql",
+      "sha256": "259fca9aae0c4fdd976e378ae955268d2cc4e8a6970cfcb30486c69fb7b8ca14"
+    },
+    {
+      "file": "20260715204427_1d5f1d17-e6de-4ef0-ac86-1c87e8b20b9e.sql",
+      "sha256": "7fe5d213427819c89dd2245a007fb73f620dec3f5d0a1571b25494e8210a28bf"
+    },
+    {
+      "file": "20260715212705_7901d3de-6d4d-4917-b242-9e2cd07b54ff.sql",
+      "sha256": "5bc35dfedd66f6f95f78b1bc381bdbf4717a60da43f51be09718c868d59f0ad0"
+    },
+    {
+      "file": "20260715222235_4714b86c-97e8-44aa-85fb-943ae7e2e722.sql",
+      "sha256": "54188333d7646d9105d5e68c6eaeb2e6c4ab58094ee075b69702a01d4ae1693a"
+    },
+    {
+      "file": "20260716010204_06ede091-d154-4e35-966c-214028496a4a.sql",
+      "sha256": "194b416bb2838312d45b70c46198eb29361a2f144bdc09fde62f7d1450b3b5ca"
+    },
+    {
+      "file": "20260716015328_0ac5e9de-b37d-4ca2-b036-c0ce1c0f61f8.sql",
+      "sha256": "56a9296c5a54da75d4e723f8f6a2274de00200d7436d97b3008080c11cb627ed"
+    },
+    {
+      "file": "20260716130324_727dadd6-546c-4eb7-9531-3e1428dd16a5.sql",
+      "sha256": "89e081142116ba9c4e615fe27e28bd7e425bb6604436c590dde68a68a7ca68ea"
+    },
+    {
+      "file": "20260716130346_230665dd-2bb9-40fd-a84b-81391618efd2.sql",
+      "sha256": "c03b8644127c6f987722e88ef434a59c383339f03131fd24f3e2384986beaa13"
+    },
+    {
+      "file": "20260718080520_81ddbd01-aa2e-46d8-8de9-d8f5e726bc48.sql",
+      "sha256": "80e1fd394f9ce2f54295e2a5501bf0555f6d0ffadad09aba10c1b1d2119b3279"
+    },
+    {
+      "file": "20260721122535_7bfced85-b1eb-48ec-bb19-d137048d8e03.sql",
+      "sha256": "269f4e3f41daa2f6edc1541dbece9d9dba4b23064ed6d7041699a9ee4895bc42"
+    },
+    {
+      "file": "20260721204230_eace9e53-e71c-4723-8980-45d73d73b45c.sql",
+      "sha256": "ef50ff90045dc099731bc08bd2ae41c73d99620af3fa9994581cde3873355337"
+    },
+    {
+      "file": "20260722201335_2f2ef531-beda-47b2-8745-979b1da71158.sql",
+      "sha256": "e7616c55a1f73966cdf7cb34c7723a40f5d2d9aa2712b1932e00629ad79dc839"
+    },
+    {
+      "file": "20260723120000_twilio_missed_call_idempotency.sql",
+      "sha256": "8411c88602f9ff3be2202b05e3b98a42bb9972cec1de1539e4076cde491bfdb1"
+    },
+    {
+      "file": "20260725160000_customer_call_handling.sql",
+      "sha256": "fda5813fd9f92a34bde8e4aa036a8ba195bb4cb45657c417036886edd810d989",
+      "dependsOn": ["20260723120000_twilio_missed_call_idempotency.sql"]
+    },
+    {
+      "file": "20260726120000_text_link_dispatch_hardening.sql",
+      "sha256": "2af82ad64aad8550990a9b691526e76b5972859b30c14d1bfccdf6792339cb85",
+      "dependsOn": ["20260725160000_customer_call_handling.sql"]
+    },
+    {
+      "file": "20260727120000_text_link_sms_billable.sql",
+      "sha256": "94d7762eaa4b294e8405b26a419901c7718154cc13df0257a3d7bb5f579de99b",
+      "dependsOn": ["20260726120000_text_link_dispatch_hardening.sql"]
+    },
+    {
+      "file": "20260728100000_onboarding_step.sql",
+      "sha256": "02eec1b15900d219dc42790279f60f32ac652be28f0c69790177526ca0f022bd",
+      "dependsOn": ["20260711045456_3cca7ee8-e722-4172-aaaf-15790bc18c91.sql"]
+    },
+    {
+      "file": "20260728120000_commercial_sms_invoicing.sql",
+      "sha256": "da8efd7e054a6e3b6fda500cf684bec43d8d177638156c8903111a8b0171c5a0",
+      "dependsOn": [
+        "20260716015328_0ac5e9de-b37d-4ca2-b036-c0ce1c0f61f8.sql",
+        "20260727120000_text_link_sms_billable.sql"
+      ]
+    }
+  ]
+}
