@@ -35,25 +35,31 @@ function stagingEnv(): NodeJS.ProcessEnv {
 }
 
 describe("staging deployment boundary", () => {
-  it("automatically deploys only the verified same-repository PR 7 acquisition head", () => {
+  it("automatically deploys only a verified push that remains the open PR 7 head", () => {
     const releaseWorkflow = readFileSync(
       ".github/workflows/commercial-release-candidate.yml",
       "utf8",
+    );
+    const authorization = releaseWorkflow.slice(
+      releaseWorkflow.indexOf("authorize-pr-7-staging:"),
+      releaseWorkflow.indexOf("deploy-pr-7-to-isolated-staging:"),
     );
     const automaticDeployment = releaseWorkflow.slice(
       releaseWorkflow.indexOf("deploy-pr-7-to-isolated-staging:"),
     );
 
-    expect(automaticDeployment).toContain("needs: verify-and-package");
-    expect(automaticDeployment).toContain("github.event_name == 'pull_request'");
-    expect(automaticDeployment).toContain("github.event.pull_request.number == 7");
-    expect(automaticDeployment).toContain(
-      "github.event.pull_request.head.repo.full_name == github.repository",
-    );
-    expect(automaticDeployment).toContain(
-      "github.event.pull_request.head.ref == 'feat/acquisition-funnel'",
-    );
-    expect(automaticDeployment).toContain("release_sha: ${{ github.event.pull_request.head.sha }}");
+    expect(releaseWorkflow).toContain("- feat/acquisition-funnel");
+    expect(authorization).toContain("needs: verify-and-package");
+    expect(authorization).toContain("github.event_name == 'push'");
+    expect(authorization).toContain("github.ref == 'refs/heads/feat/acquisition-funnel'");
+    expect(authorization).toContain('gh api "repos/$GITHUB_REPOSITORY/pulls/7"');
+    expect(authorization).toContain('.state == "open"');
+    expect(authorization).toContain(".head.ref == env.EXPECTED_HEAD_REF");
+    expect(authorization).toContain(".head.repo.full_name == env.GITHUB_REPOSITORY");
+    expect(authorization).toContain(".head.sha == env.EXPECTED_HEAD_SHA");
+    expect(automaticDeployment).toContain("- verify-and-package");
+    expect(automaticDeployment).toContain("- authorize-pr-7-staging");
+    expect(automaticDeployment).toContain("release_sha: ${{ github.sha }}");
     expect(automaticDeployment).toContain("environment_id: staging-commercial-rc");
     expect(automaticDeployment).toContain("apply_migrations: true");
     expect(automaticDeployment).toContain("confirmation: DEPLOY_STAGING_ONLY");

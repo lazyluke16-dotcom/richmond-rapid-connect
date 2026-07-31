@@ -4,12 +4,14 @@ on:
   push:
     branches:
       - feat/customer-call-handling-reconstructed
+      - feat/acquisition-funnel
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
   deployments: write
+  pull-requests: read
 
 concurrency:
   group: commercial-release-candidate-${{ github.ref }}
@@ -91,16 +93,36 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
-  deploy-pr-7-to-isolated-staging:
+  authorize-pr-7-staging:
     needs: verify-and-package
     if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.number == 7 &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'feat/acquisition-funnel'
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feat/acquisition-funnel'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require this exact commit to remain the open PR 7 head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD_REF: feat/acquisition-funnel
+          EXPECTED_HEAD_SHA: ${{ github.sha }}
+        run: |
+          test "$(
+            gh api "repos/$GITHUB_REPOSITORY/pulls/7" \
+              --jq 'select(
+                .state == "open" and
+                .head.ref == env.EXPECTED_HEAD_REF and
+                .head.repo.full_name == env.GITHUB_REPOSITORY and
+                .head.sha == env.EXPECTED_HEAD_SHA
+              ) | .number'
+          )" = "7"
+
+  deploy-pr-7-to-isolated-staging:
+    needs:
+      - verify-and-package
+      - authorize-pr-7-staging
     uses: ./.github/workflows/staging-deployment.yml
     with:
-      release_sha: ${{ github.event.pull_request.head.sha }}
+      release_sha: ${{ github.sha }}
       environment_id: staging-commercial-rc
       apply_migrations: true
       confirmation: DEPLOY_STAGING_ONLY
