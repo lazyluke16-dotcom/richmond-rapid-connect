@@ -8,6 +8,7 @@ import {
   getAcquisitionAttribution,
   normalizePromoCode,
   readAcquisitionDraft,
+  recoverAcquisitionDraftFromUser,
 } from "@/lib/acquisition";
 import { acquisitionContextFromClaims } from "@/lib/acquisition.functions";
 
@@ -101,6 +102,63 @@ describe("acquisition funnel pricing and attribution", () => {
 });
 
 describe("authenticated acquisition continuity", () => {
+  it("recovers the saved plan and offer after confirmation followed by a manual login", () => {
+    const fallback = createDefaultAcquisitionDraft({
+      source: "direct",
+      medium: null,
+      campaign: "new-visit",
+      content: null,
+      referralCode: null,
+    });
+    const recovered = recoverAcquisitionDraftFromUser(
+      {
+        email: "alex@example.com",
+        user_metadata: {
+          first_name: "Alex",
+          last_name: "Smith",
+          business_name: "Smith Plumbing",
+          business_phone_e164: "+61411111111",
+          contact_mobile_e164: "+61422222222",
+          acquisition_plan: "ai_receptionist",
+          acquisition_promo_code: "foundingplumber",
+          acquisition_source: "certification",
+          acquisition_campaign: "staging-certification",
+          call_handling_timing: "all_calls",
+          current_answering_arrangement: "mobile",
+        },
+      },
+      fallback,
+    );
+
+    expect(recovered).toMatchObject({
+      email: "alex@example.com",
+      businessName: "Smith Plumbing",
+      plan: "ai_receptionist",
+      promoCode: "FOUNDINGPLUMBER",
+      handlingTiming: "all_calls",
+      attribution: {
+        source: "certification",
+        campaign: "staging-certification",
+      },
+    });
+  });
+
+  it("does not treat an unrelated authenticated account as an interrupted acquisition signup", () => {
+    const fallback = createDefaultAcquisitionDraft({
+      source: null,
+      medium: null,
+      campaign: null,
+      content: null,
+      referralCode: null,
+    });
+    expect(
+      recoverAcquisitionDraftFromUser(
+        { email: "existing@example.com", user_metadata: { business_name: "Existing Business" } },
+        fallback,
+      ),
+    ).toBeNull();
+  });
+
   it("accepts only known plans from user metadata", () => {
     expect(
       acquisitionContextFromClaims({
@@ -183,6 +241,14 @@ describe("acquisition experience source", () => {
     expect(wizard).toContain('"/api/public/billing/checkout"');
     expect(wizard).toContain("does not store your card number");
     expect(wizard).not.toContain('name="card_number"');
+  });
+
+  it("recovers authenticated acquisition users without requiring the resume query parameter", () => {
+    expect(wizard).toContain("recoverAcquisitionDraftFromUser(data.session?.user, draft)");
+    expect(wizard).toContain("recoverAcquisitionDraftFromUser(existingAuth.session?.user, draft)");
+    expect(wizard).not.toContain(
+      'new URLSearchParams(window.location.search).get("resume") === "signup"',
+    );
   });
 
   it("preserves the funnel plan when the customer later continues onboarding", () => {
