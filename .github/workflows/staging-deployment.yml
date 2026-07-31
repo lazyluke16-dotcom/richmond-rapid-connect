@@ -118,13 +118,16 @@ jobs:
           STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
           STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
           STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE: ${{ secrets.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE }}
+          STRIPE_CONTEXT: ${{ vars.STRIPE_CONTEXT }}
           SMS_INVOICE_PROCESSOR_KEY: ${{ secrets.SMS_INVOICE_PROCESSOR_KEY }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           DASHBOARD_PIN: ${{ secrets.DASHBOARD_PIN }}
-        run: >-
-          node scripts/staging-deployment.mjs
-          --preflight
-          --environment-id "${{ inputs.environment_id }}"
+        run: |
+          node scripts/staging-deployment.mjs \
+            --preflight \
+            --environment-id "${{ inputs.environment_id }}"
+          node scripts/verify-stripe-checkout-config.mjs
 
       - name: Run complete release gates
         run: |
@@ -187,6 +190,7 @@ jobs:
           STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
           STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
           STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE: ${{ secrets.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE }}
           SMS_INVOICE_PROCESSOR_KEY: ${{ secrets.SMS_INVOICE_PROCESSOR_KEY }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           DASHBOARD_PIN: ${{ secrets.DASHBOARD_PIN }}
@@ -205,6 +209,7 @@ jobs:
             "STRIPE_PRICE_MCR_BASE",
             "STRIPE_PRICE_AIR_BASE",
             "STRIPE_PRICE_AIR_USAGE",
+            "STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE",
             "SMS_INVOICE_PROCESSOR_KEY",
             "WEBHOOK_SECRET",
             "DASHBOARD_PIN",
@@ -254,6 +259,7 @@ jobs:
           STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
           STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
           STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE: ${{ secrets.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE }}
           SMS_INVOICE_PROCESSOR_KEY: ${{ secrets.SMS_INVOICE_PROCESSOR_KEY }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           DASHBOARD_PIN: ${{ secrets.DASHBOARD_PIN }}
