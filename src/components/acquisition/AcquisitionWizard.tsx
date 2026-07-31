@@ -25,6 +25,7 @@ import {
   AcquisitionSignupDraftSchema,
   moneyFromCents,
   normalizePromoCode,
+  recoverAcquisitionDraftFromUser,
   type AcquisitionEventName,
   type AcquisitionSignupDraft,
 } from "@/lib/acquisition";
@@ -127,56 +128,18 @@ export function AcquisitionWizard({
     if (!open || !sessionId || resumeAttempted.current) return;
     void (async () => {
       const { data } = await supabase.auth.getSession();
-      if (data.session && new URLSearchParams(window.location.search).get("resume") === "signup") {
-        resumeAttempted.current = true;
-        setBusy(true);
-        try {
-          const user = data.session.user;
-          const metadata = user.user_metadata ?? {};
-          const hydrated = AcquisitionSignupDraftSchema.parse({
-            ...draft,
-            businessName: String(metadata.business_name ?? draft.businessName),
-            firstName: String(metadata.first_name ?? draft.firstName),
-            lastName: String(metadata.last_name ?? draft.lastName),
-            email: user.email ?? draft.email,
-            mobile: String(metadata.contact_mobile_e164 ?? draft.mobile),
-            businessPhone: String(metadata.business_phone_e164 ?? draft.businessPhone),
-            plan:
-              metadata.acquisition_plan === "ai_receptionist" ||
-              metadata.acquisition_plan === "missed_call_recovery"
-                ? metadata.acquisition_plan
-                : draft.plan,
-            promoCode: normalizePromoCode(
-              String(metadata.acquisition_promo_code ?? draft.promoCode),
-            ),
-            handlingTiming:
-              metadata.call_handling_timing === "after_hours" ||
-              metadata.call_handling_timing === "all_calls" ||
-              metadata.call_handling_timing === "missed_calls"
-                ? metadata.call_handling_timing
-                : draft.handlingTiming,
-            currentArrangement:
-              metadata.current_answering_arrangement === "none" ||
-              metadata.current_answering_arrangement === "mobile" ||
-              metadata.current_answering_arrangement === "receptionist" ||
-              metadata.current_answering_arrangement === "answering_service"
-                ? metadata.current_answering_arrangement
-                : draft.currentArrangement,
-            attribution: {
-              source: metadata.acquisition_source ?? draft.attribution.source,
-              medium: metadata.acquisition_medium ?? draft.attribution.medium,
-              campaign: metadata.acquisition_campaign ?? draft.attribution.campaign,
-              content: metadata.acquisition_content ?? draft.attribution.content,
-              referralCode: metadata.referral_code ?? draft.attribution.referralCode,
-            },
-          });
-          setDraft(hydrated);
-          onDraftChange(hydrated);
-          await continueAuthenticatedSignup(hydrated, sessionId, onTrack);
-        } catch (cause) {
-          setError(cause instanceof Error ? cause.message : "Could not continue signup");
-          setBusy(false);
-        }
+      const hydrated = recoverAcquisitionDraftFromUser(data.session?.user, draft);
+      if (!hydrated) return;
+
+      resumeAttempted.current = true;
+      setBusy(true);
+      try {
+        setDraft(hydrated);
+        onDraftChange(hydrated);
+        await continueAuthenticatedSignup(hydrated, sessionId, onTrack);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Could not continue signup");
+        setBusy(false);
       }
     })();
   }, [draft, onDraftChange, onTrack, open, sessionId]);
@@ -215,6 +178,16 @@ export function AcquisitionWizard({
     setError(null);
     onTrack("signup_submitted", { plan: draft.plan, wizardStep: draft.step });
     try {
+      const { data: existingAuth } = await supabase.auth.getSession();
+      const recovered = recoverAcquisitionDraftFromUser(existingAuth.session?.user, draft);
+      if (recovered) {
+        resumeAttempted.current = true;
+        setDraft(recovered);
+        onDraftChange(recovered);
+        await continueAuthenticatedSignup(recovered, sessionId, onTrack);
+        return;
+      }
+
       const businessPhone = normalizeAustralianPhone(draft.businessPhone);
       const mobile = normalizeAustralianPhone(draft.mobile);
       const metadataDraft = { ...draft, businessPhone, mobile };
