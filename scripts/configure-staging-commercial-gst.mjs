@@ -191,7 +191,7 @@ export async function configureStagingCommercialGst(env = process.env) {
     );
   }
 
-  runGh(["secret", "set", INCLUSIVE_TAX_RATE_SECRET, "--env", "staging", "--body", "-"], {
+  runGh(["secret", "set", INCLUSIVE_TAX_RATE_SECRET, "--env", "staging"], {
     input: taxRate.id,
     token: configurationToken,
     repository: required(env, "GITHUB_REPOSITORY"),

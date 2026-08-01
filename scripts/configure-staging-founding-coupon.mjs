@@ -140,7 +140,7 @@ export async function configureStagingFoundingCoupon(env = process.env) {
   validateFoundingCoupon({ coupon, prices });
 
   const repository = required(env, "GITHUB_REPOSITORY");
-  runGh(["secret", "set", COUPON_SECRET_NAME, "--env", "staging", "--body", "-"], {
+  runGh(["secret", "set", COUPON_SECRET_NAME, "--env", "staging"], {
     input: coupon.id,
     token: configurationToken,
     repository,

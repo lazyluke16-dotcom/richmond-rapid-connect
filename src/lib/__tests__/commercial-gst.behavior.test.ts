@@ -102,4 +102,16 @@ describe("approved Australian GST contract", () => {
     expect(smsInvoice).toContain("STRIPE_SMS_GST_TAX_RATE_ID");
     expect(smsInvoice).not.toContain("STRIPE_GST_INCLUSIVE_TAX_RATE_ID");
   });
+
+  it("writes environment secrets through stdin instead of storing a literal dash", () => {
+    const gstConfigurator = readFileSync("scripts/configure-staging-commercial-gst.mjs", "utf8");
+    const couponConfigurator = readFileSync(
+      "scripts/configure-staging-founding-coupon.mjs",
+      "utf8",
+    );
+    expect(gstConfigurator).not.toContain('"--body", "-"');
+    expect(couponConfigurator).not.toContain('"--body", "-"');
+    expect(gstConfigurator).toContain('"secret", "set", INCLUSIVE_TAX_RATE_SECRET');
+    expect(couponConfigurator).toContain('"secret", "set", COUPON_SECRET_NAME');
+  });
 });
