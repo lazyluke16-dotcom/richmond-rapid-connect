@@ -15,6 +15,7 @@ function resources() {
         livemode: false,
         active: true,
         currency: "aud",
+        tax_behavior: "inclusive",
         unit_amount: 900,
         product: "prod_mcr",
         recurring: { interval: "month", usage_type: "licensed" },
@@ -24,6 +25,7 @@ function resources() {
         livemode: false,
         active: true,
         currency: "aud",
+        tax_behavior: "inclusive",
         unit_amount: 1500,
         product: "prod_air_base",
         recurring: { interval: "month", usage_type: "licensed" },
@@ -33,6 +35,7 @@ function resources() {
         livemode: false,
         active: true,
         currency: "aud",
+        tax_behavior: "inclusive",
         unit_amount: null,
         unit_amount_decimal: "0.983333000000",
         product: "prod_air_usage",
@@ -57,6 +60,15 @@ function resources() {
       duration_in_months: 3,
       applies_to: { products: ["prod_air_base", "prod_mcr"] },
     },
+    inclusiveTaxRate: {
+      object: "tax_rate",
+      livemode: false,
+      active: true,
+      inclusive: true,
+      percentage: 10,
+      country: "AU",
+      jurisdiction: "AU",
+    },
   };
 }
 
@@ -74,12 +86,13 @@ describe("Stripe checkout staging resource validation", () => {
       couponScopedToBaseProducts: true,
       foundingCouponThreeMonths: true,
       usageProductsExcludedFromFoundingCoupon: true,
+      inclusiveGstTaxRateReady: true,
       commercialPricing: {
         mcrMonthlyAud: 9,
         aiMonthlyAud: 15,
         aiUsageAudPerSecond: 0.00983333,
         aiUsageAudPerMinute: 0.5899998,
-        taxBehavior: { mcr: "unspecified", ai: "unspecified", aiUsage: "unspecified" },
+        taxBehavior: { mcr: "inclusive", ai: "inclusive", aiUsage: "inclusive" },
       },
     });
   });

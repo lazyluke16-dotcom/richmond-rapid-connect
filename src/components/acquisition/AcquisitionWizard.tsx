@@ -827,7 +827,9 @@ function PlanStep({
             <h3 className="mt-4 text-xl font-black">{config.name}</h3>
             <div className="mt-2 text-2xl font-black">
               {moneyFromCents(config.platformFeeCents)}
-              <span className="text-sm font-medium text-muted-foreground">/month</span>
+              <span className="text-sm font-medium text-muted-foreground">
+                /month including GST
+              </span>
             </div>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
               {config.explanation}
@@ -1258,7 +1260,7 @@ function AccountStep({
           <li>A$0 platform fees for the first three monthly billing periods.</li>
           <li>
             Normal platform billing begins {normalBillingDate()}:{" "}
-            {moneyFromCents(plan.platformFeeCents)}/month.
+            {moneyFromCents(plan.platformFeeCents)}/month including GST.
           </li>
           <li>Usage billing starts when the service is activated.</li>
         </ul>
@@ -1283,7 +1285,7 @@ function AccountStep({
           className="mt-0.5 h-5 w-5 accent-yellow-400"
         />
         <span>
-          I accept the pricing above, usage from activation, normal billing from{" "}
+          I accept the GST-inclusive pricing above, usage from activation, normal billing from{" "}
           {normalBillingDate()}, cancel-anytime terms, and Stripe’s secure payment setup.
         </span>
       </label>
@@ -1315,7 +1317,7 @@ function OrderSummary({ draft, promo }: { draft: AcquisitionSignupDraft; promo: 
       <div className="mt-5 space-y-3 border-y border-border py-4 text-sm">
         <SummaryRow
           label="Normal subscription"
-          value={`${moneyFromCents(plan.platformFeeCents)}/month`}
+          value={`${moneyFromCents(plan.platformFeeCents)}/month incl GST`}
         />
         <SummaryRow label="First three months" value="A$0 platform fees" accent />
         <SummaryRow label="Usage" value={plan.usage} />
@@ -1335,8 +1337,8 @@ function OrderSummary({ draft, promo }: { draft: AcquisitionSignupDraft; promo: 
         </span>
       </div>
       <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-        If activated today, normal subscription billing begins {normalBillingDate()}. Prices are
-        AUD. Usage is metered separately from day one. GST is applied where required. Cancel
+        If activated today, normal subscription billing begins {normalBillingDate()}. Prices are AUD
+        and the prominent totals include GST. Usage is metered separately from day one. Cancel
         anytime.
       </p>
     </aside>

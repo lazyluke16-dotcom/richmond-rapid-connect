@@ -3,6 +3,7 @@ import {
   getStripe,
   getCheckoutLineItems,
   getFoundingThreeMonthCouponId,
+  getInclusiveGstTaxRateId,
   getUnionCouponId,
   type StripePlan,
 } from "@/lib/stripe.server";
@@ -22,6 +23,7 @@ type BillingCheckoutFailure = {
     | "stripe_mode_invalid"
     | "stripe_mode_mismatch"
     | "stripe_prices_not_configured"
+    | "stripe_tax_not_configured"
     | "billing_return_url_invalid"
     | "stripe_request_failed"
     | "billing_checkout_failed";
@@ -56,6 +58,12 @@ export function classifyBillingCheckoutFailure(error: unknown): BillingCheckoutF
     }
     if (message.includes("Missing required Stripe price configuration")) {
       return "stripe_prices_not_configured" as const;
+    }
+    if (
+      message.includes("Missing required Stripe tax configuration") ||
+      message.includes("STRIPE_GST_INCLUSIVE_TAX_RATE_ID is invalid")
+    ) {
+      return "stripe_tax_not_configured" as const;
     }
     if (message === "Billing return URL must use HTTPS") {
       return "billing_return_url_invalid" as const;
@@ -106,11 +114,12 @@ export function checkoutIdempotencyKeys(
   businessId: string,
   plan: StripePlan,
   couponId: string | null,
+  taxPolicy = "gst-inclusive-v1",
 ): { customer: string; session: string } {
   const tenantPlan = `${businessId}:${plan}`;
   return {
     customer: `billing-checkout:customer:${tenantPlan}`,
-    session: `billing-checkout:session:${tenantPlan}:${couponId ?? "standard"}`,
+    session: `billing-checkout:session:${tenantPlan}:${couponId ?? "standard"}:${taxPolicy}`,
   };
 }
 
@@ -272,7 +281,13 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
           }
           const checkoutDiscounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined =
             couponId ? [{ coupon: couponId }] : undefined;
-          const idempotencyKeys = checkoutIdempotencyKeys(businessId, plan, couponId);
+          const inclusiveGstTaxRateId = getInclusiveGstTaxRateId();
+          const idempotencyKeys = checkoutIdempotencyKeys(
+            businessId,
+            plan,
+            couponId,
+            "gst-inclusive-v1",
+          );
           const stripe = getStripe();
           const origin = resolveBillingReturnOrigin(request);
 
@@ -345,7 +360,11 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
               payment_method_collection: "always",
               line_items: getCheckoutLineItems(plan),
               ...(checkoutDiscounts ? { discounts: checkoutDiscounts } : {}),
+              // The configured Price totals already include GST. This explicit manual tax policy
+              // lets Stripe identify the embedded 10% without adding another 10% at Checkout.
+              automatic_tax: { enabled: false },
               subscription_data: {
+                default_tax_rates: [inclusiveGstTaxRateId],
                 metadata: {
                   business_id: businessId,
                   plan,

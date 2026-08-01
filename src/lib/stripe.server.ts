@@ -134,6 +134,19 @@ export function getFoundingThreeMonthCouponId(): string | null {
   return stripeEnvValue("STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES") ?? null;
 }
 
+export function getInclusiveGstTaxRateId(): string {
+  const taxRateId = stripeEnvValue("STRIPE_GST_INCLUSIVE_TAX_RATE_ID");
+  if (!taxRateId) {
+    throw new Error(
+      "[stripe] Missing required Stripe tax configuration: STRIPE_GST_INCLUSIVE_TAX_RATE_ID",
+    );
+  }
+  if (!/^txr_[A-Za-z0-9]+$/.test(taxRateId)) {
+    throw new Error("[stripe] STRIPE_GST_INCLUSIVE_TAX_RATE_ID is invalid");
+  }
+  return taxRateId;
+}
+
 export const STRIPE_METER_EVENT_NAME = "ai_voice_seconds";
 
 // Base price amounts in AUD cents — must match Stripe config exactly.

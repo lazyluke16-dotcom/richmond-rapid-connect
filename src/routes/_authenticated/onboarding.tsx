@@ -778,8 +778,10 @@ function OnboardingWizard() {
                 highlight
               />
               <p className="text-xs text-muted-foreground">
-                Normal pricing is A$9/month, A$15/month, or A$24/month for both. FOUNDINGPLUMBER
-                receives the first three subscription months free; usage applies from activation.
+                Normal pricing is A$9/month, A$15/month, or A$24/month for both, including GST.
+                FOUNDINGPLUMBER receives the first three subscription months free; usage applies
+                from activation at 27.5¢ including GST per accepted recovery SMS and A$0.59/minute
+                including GST for AI voice.
               </p>
               {plan !== "missed_call_recovery" && (
                 <div className="rounded-md border border-yellow-500/40 bg-yellow-500/5 p-3 text-xs text-yellow-200 flex gap-2">
@@ -1133,7 +1135,8 @@ function PlanCard({
         ))}
       </ul>
       <div className="mt-2 text-xs text-primary">
-        Founding offer: first 3 subscription months free · usage applies from activation
+        Founding offer: first 3 subscription months free · prominent prices include GST · usage
+        applies from activation
       </div>
     </button>
   );

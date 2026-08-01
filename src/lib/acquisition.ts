@@ -27,7 +27,8 @@ export const ACQUISITION_PLANS: Record<
     shortName: "Missed calls",
     setupFeeCents: COMMERCIAL_PRICING.setupFeeCents,
     platformFeeCents: platformFeeCents("missed_call_recovery"),
-    usage: "A$0.25 ex GST per accepted recovery SMS. Usage starts when activated.",
+    usage:
+      "27.5¢ including GST per provider-accepted recovery SMS (25¢ excluding GST). Usage starts when activated.",
     explanation:
       "When you miss a call, we immediately text the customer, collect their job details and place the opportunity in your Missed Jobs inbox.",
     includes: [
@@ -41,7 +42,8 @@ export const ACQUISITION_PLANS: Record<
     shortName: "AI answers",
     setupFeeCents: COMMERCIAL_PRICING.setupFeeCents,
     platformFeeCents: platformFeeCents("ai_receptionist"),
-    usage: "A$0.59 per AI voice minute, metered by the second. Usage starts when activated.",
+    usage:
+      "A$0.59 including GST per AI voice minute, metered by the second. Usage starts when activated.",
     explanation:
       "Our AI answers the call for you, speaks with the customer, gathers the job details and alerts you—24/7.",
     includes: [
@@ -55,7 +57,8 @@ export const ACQUISITION_PLANS: Record<
     shortName: "Complete cover",
     setupFeeCents: COMMERCIAL_PRICING.setupFeeCents,
     platformFeeCents: platformFeeCents("both"),
-    usage: "The disclosed SMS and AI voice usage rates apply from activation.",
+    usage:
+      "27.5¢ including GST per accepted recovery SMS and A$0.59 including GST per AI voice minute apply from activation.",
     explanation:
       "Use AI Receptionist to answer calls and Missed-Call Recovery as your follow-up path for calls that are still missed.",
     includes: [

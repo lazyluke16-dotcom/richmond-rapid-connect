@@ -18,9 +18,9 @@ describe("frozen migration manifest", () => {
       manifestSha256: string;
     };
 
-    expect(evidence.migrationCount).toBe(33);
+    expect(evidence.migrationCount).toBe(34);
     expect(evidence.first).toBe("20260711045456_3cca7ee8-e722-4172-aaaf-15790bc18c91.sql");
-    expect(evidence.last).toBe("20260801190000_identity_safe_acquisition_profile.sql");
+    expect(evidence.last).toBe("20260801200000_authoritative_gst_pricing.sql");
     expect(evidence.pendingSqlCount).toBe(0);
     expect(evidence.manifestSha256).toMatch(/^[a-f0-9]{64}$/);
   });

@@ -33,6 +33,7 @@ export function validateFoundingCoupon({ coupon, prices }) {
     assert(price.active === true, `${name} must be active`);
     assert(price.currency === "aud", `${name} must use AUD`);
     assert(price.recurring?.interval === "month", `${name} must recur monthly`);
+    assert(price.tax_behavior === "inclusive", `${name} must include GST in its Stripe total`);
   }
 
   assert(mcrBase.unit_amount === 900, "Missed-Call Recovery must be A$9.00 per month");

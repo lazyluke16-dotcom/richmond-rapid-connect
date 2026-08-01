@@ -8,6 +8,7 @@ import {
 } from "@/lib/billing.server";
 import { PLAN_BASE_PRICE_CENTS } from "@/lib/stripe.server";
 import { GRACE_USAGE_CAP_AUD } from "@/lib/billing-types";
+import { calculateGstMinor } from "@/lib/sms-invoicing.server";
 import type { EffectiveBillingState, SelectedPlan } from "@/lib/billing-types";
 
 export const Route = createFileRoute("/api/public/billing/summary")({
@@ -158,8 +159,14 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           (sum, row) => sum + (Number(row.billable_seconds) || 0),
           0,
         );
-        const billableRows = rows.filter((row) => row.billable);
-        const estimatedChargeAud = sumUsageChargesMinor(billableRows) / 100;
+        const billableSmsRows = rows.filter(
+          (row) => row.usage_type === "outbound_sms" && row.billable,
+        );
+        const estimatedVoiceIncGstMinor = sumUsageChargesMinor(billableVoiceRows);
+        const estimatedSmsExGstMinor = sumUsageChargesMinor(billableSmsRows);
+        const estimatedSmsGstMinor = calculateGstMinor(estimatedSmsExGstMinor);
+        const estimatedChargeAud =
+          (estimatedVoiceIncGstMinor + estimatedSmsExGstMinor + estimatedSmsGstMinor) / 100;
         const smsMessages = rows
           .filter((row) => row.usage_type === "outbound_sms")
           .reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
@@ -176,20 +183,35 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           const graceRows = ((
             await supabaseAdmin
               .from("billing_usage_events")
-              .select("estimated_customer_charge, estimated_customer_charge_minor")
+              .select("usage_type, estimated_customer_charge, estimated_customer_charge_minor")
               .eq("business_id", businessId)
               .eq("billable", true)
               .gte("created_at", bb.grace_started_at)
           ).data ?? []) as {
+            usage_type?: string;
             estimated_customer_charge?: number | null;
             estimated_customer_charge_minor?: number | null;
           }[];
 
-          const graceTotal = sumUsageChargesMinor(graceRows) / 100;
+          const graceSmsRows = graceRows.filter((row) => row.usage_type === "outbound_sms");
+          const graceNonSmsRows = graceRows.filter((row) => row.usage_type !== "outbound_sms");
+          const graceSmsExGstMinor = sumUsageChargesMinor(graceSmsRows);
+          const graceTotal =
+            (sumUsageChargesMinor(graceNonSmsRows) +
+              graceSmsExGstMinor +
+              calculateGstMinor(graceSmsExGstMinor)) /
+            100;
           withinGraceCap = graceTotal < GRACE_USAGE_CAP_AUD;
         }
 
         const platformFeeAud = selectedPlan ? (PLAN_BASE_PRICE_CENTS[selectedPlan] ?? 0) / 100 : 0;
+        const normalBillingStartsAt = bb.normal_billing_starts_at
+          ? new Date(bb.normal_billing_starts_at)
+          : null;
+        const currentPlatformFeeAud =
+          normalBillingStartsAt && normalBillingStartsAt.getTime() > Date.now()
+            ? 0
+            : platformFeeAud;
         const business = (bizRow ?? {}) as {
           name?: string;
           public_email?: string | null;
@@ -246,6 +268,9 @@ export const Route = createFileRoute("/api/public/billing/summary")({
               periodStart: periodStart?.toISOString() ?? null,
               totalBillableSeconds,
               estimatedChargeAud,
+              estimatedVoiceIncGstAud: estimatedVoiceIncGstMinor / 100,
+              estimatedSmsExGstAud: estimatedSmsExGstMinor / 100,
+              estimatedSmsGstAud: estimatedSmsGstMinor / 100,
               smsMessages,
               smsBillable: true,
               pendingMeterEvents,
@@ -253,7 +278,8 @@ export const Route = createFileRoute("/api/public/billing/summary")({
               withinGraceCap,
             },
             platformFeeAud,
-            estimatedCurrentTotalAud: platformFeeAud + estimatedChargeAud,
+            currentPlatformFeeAud,
+            estimatedCurrentTotalAud: currentPlatformFeeAud + estimatedChargeAud,
             connections: {
               stripe: Boolean(bb.stripe_customer_id),
               phoneNumber: telephony.inbound_number ?? null,

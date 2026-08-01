@@ -47,11 +47,11 @@ phone number, email address or other personal information in the URL.
 
 Public code: `FOUNDINGPLUMBER`
 
-| Selection            | Setup list price | With valid code | Ongoing platform price | Usage                                   |
-| -------------------- | ---------------: | --------------: | ---------------------: | --------------------------------------- |
-| Missed-Call Recovery |            A$499 |             A$0 |              A$9/month | A$0.25 ex GST per accepted recovery SMS |
-| AI Receptionist      |            A$499 |             A$0 |             A$15/month | A$0.59 per AI voice minute              |
-| Both services        |            A$499 |             A$0 |             A$24/month | Both disclosed usage rates              |
+| Selection            | Setup list price | With valid code |   Ongoing platform price | Usage                                                             |
+| -------------------- | ---------------: | --------------: | -----------------------: | ----------------------------------------------------------------- |
+| Missed-Call Recovery |            A$499 |             A$0 |  A$9/month including GST | 27.5¢ including GST per provider-accepted SMS (25¢ excluding GST) |
+| AI Receptionist      |            A$499 |             A$0 | A$15/month including GST | A$0.59/minute including GST, metered by the second                |
+| Both services        |            A$499 |             A$0 | A$24/month including GST | Both GST-inclusive usage rates above                              |
 
 The seeded campaign:
 
@@ -68,6 +68,11 @@ and the product-scoped Stripe test coupon discounts only the first three monthly
 periods. Usage begins at activation and is never included in either discount. Existing accounts
 created before the three-month offer retain their recorded eligibility rather than being silently
 re-enrolled.
+
+The customer totals above are the amounts payable including Australian GST; Checkout must not add
+another 10% to A$9, A$15, A$24 or A$0.59. Recovery SMS retains a 25¢ excluding-GST ledger rate and
+the SMS invoice layer adds 2.5¢ GST per unit before aggregate whole-cent invoice rounding. Usage
+starts at activation and is not discounted by the founding offer.
 
 ## Commercial script (58 seconds)
 

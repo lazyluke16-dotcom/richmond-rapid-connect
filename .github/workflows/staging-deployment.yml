@@ -85,6 +85,20 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Configure approved Australian GST in Stripe test mode
+        id: stripe_gst
+        env:
+          DEPLOYMENT_TARGET: staging
+          STRIPE_MODE: test
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
+          STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
+          STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          STRIPE_GST_INCLUSIVE_TAX_RATE_ID: ${{ secrets.STRIPE_GST_INCLUSIVE_TAX_RATE_ID }}
+          STRIPE_CONTEXT: ${{ vars.STRIPE_CONTEXT }}
+          STAGING_CONFIGURATION_TOKEN: ${{ secrets.STAGING_CONFIGURATION_TOKEN }}
+        run: node scripts/configure-staging-commercial-gst.mjs
+
       - name: Configure the approved founding coupon in Stripe test mode
         env:
           DEPLOYMENT_TARGET: staging
@@ -127,6 +141,7 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_SMS_GST_TAX_RATE_ID: ${{ secrets.STRIPE_SMS_GST_TAX_RATE_ID }}
+          STRIPE_GST_INCLUSIVE_TAX_RATE_ID: ${{ steps.stripe_gst.outputs.tax_rate_id }}
           STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
           STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
           STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
@@ -200,6 +215,7 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_SMS_GST_TAX_RATE_ID: ${{ secrets.STRIPE_SMS_GST_TAX_RATE_ID }}
+          STRIPE_GST_INCLUSIVE_TAX_RATE_ID: ${{ steps.stripe_gst.outputs.tax_rate_id }}
           STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
           STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
           STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
@@ -220,6 +236,7 @@ jobs:
             "STRIPE_SECRET_KEY",
             "STRIPE_WEBHOOK_SECRET",
             "STRIPE_SMS_GST_TAX_RATE_ID",
+            "STRIPE_GST_INCLUSIVE_TAX_RATE_ID",
             "STRIPE_PRICE_MCR_BASE",
             "STRIPE_PRICE_AIR_BASE",
             "STRIPE_PRICE_AIR_USAGE",
@@ -279,6 +296,7 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_SMS_GST_TAX_RATE_ID: ${{ secrets.STRIPE_SMS_GST_TAX_RATE_ID }}
+          STRIPE_GST_INCLUSIVE_TAX_RATE_ID: ${{ steps.stripe_gst.outputs.tax_rate_id }}
           STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
           STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
           STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}

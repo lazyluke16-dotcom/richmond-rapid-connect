@@ -119,11 +119,13 @@ describe("human finding: wizard payment and authoritative pricing", () => {
     expect(platformFeeCents("both")).toBe(2400);
     expect(COMMERCIAL_PRICING.services.missed_call_recovery.usage).toMatchObject({
       unitPriceCents: 25,
+      unitPriceIncGstCents: 27.5,
       taxBehavior: "exclusive",
     });
     expect(COMMERCIAL_PRICING.services.ai_receptionist.usage).toMatchObject({
       unitPriceCents: 59,
       meteredPer: "second",
+      taxBehavior: "inclusive",
     });
     expect(usageRateLines("both")).toHaveLength(2);
   });
@@ -136,6 +138,8 @@ describe("human finding: wizard payment and authoritative pricing", () => {
     );
     expect(wizard).toContain("Switching a service off");
     expect(wizard).toContain("normalBillingDate()");
+    expect(wizard).toContain("including GST");
+    expect(landing).toContain("27.5¢ including GST");
   });
 
   it("keeps Stripe-hosted collection in the wizard and returns cancellation to payment resume", () => {

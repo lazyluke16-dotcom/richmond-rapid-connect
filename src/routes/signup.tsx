@@ -167,19 +167,21 @@ function PartnerOfferBanner({ partner }: { partner: string }) {
             <b>$0 setup</b>
           </li>
           <li>
-            <b>First month's platform fee free</b>
+            <b>First three monthly platform billing periods free</b>
           </li>
           <li>Usage charges apply from day one</li>
         </ul>
         <div className="pt-1 border-t border-primary/20">
           <div className="font-bold uppercase tracking-widest text-[10px] text-muted-foreground mb-1">
-            After first month
+            After the first three monthly billing periods
           </div>
           <div>
-            Missed Call Recovery — <b>A$9/mo</b> + SMS usage
+            Missed Call Recovery — <b>A$9/mo including GST</b> + 27.5¢ including GST per accepted
+            recovery SMS
           </div>
           <div>
-            AI Receptionist — <b>A$15/mo</b> + <b>A$0.59/min</b> AI usage
+            AI Receptionist — <b>A$15/mo including GST</b> + <b>A$0.59/min including GST</b> AI
+            usage
           </div>
         </div>
         <div className="pt-1 text-[11px] text-muted-foreground">

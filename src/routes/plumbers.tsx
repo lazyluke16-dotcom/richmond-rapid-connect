@@ -235,7 +235,7 @@ function PlumberAcquisitionPage() {
               <HeroService
                 icon={MessageSquareText}
                 title="Missed-Call Recovery"
-                price="A$9/mo"
+                price="A$9/mo incl GST"
                 onStart={() => selectPlanAndStart("missed_call_recovery")}
               >
                 Missed call → immediate customer text
@@ -243,7 +243,7 @@ function PlumberAcquisitionPage() {
               <HeroService
                 icon={Bot}
                 title="AI Receptionist"
-                price="A$15/mo"
+                price="A$15/mo incl GST"
                 onStart={() => selectPlanAndStart("ai_receptionist")}
               >
                 Incoming call → AI answers 24/7
@@ -287,8 +287,8 @@ function PlumberAcquisitionPage() {
               />
             </div>
             <div className="mt-6 rounded-xl bg-emerald-400/12 p-4 text-sm text-emerald-100">
-              <b>A typical A$350 job</b> could cover about 38 months of A$9 Missed-Call Recovery
-              subscription fees, excluding variable usage.
+              <b>A typical A$350 job</b> could cover about 38 months of the A$9 including-GST
+              Missed-Call Recovery subscription, excluding variable usage.
             </div>
           </div>
         </div>
@@ -345,7 +345,7 @@ function PlumberAcquisitionPage() {
                 missed. Both feed the same inbox.
               </span>
             </span>
-            <span className="shrink-0 text-xl font-black">A$24/month normally</span>
+            <span className="shrink-0 text-xl font-black">A$24/month normally · incl GST</span>
           </button>
         </div>
       </section>
@@ -386,7 +386,7 @@ function PlumberAcquisitionPage() {
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <Metric
-                label="Normal monthly subscription"
+                label="Normal monthly subscription · incl GST"
                 value={moneyFromCents(plan.platformFeeCents)}
               />
               <Metric
@@ -397,10 +397,11 @@ function PlumberAcquisitionPage() {
             </div>
             <p className="mt-5 text-sm leading-relaxed text-slate-600">
               Your typical job is worth A${jobValue}. {plan.name} normally costs{" "}
-              {moneyFromCents(plan.platformFeeCents)} per month. Recovering one job that would
-              otherwise have been lost could cover about {roi.monthsCovered} months of subscription
-              fees. Usage charges are separate: recovery SMS is A$0.25 ex GST per accepted SMS; AI
-              voice is A$0.59 per minute, metered by the second.
+              {moneyFromCents(plan.platformFeeCents)} per month including GST. Recovering one job
+              that would otherwise have been lost could cover about {roi.monthsCovered} months of
+              subscription fees. Usage charges are separate: recovery SMS is 27.5¢ including GST per
+              provider-accepted SMS (25¢ excluding GST); AI voice is A$0.59 including GST per
+              minute, metered by the second.
             </p>
           </div>
         </div>
@@ -464,7 +465,7 @@ function PlumberAcquisitionPage() {
       </section>
 
       <footer className="border-t border-white/10 px-5 py-8 text-center text-xs text-white/45">
-        Rapid Connect · Prices in AUD · Variable usage is disclosed before activation
+        Rapid Connect · Prominent prices include GST · Variable usage is disclosed before activation
       </footer>
 
       <DemoExperience
@@ -569,7 +570,12 @@ function ServiceCard({
         <span className="grid h-12 w-12 place-items-center rounded-xl bg-slate-950 text-yellow-300">
           <Icon className="h-6 w-6" />
         </span>
-        <span className="text-2xl font-black">{moneyFromCents(config.platformFeeCents)}/mo</span>
+        <span className="text-right text-2xl font-black">
+          {moneyFromCents(config.platformFeeCents)}/mo
+          <span className="block text-[10px] uppercase tracking-wider text-slate-500">
+            incl GST
+          </span>
+        </span>
       </div>
       <h3 className="mt-5 text-2xl font-black">{config.name}</h3>
       <p className="mt-3 leading-relaxed text-slate-600">{config.explanation}</p>

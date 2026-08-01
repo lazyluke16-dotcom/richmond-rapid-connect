@@ -17,15 +17,15 @@ appear in footage.
 
 ## Edit and voice-over lock
 
-| Time   | Picture                                                                 | Voice-over / caption                                                                                          | Required screen proof                                                    |
-| ------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| 0–6s   | Labelled reconstruction: plumber under a sink misses an original call   | “Missed-Call Recovery starts after a call is missed. Rapid Connect does not answer that original call.”       | Service on; missed-call state; simulation label                          |
-| 6–19s  | Customer receives automatic SMS and enters burst-pipe job details       | “We text the customer straight away and collect the job, suburb and urgency.”                                 | SMS thread and three completed fields                                    |
-| 19–29s | Plumber alert and completed Missed Jobs entry                           | “The captured opportunity is ready in Missed Jobs.”                                                           | Test/simulation marker, source, time, status and captured detail         |
-| 29–35s | Labelled reconstruction: new caller rings; AI answers the original call | “AI Receptionist answers the call for you, 24/7.”                                                             | AI service on; answered-call state; simulation label                     |
-| 35–48s | Customer describes a blocked drain; AI gathers details and escalates    | “It speaks with the customer, gathers the job details and alerts you.”                                        | Short captioned transcript, escalation alert and no personal information |
-| 48–53s | Completed AI opportunity in Missed Jobs                                 | “Both services deliver a clear opportunity to the same simple inbox.”                                         | AI capture source, time, status and captured detail                      |
-| 53–58s | Each service toggles off, then returns to its intended resting state    | “Only use the service when you need it. On or off is one touch; off pauses operation, not your subscription.” | Two labelled switches; A$9/A$15; A$0 sign-on; three platform months free |
+| Time   | Picture                                                                 | Voice-over / caption                                                                                          | Required screen proof                                                                  |
+| ------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 0–6s   | Labelled reconstruction: plumber under a sink misses an original call   | “Missed-Call Recovery starts after a call is missed. Rapid Connect does not answer that original call.”       | Service on; missed-call state; simulation label                                        |
+| 6–19s  | Customer receives automatic SMS and enters burst-pipe job details       | “We text the customer straight away and collect the job, suburb and urgency.”                                 | SMS thread and three completed fields                                                  |
+| 19–29s | Plumber alert and completed Missed Jobs entry                           | “The captured opportunity is ready in Missed Jobs.”                                                           | Test/simulation marker, source, time, status and captured detail                       |
+| 29–35s | Labelled reconstruction: new caller rings; AI answers the original call | “AI Receptionist answers the call for you, 24/7.”                                                             | AI service on; answered-call state; simulation label                                   |
+| 35–48s | Customer describes a blocked drain; AI gathers details and escalates    | “It speaks with the customer, gathers the job details and alerts you.”                                        | Short captioned transcript, escalation alert and no personal information               |
+| 48–53s | Completed AI opportunity in Missed Jobs                                 | “Both services deliver a clear opportunity to the same simple inbox.”                                         | AI capture source, time, status and captured detail                                    |
+| 53–58s | Each service toggles off, then returns to its intended resting state    | “Only use the service when you need it. On or off is one touch; off pauses operation, not your subscription.” | Two labelled switches; A$9/A$15 including GST; A$0 sign-on; three platform months free |
 
 The read target is 122–132 words per minute, warm Australian delivery, practical rather than
 futuristic. “AI” must sound like the letters A-I.
@@ -49,6 +49,8 @@ futuristic. “AI” must sound like the letters A-I.
 
 - Use “helps stop losing good jobs”, not an absolute earnings or job-volume guarantee.
 - Show ongoing platform and usage pricing before the final signup action.
+- Lead with the payable totals: A$9/A$15/A$24 platform and A$0.59/minute AI voice including GST;
+  show recovery SMS as 27.5¢ including GST (25¢ excluding GST) per provider-accepted message.
 - The setup-fee waiver must be presented as a limited founding-plumber promotion.
 - Do not imply that AI handles emergencies, diagnoses plumbing faults or replaces emergency
   services.

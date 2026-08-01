@@ -43,12 +43,16 @@ type BillingSummary = {
     periodStart: string | null;
     totalBillableSeconds: number;
     estimatedChargeAud: number;
+    estimatedVoiceIncGstAud: number;
+    estimatedSmsExGstAud: number;
+    estimatedSmsGstAud: number;
     smsMessages: number;
     smsBillable: true;
     pendingMeterEvents: number;
     withinGraceCap: boolean;
   };
   platformFeeAud: number;
+  currentPlatformFeeAud: number;
   estimatedCurrentTotalAud: number;
   connections: {
     stripe: boolean;
@@ -262,7 +266,14 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-black">A${summary.platformFeeAud.toFixed(2)}</div>
-                  <div className="text-xs text-muted-foreground">platform fee / month</div>
+                  <div className="text-xs text-muted-foreground">
+                    normal platform fee / month · including GST
+                  </div>
+                  {summary.currentPlatformFeeAud === 0 && summary.platformFeeAud > 0 && (
+                    <div className="mt-1 text-xs font-black text-primary">
+                      A$0 during the founding offer
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -295,21 +306,21 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
                       <PlanChoice
                         active={selectedPlan === "missed_call_recovery"}
                         title="Missed-Call Recovery"
-                        price="A$9/month"
+                        price="A$9/month incl GST"
                         detail="Missed-call text recovery and lead capture."
                         onClick={() => setSelectedPlan("missed_call_recovery")}
                       />
                       <PlanChoice
                         active={selectedPlan === "ai_receptionist"}
                         title="AI Receptionist"
-                        price="A$15/month"
+                        price="A$15/month incl GST"
                         detail="Answers calls and captures the job."
                         onClick={() => setSelectedPlan("ai_receptionist")}
                       />
                       <PlanChoice
                         active={selectedPlan === "both"}
                         title="Both services"
-                        price="A$24/month"
+                        price="A$24/month incl GST"
                         detail="AI answering plus missed-call follow-up."
                         onClick={() => setSelectedPlan("both")}
                       />
@@ -341,7 +352,7 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
                 </div>
                 <div className="text-right">
                   <div className="text-xs uppercase tracking-widest text-muted-foreground">
-                    Estimated total
+                    Estimated current total · incl GST
                   </div>
                   <div className="text-2xl font-black">
                     A${summary.estimatedCurrentTotalAud.toFixed(2)}
@@ -355,7 +366,7 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
                 />
                 <Metric label="Recovery SMS" value={`${summary.usage.smsMessages} recorded`} />
                 <Metric
-                  label="Estimated usage"
+                  label="Estimated usage · incl GST"
                   value={`A$${summary.usage.estimatedChargeAud.toFixed(2)}`}
                 />
                 <Metric
@@ -379,6 +390,12 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
                     {usageWorkedExample(summary.billing.selectedPlan)} No separate AI-model,
                     inbound-call or phone-number customer charge is implemented.
                   </p>
+                  {summary.usage.smsMessages > 0 && (
+                    <p className="mt-2 font-bold">
+                      Current SMS estimate: A${summary.usage.estimatedSmsExGstAud.toFixed(2)}
+                      excluding GST + A${summary.usage.estimatedSmsGstAud.toFixed(2)} GST.
+                    </p>
+                  )}
                 </details>
               )}
             </section>
@@ -491,9 +508,9 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
             <p className="text-xs text-muted-foreground">
               Subscription changes and cancellation are handled in Stripe’s secure customer portal.
               Access continues according to the displayed billing state and any stated grace period.
-              Each Twilio-accepted recovery SMS is A$
-              {(TEXT_LINK_SMS_UNIT_PRICE_MINOR / 100).toFixed(2)} excluding GST. GST is applied by
-              the invoicing and tax layer.
+              Each provider-accepted recovery SMS is 27.5¢ including GST: A$
+              {(TEXT_LINK_SMS_UNIT_PRICE_MINOR / 100).toFixed(2)} excluding GST plus 2.5¢ GST. The
+              invoice aggregates usage and rounds only the final AUD tax amount to whole cents.
             </p>
           </div>
         )}

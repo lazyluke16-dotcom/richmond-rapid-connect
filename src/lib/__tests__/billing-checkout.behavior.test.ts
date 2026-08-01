@@ -51,6 +51,10 @@ describe("billing checkout failure responses", () => {
       "[stripe] STRIPE_MODE=test does not match the configured live-mode key",
       "stripe_mode_mismatch",
     ],
+    [
+      "[stripe] Missing required Stripe tax configuration: STRIPE_GST_INCLUSIVE_TAX_RATE_ID",
+      "stripe_tax_not_configured",
+    ],
     ["Billing return URL must use HTTPS", "billing_return_url_invalid"],
   ])("classifies %s without exposing configuration values", (message, code) => {
     expect(classifyBillingCheckoutFailure(new Error(message))).toMatchObject({
@@ -106,6 +110,14 @@ describe("billing checkout idempotency and waiver ordering", () => {
     expect(checkoutIdempotencyKeys("business-a", "missed_call_recovery", null).session).not.toBe(
       first.session,
     );
+    expect(
+      checkoutIdempotencyKeys(
+        "business-a",
+        "missed_call_recovery",
+        "coupon-test",
+        "future-tax-policy",
+      ).session,
+    ).not.toBe(first.session);
   });
 
   it("validates the waiver before creating customers and applies it until redeemed", () => {
@@ -123,6 +135,8 @@ describe("billing checkout idempotency and waiver ordering", () => {
     );
     expect(source).toContain("{ idempotencyKey: idempotencyKeys.customer }");
     expect(source).toContain("{ idempotencyKey: idempotencyKeys.session }");
+    expect(source).toContain("default_tax_rates: [inclusiveGstTaxRateId]");
+    expect(source).toContain("automatic_tax: { enabled: false }");
     expect(source).not.toContain("isFirstCheckout");
   });
 });

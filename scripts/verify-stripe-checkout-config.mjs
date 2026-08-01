@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 import Stripe from "stripe";
+import { validateInclusiveGstResources } from "./configure-staging-commercial-gst.mjs";
 import { validateFoundingCoupon } from "./configure-staging-founding-coupon.mjs";
 
 const STRIPE_API_VERSION = "2026-06-24.dahlia";
@@ -19,7 +20,13 @@ function sorted(values) {
   return [...new Set(values)].sort();
 }
 
-export function validateStripeCheckoutResources({ account, prices, coupon, foundingCoupon }) {
+export function validateStripeCheckoutResources({
+  account,
+  prices,
+  coupon,
+  foundingCoupon,
+  inclusiveTaxRate,
+}) {
   const mcrBase = prices.MCR_BASE;
   const airBase = prices.AIR_BASE;
   const airUsage = prices.AIR_USAGE;
@@ -61,6 +68,7 @@ export function validateStripeCheckoutResources({ account, prices, coupon, found
   assert(!scopedProducts.includes(airUsage.product), "Union waiver Coupon must exclude AI usage");
 
   validateFoundingCoupon({ coupon: foundingCoupon, prices });
+  const gst = validateInclusiveGstResources({ prices, taxRate: inclusiveTaxRate });
 
   return {
     mode: "test",
@@ -69,6 +77,7 @@ export function validateStripeCheckoutResources({ account, prices, coupon, found
     couponScopedToBaseProducts: true,
     foundingCouponThreeMonths: true,
     usageProductsExcludedFromFoundingCoupon: true,
+    inclusiveGstTaxRateReady: gst.headlineTotalsUnchanged,
     commercialPricing: {
       mcrMonthlyAud: mcrBase.unit_amount / 100,
       aiMonthlyAud: airBase.unit_amount / 100,
@@ -105,20 +114,24 @@ export async function verifyStripeCheckoutConfig(env = process.env) {
   };
   const couponId = required(env, "STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE");
   const foundingCouponId = required(env, "STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES");
-  const [account, mcrBase, airBase, airUsage, coupon, foundingCoupon] = await Promise.all([
-    stripe.accounts.retrieve(),
-    stripe.prices.retrieve(priceIds.MCR_BASE),
-    stripe.prices.retrieve(priceIds.AIR_BASE),
-    stripe.prices.retrieve(priceIds.AIR_USAGE),
-    stripe.coupons.retrieve(couponId, { expand: ["applies_to"] }),
-    stripe.coupons.retrieve(foundingCouponId, { expand: ["applies_to"] }),
-  ]);
+  const inclusiveTaxRateId = required(env, "STRIPE_GST_INCLUSIVE_TAX_RATE_ID");
+  const [account, mcrBase, airBase, airUsage, coupon, foundingCoupon, inclusiveTaxRate] =
+    await Promise.all([
+      stripe.accounts.retrieve(),
+      stripe.prices.retrieve(priceIds.MCR_BASE),
+      stripe.prices.retrieve(priceIds.AIR_BASE),
+      stripe.prices.retrieve(priceIds.AIR_USAGE),
+      stripe.coupons.retrieve(couponId, { expand: ["applies_to"] }),
+      stripe.coupons.retrieve(foundingCouponId, { expand: ["applies_to"] }),
+      stripe.taxRates.retrieve(inclusiveTaxRateId),
+    ]);
 
   return validateStripeCheckoutResources({
     account,
     prices: { MCR_BASE: mcrBase, AIR_BASE: airBase, AIR_USAGE: airUsage },
     coupon,
     foundingCoupon,
+    inclusiveTaxRate,
   });
 }
 

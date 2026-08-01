@@ -193,6 +193,14 @@
         "20260722201335_2f2ef531-beda-47b2-8745-979b1da71158.sql",
         "20260728140000_acquisition_funnel.sql"
       ]
+    },
+    {
+      "file": "20260801200000_authoritative_gst_pricing.sql",
+      "sha256": "fe12cf044c154ec3b1a860a2684d134d5362ccd865f3de5c44f4ecc8a79b762e",
+      "dependsOn": [
+        "20260728120000_commercial_sms_invoicing.sql",
+        "20260801190000_identity_safe_acquisition_profile.sql"
+      ]
     }
   ]
 }

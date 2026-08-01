@@ -45,6 +45,11 @@ export interface UsageSummary {
   periodStart: string | null;
   totalBillableSeconds: number;
   estimatedChargeAud: number;
+  estimatedVoiceIncGstAud: number;
+  estimatedSmsExGstAud: number;
+  estimatedSmsGstAud: number;
+  smsMessages: number;
+  smsBillable: boolean;
   pendingMeterEvents: number;
   alertThresholds: {
     threshold: UsageAlertThreshold;
@@ -57,4 +62,6 @@ export interface BillingDetailResponse {
   billing: BillingStateSummary;
   usage: UsageSummary;
   platformFeeAud: number;
+  currentPlatformFeeAud: number;
+  estimatedCurrentTotalAud: number;
 }
