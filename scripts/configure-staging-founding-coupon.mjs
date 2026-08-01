@@ -124,7 +124,7 @@ export async function configureStagingFoundingCoupon(env = process.env) {
     ) {
       coupon = await stripe.coupons.create({
         id: COUPON_ID,
-        name: "FOUNDINGPLUMBER — first three months of platform fees",
+        name: "FOUNDINGPLUMBER — 3 months free",
         percent_off: 100,
         duration: "repeating",
         duration_in_months: 3,
