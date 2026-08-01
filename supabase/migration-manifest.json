@@ -185,6 +185,14 @@
         "20260725160000_customer_call_handling.sql",
         "20260731120000_acquisition_account_recovery.sql"
       ]
+    },
+    {
+      "file": "20260801190000_identity_safe_acquisition_profile.sql",
+      "sha256": "93c23e2c407f7fda4cf498f55c50cc261f24305d6363847af4908f64265cc6e9",
+      "dependsOn": [
+        "20260722201335_2f2ef531-beda-47b2-8745-979b1da71158.sql",
+        "20260728140000_acquisition_funnel.sql"
+      ]
     }
   ]
 }

@@ -187,6 +187,7 @@ export function DemoCommercial({
       role="dialog"
       aria-modal="true"
       aria-label="Rapid Connect product demonstration"
+      data-demo-variant="demo-original"
       className="acquisition-experience fixed inset-0 z-[100] overflow-hidden bg-[#071018] text-white"
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(250,204,21,0.18),transparent_34%),radial-gradient(circle_at_80%_70%,rgba(14,165,233,0.16),transparent_38%)]" />

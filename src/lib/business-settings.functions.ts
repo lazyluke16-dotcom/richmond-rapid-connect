@@ -36,6 +36,8 @@ export interface EditableBusiness {
   licence_holder_name?: string | null;
   licence_expiry?: string | null;
   licence_public?: boolean | null;
+  licence_state?: string | null;
+  private_logo_path?: string | null;
 }
 
 // Column lists for tolerant reads while the Phase 1 migration is unapplied.
@@ -43,7 +45,7 @@ const BASE_COLS =
   "id,name,slug,public_phone,public_email,logo_url,primary_colour,secondary_colour,accent_colour,short_description,hero_heading,hero_subheading,emergency_message,selected_plan";
 const PHASE1_COLS =
   BASE_COLS +
-  ",base_suburb,base_state,base_postcode,travel_radius_km,region_labels,postcode_ranges,excluded_areas,licence_number,licence_holder_name,licence_expiry,licence_public";
+  ",base_suburb,base_state,base_postcode,travel_radius_km,region_labels,postcode_ranges,excluded_areas,licence_number,licence_holder_name,licence_expiry,licence_public,licence_state,private_logo_path";
 
 function isMissingPhase1Column(err: { message?: string; code?: string } | null): boolean {
   if (!err) return false;
@@ -61,6 +63,8 @@ function isMissingPhase1Column(err: { message?: string; code?: string } | null):
     "licence_holder_name",
     "licence_expiry",
     "licence_public",
+    "licence_state",
+    "private_logo_path",
   ];
   return (
     cols.some((c) => m.includes(c)) &&
@@ -101,6 +105,7 @@ function buildLicencePatch(data: LicencePayload): Record<string, unknown> {
     licence_number: data.licence_number ?? null,
     licence_holder_name: data.licence_holder_name ?? null,
     licence_expiry: data.licence_expiry ?? null,
+    licence_state: data.licence_state ?? null,
   };
   if (data.licence_public !== undefined) patch.licence_public = data.licence_public;
   return patch;

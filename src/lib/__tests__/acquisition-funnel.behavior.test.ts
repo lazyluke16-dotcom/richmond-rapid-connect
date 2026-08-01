@@ -12,7 +12,8 @@ import {
   getAcquisitionAttribution,
   normalBillingDate,
   normalizePromoCode,
-  readAcquisitionDraft,
+  readSafeAcquisitionDraft,
+  safeAcquisitionDraftForBrowser,
   recoverAcquisitionDraftFromUser,
 } from "@/lib/acquisition";
 import { acquisitionContextFromClaims } from "@/lib/acquisition.functions";
@@ -91,7 +92,7 @@ describe("acquisition funnel pricing and attribution", () => {
     });
   });
 
-  it("restores a safe draft while letting the current link supply fresh attribution", () => {
+  it("restores only non-identifying choices and never another browser user's details", () => {
     const old = createDefaultAcquisitionDraft({
       source: "email",
       medium: null,
@@ -107,8 +108,17 @@ describe("acquisition funnel pricing and attribution", () => {
       content: null,
       referralCode: null,
     });
-    const restored = readAcquisitionDraft(JSON.stringify(old), current);
-    expect(restored.businessName).toBe("Harbour Plumbing");
+    old.email = "alex@example.com";
+    old.mobile = "+61411111111";
+    old.plan = "ai_receptionist";
+    const stored = safeAcquisitionDraftForBrowser(old);
+    expect(stored).not.toHaveProperty("businessName");
+    expect(stored).not.toHaveProperty("email");
+    expect(stored).not.toHaveProperty("mobile");
+    const restored = readSafeAcquisitionDraft(JSON.stringify(stored), current);
+    expect(restored.businessName).toBe("");
+    expect(restored.email).toBe("");
+    expect(restored.plan).toBe("ai_receptionist");
     expect(restored.attribution).toMatchObject({
       source: "sms",
       medium: "direct",
@@ -335,15 +345,17 @@ describe("acquisition experience source", () => {
 
   it("uses Stripe for card collection and does not collect card fields locally", () => {
     expect(wizard).toContain('"/api/public/billing/checkout"');
-    expect(wizard).toContain("does not store your card number");
+    expect(wizard).toContain("never receives or stores your raw card number");
     expect(wizard).not.toContain('name="card_number"');
   });
 
-  it("recovers authenticated acquisition users without requiring the resume query parameter", () => {
-    expect(wizard).toContain("recoverAcquisitionDraftFromUser(data.session?.user, draft)");
-    expect(wizard).toContain("recoverAcquisitionDraftFromUser(existingAuth.session?.user, draft)");
+  it("requires an explicit tenant-scoped resume choice and never silently changes login identity", () => {
+    expect(wizard).toContain("Continue as ${identity.email}");
+    expect(wizard).toContain("Use a different account");
+    expect(wizard).toContain("Start fresh with this signed-in account");
+    expect(wizard).toContain("email: existingAuth.session.user.email");
     expect(wizard).not.toContain(
-      'new URLSearchParams(window.location.search).get("resume") === "signup"',
+      "recoverAcquisitionDraftFromUser(existingAuth.session?.user, draft)",
     );
   });
 

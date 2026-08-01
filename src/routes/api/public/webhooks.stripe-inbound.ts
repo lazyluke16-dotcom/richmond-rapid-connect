@@ -256,11 +256,14 @@ export const Route = createFileRoute("/api/public/webhooks/stripe-inbound")({
 
               const { data: acquisitionBusiness } = await supabaseAdmin
                 .from("businesses")
-                .select("acquisition_session_id")
+                .select("acquisition_session_id, acquisition_demo_variant")
                 .eq("id", businessId)
                 .maybeSingle();
               const sessionId = (
-                acquisitionBusiness as { acquisition_session_id?: string | null } | null
+                acquisitionBusiness as {
+                  acquisition_session_id?: string | null;
+                  acquisition_demo_variant?: string | null;
+                } | null
               )?.acquisition_session_id;
               if (sessionId) {
                 for (const eventName of ["checkout_completed", "activation_completed"]) {
@@ -271,6 +274,9 @@ export const Route = createFileRoute("/api/public/webhooks/stripe-inbound")({
                     event_name: eventName,
                     path: "/dashboard",
                     plan,
+                    demo_variant:
+                      (acquisitionBusiness as { acquisition_demo_variant?: string | null } | null)
+                        ?.acquisition_demo_variant ?? null,
                   } as never);
                 }
               }

@@ -37,6 +37,10 @@ export function validateStripeCheckoutResources({ account, prices, coupon, found
   assert(airBase.recurring?.usage_type === "licensed", "AI base must be licensed");
   assert(airUsage.recurring?.usage_type === "metered", "AI usage must be metered");
   assert(
+    airUsage.unit_amount_decimal === "0.983333",
+    "AI usage must be 0.983333 AUD cents per metered second (A$0.59/minute)",
+  );
+  assert(
     new Set([mcrBase.product, airBase.product, airUsage.product]).size === 3,
     "Base and usage Prices must use three separate Stripe Products",
   );
@@ -63,6 +67,16 @@ export function validateStripeCheckoutResources({ account, prices, coupon, found
     couponScopedToBaseProducts: true,
     foundingCouponThreeMonths: true,
     usageProductsExcludedFromFoundingCoupon: true,
+    commercialPricing: {
+      mcrMonthlyAud: mcrBase.unit_amount / 100,
+      aiMonthlyAud: airBase.unit_amount / 100,
+      aiUsageAudPerMinute: (Number(airUsage.unit_amount_decimal) * 60) / 100,
+      taxBehavior: {
+        mcr: mcrBase.tax_behavior ?? "unspecified",
+        ai: airBase.tax_behavior ?? "unspecified",
+        aiUsage: airUsage.tax_behavior ?? "unspecified",
+      },
+    },
   };
 }
 

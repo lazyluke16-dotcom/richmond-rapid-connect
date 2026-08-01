@@ -209,7 +209,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
           // A database/schema failure must not leave an orphaned Stripe customer.
           const { data: acquisitionData, error: acquisitionError } = await supabaseAdmin
             .from("businesses")
-            .select("promotion_code, setup_fee_waived_cents")
+            .select("promotion_code, setup_fee_waived_cents, acquisition_demo_variant")
             .eq("id", businessId)
             .maybeSingle();
           if (acquisitionError) {
@@ -224,12 +224,16 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
           const acquisition = acquisitionData as {
             promotion_code?: string | null;
             setup_fee_waived_cents?: number | null;
+            acquisition_demo_variant?: string | null;
           } | null;
           const acquisitionMetadata: Record<string, string> =
             acquisition?.promotion_code && acquisition.setup_fee_waived_cents != null
               ? {
                   promotion_code: acquisition.promotion_code,
                   setup_fee_waived_cents: String(acquisition.setup_fee_waived_cents),
+                  ...(acquisition.acquisition_demo_variant
+                    ? { demo_variant: acquisition.acquisition_demo_variant }
+                    : {}),
                 }
               : {};
 
@@ -356,7 +360,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
               customer_update: { address: "auto" },
               tax_id_collection: { enabled: false },
               success_url: `${origin}/dashboard?billing=success&session_id={CHECKOUT_SESSION_ID}`,
-              cancel_url: `${origin}/dashboard?billing=cancelled`,
+              cancel_url: `${origin}/plumbers?resume=payment&billing=cancelled`,
               metadata: {
                 business_id: businessId,
                 plan,

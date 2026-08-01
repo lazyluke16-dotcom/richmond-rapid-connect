@@ -251,6 +251,11 @@ export const LicencePayloadSchema = z.object({
     .optional()
     .or(z.literal("").transform(() => null)),
   licence_public: z.boolean().optional(),
+  licence_state: z
+    .enum(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"])
+    .nullable()
+    .optional()
+    .or(z.literal("").transform(() => null)),
 });
 export type LicencePayload = z.infer<typeof LicencePayloadSchema>;
 

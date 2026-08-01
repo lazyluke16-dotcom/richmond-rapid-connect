@@ -12,6 +12,8 @@ import {
   Phone,
   ShieldCheck,
   Sparkles,
+  Upload,
+  UserRound,
   X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,12 +25,13 @@ import {
   setMyHours,
   setMyServices,
 } from "@/lib/onboarding.functions";
-import { updateMyBusiness } from "@/lib/business-settings.functions";
+import { setMyLicence, updateMyBusiness } from "@/lib/business-settings.functions";
 import { normalizeAustralianPhone } from "@/lib/call-handling";
 import { redeemMyAcquisitionOffer } from "@/lib/acquisition.functions";
 import {
   ACQUISITION_PLANS,
   ACQUISITION_STORAGE_KEY,
+  ACQUISITION_SAFE_STORAGE_KEY,
   AcquisitionSignupDraftSchema,
   moneyFromCents,
   normalBillingDate,
@@ -38,9 +41,23 @@ import {
   acquisitionAreaRows,
   acquisitionHourRows,
   acquisitionServiceRows,
+  firstIncompleteAcquisitionStep,
   type AcquisitionEventName,
   type AcquisitionSignupDraft,
 } from "@/lib/acquisition";
+import { usageRateLines, usageWorkedExample } from "@/lib/commercial-pricing";
+
+type IdentityState =
+  | { kind: "loading" }
+  | { kind: "anonymous" }
+  | {
+      kind: "signed-in";
+      email: string;
+      onboarding: Awaited<ReturnType<typeof getOnboardingStatus>>;
+      billingStatus: string | null;
+      hasStripeSubscription: boolean;
+      selectedPlan: AcquisitionSignupDraft["plan"] | null;
+    };
 
 type PromoState =
   | { status: "checking" }
@@ -60,6 +77,7 @@ export function AcquisitionWizard({
   onClose,
   onDraftChange,
   onTrack,
+  checkoutCancelled = false,
 }: {
   open: boolean;
   initialDraft: AcquisitionSignupDraft;
@@ -70,6 +88,7 @@ export function AcquisitionWizard({
     event: AcquisitionEventName,
     details?: { plan?: AcquisitionSignupDraft["plan"]; wizardStep?: number },
   ) => void;
+  checkoutCancelled?: boolean;
 }) {
   const [draft, setDraft] = useState(initialDraft);
   const [password, setPassword] = useState("");
@@ -78,11 +97,23 @@ export function AcquisitionWizard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
-  const resumeAttempted = useRef(false);
+  const [identity, setIdentity] = useState<IdentityState>({ kind: "loading" });
+  const [identityAccepted, setIdentityAccepted] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoValidationError, setLogoValidationError] = useState<string | null>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const wizardStarted = useRef(false);
 
   useEffect(() => setDraft(initialDraft), [initialDraft]);
+
+  useEffect(() => {
+    if (open && checkoutCancelled) {
+      setError(
+        "Stripe checkout was cancelled. Your setup is saved; review the price and try again when ready.",
+      );
+    }
+  }, [checkoutCancelled, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -152,24 +183,68 @@ export function AcquisitionWizard({
   }, [draft.plan, draft.promoCode, draft.step, onTrack, open]);
 
   useEffect(() => {
-    if (!open || !sessionId || resumeAttempted.current) return;
+    if (!open) return;
+    let cancelled = false;
     void (async () => {
+      setIdentity({ kind: "loading" });
+      setIdentityAccepted(false);
       const { data } = await supabase.auth.getSession();
-      const hydrated = recoverAcquisitionDraftFromUser(data.session?.user, draft);
-      if (!hydrated) return;
-
-      resumeAttempted.current = true;
-      setBusy(true);
+      if (cancelled) return;
+      const session = data.session;
+      if (!session?.user) {
+        setIdentity({ kind: "anonymous" });
+        setIdentityAccepted(true);
+        return;
+      }
       try {
-        setDraft(hydrated);
-        onDraftChange(hydrated);
-        await continueAuthenticatedSignup(hydrated, sessionId, onTrack);
+        const onboarding = await getOnboardingStatus();
+        let billingStatus: string | null = null;
+        let hasStripeSubscription = false;
+        let selectedPlan: AcquisitionSignupDraft["plan"] | null = null;
+        if (onboarding.hasBusiness) {
+          const response = await fetch("/api/public/billing/summary", {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          if (response.ok) {
+            const payload = (await response.json()) as {
+              billing?: {
+                billingStatus?: string;
+                hasStripeSubscription?: boolean;
+                selectedPlan?: AcquisitionSignupDraft["plan"] | null;
+              };
+            };
+            billingStatus = payload.billing?.billingStatus ?? null;
+            hasStripeSubscription = Boolean(payload.billing?.hasStripeSubscription);
+            selectedPlan = payload.billing?.selectedPlan ?? null;
+          }
+        }
+        if (!cancelled) {
+          setIdentity({
+            kind: "signed-in",
+            email: session.user.email ?? "your signed-in account",
+            onboarding,
+            billingStatus,
+            hasStripeSubscription,
+            selectedPlan,
+          });
+        }
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Could not continue signup");
-        setBusy(false);
+        if (!cancelled) {
+          setError(cause instanceof Error ? cause.message : "Could not check your account");
+        }
       }
     })();
-  }, [draft, onDraftChange, onTrack, open, sessionId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  useEffect(
+    () => () => {
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+    },
+    [logoPreview],
+  );
 
   const update = (patch: Partial<AcquisitionSignupDraft>) => {
     setDraft((current) => {
@@ -181,7 +256,7 @@ export function AcquisitionWizard({
 
   const next = () => {
     setError(null);
-    const validation = validateStep(draft, password, agreed, promo);
+    const validation = validateStep(draft, password, agreed, promo, identity.kind === "signed-in");
     if (validation) {
       setError(validation);
       return;
@@ -197,7 +272,7 @@ export function AcquisitionWizard({
   };
 
   const submit = async () => {
-    const validation = validateStep(draft, password, agreed, promo);
+    const validation = validateStep(draft, password, agreed, promo, identity.kind === "signed-in");
     if (validation) {
       setError(validation);
       return;
@@ -207,12 +282,19 @@ export function AcquisitionWizard({
     onTrack("signup_submitted", { plan: draft.plan, wizardStep: draft.step });
     try {
       const { data: existingAuth } = await supabase.auth.getSession();
-      const recovered = recoverAcquisitionDraftFromUser(existingAuth.session?.user, draft);
-      if (recovered) {
-        resumeAttempted.current = true;
-        setDraft(recovered);
-        onDraftChange(recovered);
-        await continueAuthenticatedSignup(recovered, sessionId, onTrack);
+      if (existingAuth.session?.user) {
+        if (!identityAccepted || identity.kind !== "signed-in") {
+          throw new Error("Confirm which signed-in account you want to continue with.");
+        }
+        if (identity.hasStripeSubscription) {
+          window.location.assign("/dashboard");
+          return;
+        }
+        const ownedDraft = {
+          ...draft,
+          email: existingAuth.session.user.email ?? identity.email,
+        };
+        await continueAuthenticatedSignup(ownedDraft, sessionId, onTrack, logoFile);
         return;
       }
 
@@ -228,6 +310,11 @@ export function AcquisitionWizard({
         },
       });
       if (signupError) throw signupError;
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        throw new Error(
+          "That sign-up could not be completed. Sign in or use password recovery if you may already have an account.",
+        );
+      }
       onDraftChange(metadataDraft);
       if (!data.session) {
         onTrack("email_confirmation_required", { plan: draft.plan, wizardStep: 4 });
@@ -235,7 +322,7 @@ export function AcquisitionWizard({
         setBusy(false);
         return;
       }
-      await continueAuthenticatedSignup(metadataDraft, sessionId, onTrack);
+      await continueAuthenticatedSignup(metadataDraft, sessionId, onTrack, logoFile);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not create your account");
       setBusy(false);
@@ -245,6 +332,127 @@ export function AcquisitionWizard({
   const progress = ((draft.step + 1) / 5) * 100;
 
   if (!open) return null;
+
+  if (identity.kind === "loading") {
+    return (
+      <WizardFrame onClose={onClose}>
+        <div className="grid min-h-[70vh] place-items-center">
+          <div className="text-center">
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+            <p className="mt-3 font-bold">Checking your account securely…</p>
+          </div>
+        </div>
+      </WizardFrame>
+    );
+  }
+
+  if (identity.kind === "signed-in" && !identityAccepted) {
+    const complete = identity.hasStripeSubscription || identity.billingStatus === "active";
+    return (
+      <WizardFrame onClose={onClose}>
+        <div className="mx-auto flex min-h-[70vh] max-w-2xl flex-col justify-center px-5 py-16">
+          <div className="rounded-3xl border border-border bg-card p-6 sm:p-8">
+            <span className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/15 text-primary">
+              <UserRound className="h-7 w-7" />
+            </span>
+            <div className="mt-5 text-xs font-black uppercase tracking-widest text-primary">
+              Signed-in account
+            </div>
+            <h2 className="mt-2 break-all text-3xl font-black">{identity.email}</h2>
+            <p className="mt-3 text-muted-foreground">
+              {complete
+                ? "This account already has a subscription. Continue to its dashboard—another checkout is blocked."
+                : identity.onboarding.hasBusiness
+                  ? `Resume setup for ${identity.onboarding.name ?? "this business"}. We will only restore data owned by this account.`
+                  : "Continue this account’s saved setup, or sign out to create a genuinely different account."}
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (complete) {
+                    window.location.assign("/dashboard");
+                    return;
+                  }
+                  void supabase.auth.getSession().then(({ data }) => {
+                    const recovered = recoverAcquisitionDraftFromUser(
+                      data.session?.user,
+                      draft,
+                    ) ?? {
+                      ...draft,
+                      email: identity.email,
+                      contactEmail: draft.contactEmail || identity.email,
+                    };
+                    const preciseStep = identity.onboarding.hasBusiness
+                      ? 4
+                      : firstIncompleteAcquisitionStep(recovered);
+                    const nextDraft = {
+                      ...recovered,
+                      plan: identity.selectedPlan ?? recovered.plan,
+                      step: preciseStep,
+                    };
+                    setDraft(nextDraft);
+                    onDraftChange(nextDraft);
+                    setIdentityAccepted(true);
+                  });
+                }}
+                className="rounded-xl bg-primary px-5 py-3 font-black text-primary-foreground focus-visible:ring-4 focus-visible:ring-primary/30"
+              >
+                {complete ? "Go to dashboard" : `Continue as ${identity.email}`}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  void (async () => {
+                    await supabase.auth.signOut();
+                    sessionStorage.removeItem(ACQUISITION_SAFE_STORAGE_KEY);
+                    localStorage.removeItem(ACQUISITION_STORAGE_KEY);
+                    const fresh = {
+                      ...initialDraft,
+                      step: 0 as const,
+                      businessName: "",
+                      firstName: "",
+                      lastName: "",
+                      email: "",
+                      contactEmail: "",
+                      mobile: "",
+                      businessPhone: "",
+                    };
+                    setDraft(fresh);
+                    onDraftChange(fresh);
+                    setIdentity({ kind: "anonymous" });
+                    setIdentityAccepted(true);
+                  })()
+                }
+                className="rounded-xl border border-border px-5 py-3 font-black focus-visible:ring-4 focus-visible:ring-primary/20"
+              >
+                Use a different account
+              </button>
+            </div>
+            {!identity.onboarding.hasBusiness && !complete && (
+              <button
+                type="button"
+                onClick={() => {
+                  const fresh = {
+                    ...initialDraft,
+                    email: identity.email,
+                    contactEmail: identity.email,
+                    step: 0 as const,
+                  };
+                  setDraft(fresh);
+                  onDraftChange(fresh);
+                  setIdentityAccepted(true);
+                }}
+                className="mt-4 text-sm font-bold text-primary underline"
+              >
+                Start fresh with this signed-in account
+              </button>
+            )}
+          </div>
+        </div>
+      </WizardFrame>
+    );
+  }
 
   if (confirmationEmail) {
     return (
@@ -307,8 +515,29 @@ export function AcquisitionWizard({
       <div className="mx-auto grid w-full max-w-5xl gap-6 px-5 py-7 sm:px-8 lg:grid-cols-[1fr_320px]">
         <div>
           {draft.step === 0 && <PlanStep draft={draft} update={update} onTrack={onTrack} />}
-          {draft.step === 1 && <BusinessStep draft={draft} update={update} />}
-          {draft.step === 2 && <PhoneStep draft={draft} update={update} />}
+          {draft.step === 1 && (
+            <BusinessStep
+              draft={draft}
+              update={update}
+              signedInEmail={identity.kind === "signed-in" ? identity.email : null}
+            />
+          )}
+          {draft.step === 2 && (
+            <PhoneStep
+              draft={draft}
+              update={update}
+              logoFile={logoFile}
+              logoPreview={logoPreview}
+              logoValidationError={logoValidationError}
+              onLogoChange={(file) => {
+                if (logoPreview) URL.revokeObjectURL(logoPreview);
+                setLogoFile(file);
+                setLogoPreview(file ? URL.createObjectURL(file) : null);
+                setLogoValidationError(null);
+              }}
+              onLogoValidationError={setLogoValidationError}
+            />
+          )}
           {draft.step === 3 && <OfferStep draft={draft} update={update} promo={promo} />}
           {draft.step === 4 && (
             <AccountStep
@@ -318,6 +547,7 @@ export function AcquisitionWizard({
               agreed={agreed}
               setAgreed={setAgreed}
               promo={promo}
+              signedInEmail={identity.kind === "signed-in" ? identity.email : null}
             />
           )}
 
@@ -337,7 +567,7 @@ export function AcquisitionWizard({
               disabled={busy}
               className="inline-flex items-center gap-2 rounded-xl border border-border px-5 py-3 text-sm font-bold disabled:opacity-40"
             >
-              <ArrowLeft className="h-4 w-4" /> {draft.step === 0 ? "Back to demo" : "Back"}
+              <ArrowLeft className="h-4 w-4" /> {draft.step === 0 ? "Back to services" : "Back"}
             </button>
             {draft.step < 4 ? (
               <button
@@ -359,7 +589,11 @@ export function AcquisitionWizard({
                 ) : (
                   <LockKeyhole className="h-4 w-4" />
                 )}
-                {busy ? "Setting up…" : "Create account"}
+                {busy
+                  ? "Opening Stripe…"
+                  : identity.kind === "signed-in"
+                    ? "Continue securely with Stripe"
+                    : "Create account & continue to Stripe"}
               </button>
             )}
           </div>
@@ -378,6 +612,7 @@ async function continueAuthenticatedSignup(
     event: AcquisitionEventName,
     details?: { plan?: AcquisitionSignupDraft["plan"]; wizardStep?: number },
   ) => void,
+  logoFile: File | null = null,
 ) {
   const status = await getOnboardingStatus();
   const shouldSeedSetup = !status.onboarding_completed;
@@ -397,7 +632,7 @@ async function continueAuthenticatedSignup(
       data: {
         name: draft.businessName.trim(),
         public_phone: normalizeAustralianPhone(draft.businessPhone),
-        public_email: draft.email.trim(),
+        public_email: draft.contactEmail.trim() || draft.email.trim(),
         short_description: draft.servicesOffered.trim(),
         hero_heading: `${draft.businessName.trim()} plumbing help`,
         hero_subheading: `Local help across ${draft.serviceArea.trim()}.`,
@@ -412,6 +647,15 @@ async function continueAuthenticatedSignup(
       setMyAreas({ data: { areas: acquisitionAreaRows(draft.serviceArea) } }),
       setMyHours({ data: { hours: acquisitionHourRows(draft.businessHours) } }),
     ]);
+    if (draft.licenceNumber.trim() || draft.licenceState) {
+      await setMyLicence({
+        data: {
+          licence_number: draft.licenceNumber.trim() || null,
+          licence_state: draft.licenceState || null,
+          licence_public: false,
+        },
+      });
+    }
   }
   await redeemMyAcquisitionOffer({
     data: {
@@ -419,15 +663,31 @@ async function continueAuthenticatedSignup(
       plan: draft.plan,
       session_id: sessionId,
       attribution: draft.attribution,
+      demoVariant: draft.demoVariant,
     },
   });
   if (shouldSeedSetup) await completeOnboarding();
   onTrack("account_created", { plan: draft.plan, wizardStep: 4 });
   localStorage.removeItem(ACQUISITION_STORAGE_KEY);
+  sessionStorage.removeItem(ACQUISITION_SAFE_STORAGE_KEY);
 
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error("Your session expired. Sign in again to continue.");
+  if (logoFile) {
+    const form = new FormData();
+    form.set("logo", logoFile);
+    const logoResponse = await fetch("/api/public/business-logo", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!logoResponse.ok) {
+      // A logo is optional. Unsafe or failed uploads are discarded by the server,
+      // while the plumber can still finish payment and add a logo later in Settings.
+      console.warn("[acquisition] optional business logo upload was skipped");
+    }
+  }
   const response = await fetch("/api/public/billing/checkout", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
@@ -590,9 +850,11 @@ function PlanStep({
 function BusinessStep({
   draft,
   update,
+  signedInEmail,
 }: {
   draft: AcquisitionSignupDraft;
   update: (patch: Partial<AcquisitionSignupDraft>) => void;
+  signedInEmail: string | null;
 }) {
   return (
     <div className="space-y-4">
@@ -617,13 +879,22 @@ function BusinessStep({
         />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field
-          label="Email"
-          type="email"
-          value={draft.email}
-          onChange={(email) => update({ email })}
-          autoComplete="email"
-        />
+        {signedInEmail ? (
+          <div className="rounded-xl border border-primary/30 bg-primary/10 p-4">
+            <div className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+              Signed-in login (cannot be changed here)
+            </div>
+            <div className="mt-2 break-all font-black">{signedInEmail}</div>
+          </div>
+        ) : (
+          <Field
+            label="Email for login and business contact"
+            type="email"
+            value={draft.email}
+            onChange={(email) => update({ email, contactEmail: email })}
+            autoComplete="email"
+          />
+        )}
         <Field
           label="Mobile"
           type="tel"
@@ -632,6 +903,16 @@ function BusinessStep({
           autoComplete="mobile tel"
         />
       </div>
+      {signedInEmail && (
+        <Field
+          label="Business contact email (optional)"
+          type="email"
+          value={draft.contactEmail}
+          onChange={(contactEmail) => update({ contactEmail })}
+          autoComplete="email"
+          hint="This can receive business contact. It does not change the signed-in login or Stripe ownership."
+        />
+      )}
     </div>
   );
 }
@@ -639,9 +920,19 @@ function BusinessStep({
 function PhoneStep({
   draft,
   update,
+  logoFile,
+  logoPreview,
+  logoValidationError,
+  onLogoChange,
+  onLogoValidationError,
 }: {
   draft: AcquisitionSignupDraft;
   update: (patch: Partial<AcquisitionSignupDraft>) => void;
+  logoFile: File | null;
+  logoPreview: string | null;
+  logoValidationError: string | null;
+  onLogoChange: (file: File | null) => void;
+  onLogoValidationError: (message: string | null) => void;
 }) {
   return (
     <div className="space-y-5">
@@ -653,6 +944,95 @@ function PhoneStep({
         autoComplete="tel"
         hint="The number customers currently call."
       />
+      <div className="grid gap-4 rounded-2xl border border-border bg-card p-4 sm:grid-cols-2">
+        <div>
+          <label
+            className="block text-xs font-black uppercase tracking-widest text-muted-foreground"
+            htmlFor="business-logo"
+          >
+            Business logo (optional)
+          </label>
+          <label
+            htmlFor="business-logo"
+            className="mt-2 flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border px-4 font-bold hover:border-primary focus-within:ring-2 focus-within:ring-primary/30"
+          >
+            <Upload className="h-4 w-4" /> {logoFile ? "Replace logo" : "Choose logo"}
+            <input
+              id="business-logo"
+              className="sr-only"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0] ?? null;
+                if (file && file.size > 2 * 1024 * 1024) {
+                  event.currentTarget.value = "";
+                  onLogoChange(null);
+                  onLogoValidationError(
+                    "That logo is larger than 2 MB. Choose a smaller file or skip it.",
+                  );
+                  return;
+                }
+                onLogoChange(file);
+              }}
+            />
+          </label>
+          <p className="mt-2 text-xs text-muted-foreground">
+            PNG, JPEG or WebP, up to 2 MB. Stored privately and not made public automatically.
+          </p>
+          {logoValidationError && (
+            <p className="mt-2 text-xs font-bold text-destructive" role="alert">
+              {logoValidationError}
+            </p>
+          )}
+          {logoFile && (
+            <button
+              type="button"
+              onClick={() => onLogoChange(null)}
+              className="mt-2 text-xs font-bold text-primary underline"
+            >
+              Remove selected logo
+            </button>
+          )}
+        </div>
+        <div className="grid min-h-28 place-items-center rounded-xl bg-muted/50">
+          {logoPreview ? (
+            <img
+              src={logoPreview}
+              alt="Selected business logo preview"
+              className="max-h-24 max-w-full rounded-lg object-contain"
+            />
+          ) : (
+            <span className="text-sm text-muted-foreground">Logo preview</span>
+          )}
+        </div>
+        <Field
+          label="Plumber licence / registration number (optional)"
+          value={draft.licenceNumber}
+          onChange={(licenceNumber) => update({ licenceNumber })}
+          hint="Self-reported only. Requirements and formats differ by state; Rapid Connect does not verify it."
+        />
+        <label className="block">
+          <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+            Issuing state / territory (optional)
+          </span>
+          <select
+            value={draft.licenceState}
+            onChange={(event) =>
+              update({
+                licenceState: event.currentTarget.value as AcquisitionSignupDraft["licenceState"],
+              })
+            }
+            className="mt-2 w-full rounded-xl border border-border bg-input px-4 py-3"
+          >
+            <option value="">Select later</option>
+            {(["ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"] as const).map((state) => (
+              <option key={state} value={state}>
+                {state}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <ChoiceGroup
         label="When should Rapid Connect handle calls?"
         value={draft.handlingTiming}
@@ -832,6 +1212,7 @@ function AccountStep({
   agreed,
   setAgreed,
   promo,
+  signedInEmail,
 }: {
   draft: AcquisitionSignupDraft;
   password: string;
@@ -839,6 +1220,7 @@ function AccountStep({
   agreed: boolean;
   setAgreed: (value: boolean) => void;
   promo: PromoState;
+  signedInEmail: string | null;
 }) {
   const plan = ACQUISITION_PLANS[draft.plan];
   return (
@@ -854,14 +1236,45 @@ function AccountStep({
           </div>
         </div>
       </div>
-      <Field
-        label="Create a password"
-        type="password"
-        value={password}
-        onChange={setPassword}
-        autoComplete="new-password"
-        hint="Use at least 10 characters."
-      />
+      {signedInEmail ? (
+        <div className="rounded-xl border border-primary/30 bg-primary/10 p-4 text-sm">
+          Continuing securely as <b>{signedInEmail}</b>. The subscription will belong to this
+          account’s server-verified business.
+        </div>
+      ) : (
+        <Field
+          label="Create a password"
+          type="password"
+          value={password}
+          onChange={setPassword}
+          autoComplete="new-password"
+          hint="Use at least 10 characters."
+        />
+      )}
+      <div className="rounded-xl border border-border bg-card p-4 text-sm">
+        <div className="font-black">What you will pay</div>
+        <ul className="mt-3 space-y-2">
+          <li>A$0 setup/sign-on fee.</li>
+          <li>A$0 platform fees for the first three monthly billing periods.</li>
+          <li>
+            Normal platform billing begins {normalBillingDate()}:{" "}
+            {moneyFromCents(plan.platformFeeCents)}/month.
+          </li>
+          <li>Usage billing starts when the service is activated.</li>
+        </ul>
+        <details className="mt-4 rounded-lg bg-muted/60 p-3">
+          <summary className="cursor-pointer font-black">See all usage rates</summary>
+          <ul className="mt-3 list-disc space-y-2 pl-5">
+            {usageRateLines(draft.plan).map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          <p className="mt-3">
+            No separate AI-model, inbound-call or phone-number customer charge is implemented.{" "}
+            {usageWorkedExample(draft.plan)}
+          </p>
+        </details>
+      </div>
       <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-4 text-sm">
         <input
           type="checkbox"
@@ -870,16 +1283,16 @@ function AccountStep({
           className="mt-0.5 h-5 w-5 accent-yellow-400"
         />
         <span>
-          I agree to A$0 sign-on, A$0 platform subscription fees for the first three monthly billing
-          periods, usage charges from activation, and then {moneyFromCents(plan.platformFeeCents)}
-          /month until cancelled. I authorise Rapid Connect to open Stripe’s secure payment setup.
+          I accept the pricing above, usage from activation, normal billing from{" "}
+          {normalBillingDate()}, cancel-anytime terms, and Stripe’s secure payment setup.
         </span>
       </label>
       <div className="flex gap-3 rounded-xl bg-muted/60 p-4 text-xs text-muted-foreground">
         <CreditCard className="h-5 w-5 shrink-0 text-foreground" />
         <p>
-          Your card details are entered directly into Stripe after account creation. Rapid Connect
-          does not store your card number.
+          Stripe opens securely inside this guided setup and returns you to verified activation.
+          Rapid Connect never receives or stores your raw card number. Switching a service off
+          pauses operation; it does not cancel billing.
         </p>
       </div>
       {promo.status !== "valid" && (
@@ -1028,6 +1441,7 @@ function validateStep(
   password: string,
   agreed: boolean,
   promo: PromoState,
+  signedIn: boolean,
 ): string | null {
   if (draft.step === 1) {
     if (draft.businessName.trim().length < 2) return "Enter your business name.";
@@ -1035,6 +1449,8 @@ function validateStep(
       return "Enter your first and last name.";
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email.trim()))
       return "Enter a valid email address.";
+    if (draft.contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.contactEmail.trim()))
+      return "Enter a valid business contact email address.";
     try {
       normalizeAustralianPhone(draft.mobile);
     } catch {
@@ -1055,7 +1471,7 @@ function validateStep(
   if (draft.step === 3 && promo.status !== "valid")
     return "Enter a valid offer code to waive the setup fee.";
   if (draft.step === 4) {
-    if (password.length < 10) return "Create a password with at least 10 characters.";
+    if (!signedIn && password.length < 10) return "Create a password with at least 10 characters.";
     if (!agreed) return "Confirm the displayed prices and secure payment setup to continue.";
     if (promo.status !== "valid") return "The setup-fee waiver must be verified before signup.";
   }

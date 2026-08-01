@@ -44,6 +44,7 @@ import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[
 import { Route as ApiDashboardVerifyPinRouteImport } from './routes/api/dashboard.verify-pin'
 import { Route as ApiDemoTriggerSmsRouteImport } from './routes/api/demo.trigger-sms'
 import { Route as ApiPublicAcquisitionRouteImport } from './routes/api/public/acquisition'
+import { Route as ApiPublicBusinessLogoRouteImport } from './routes/api/public/business-logo'
 import { Route as ApiPublicProcessEnrichmentJobsRouteImport } from './routes/api/public/process-enrichment-jobs'
 import { Route as ApiPublicProcessSmsInvoiceRouteImport } from './routes/api/public/process-sms-invoice'
 import { Route as ApiPublicStagingReleaseRouteImport } from './routes/api/public/staging-release'
@@ -246,6 +247,11 @@ const ApiPublicAcquisitionRoute = ApiPublicAcquisitionRouteImport.update({
   path: '/api/public/acquisition',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicBusinessLogoRoute = ApiPublicBusinessLogoRouteImport.update({
+  id: '/api/public/business-logo',
+  path: '/api/public/business-logo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicProcessEnrichmentJobsRoute =
   ApiPublicProcessEnrichmentJobsRouteImport.update({
     id: '/api/public/process-enrichment-jobs',
@@ -391,6 +397,7 @@ export interface FileRoutesByFullPath {
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
+  '/api/public/business-logo': typeof ApiPublicBusinessLogoRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
   '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
@@ -446,6 +453,7 @@ export interface FileRoutesByTo {
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
+  '/api/public/business-logo': typeof ApiPublicBusinessLogoRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
   '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
@@ -504,6 +512,7 @@ export interface FileRoutesById {
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
+  '/api/public/business-logo': typeof ApiPublicBusinessLogoRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
   '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
@@ -562,6 +571,7 @@ export interface FileRouteTypes {
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/acquisition'
+    | '/api/public/business-logo'
     | '/api/public/process-enrichment-jobs'
     | '/api/public/process-sms-invoice'
     | '/api/public/staging-release'
@@ -617,6 +627,7 @@ export interface FileRouteTypes {
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/acquisition'
+    | '/api/public/business-logo'
     | '/api/public/process-enrichment-jobs'
     | '/api/public/process-sms-invoice'
     | '/api/public/staging-release'
@@ -674,6 +685,7 @@ export interface FileRouteTypes {
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/acquisition'
+    | '/api/public/business-logo'
     | '/api/public/process-enrichment-jobs'
     | '/api/public/process-sms-invoice'
     | '/api/public/staging-release'
@@ -720,6 +732,7 @@ export interface RootRouteChildren {
   ApiDashboardVerifyPinRoute: typeof ApiDashboardVerifyPinRoute
   ApiDemoTriggerSmsRoute: typeof ApiDemoTriggerSmsRoute
   ApiPublicAcquisitionRoute: typeof ApiPublicAcquisitionRoute
+  ApiPublicBusinessLogoRoute: typeof ApiPublicBusinessLogoRoute
   ApiPublicProcessEnrichmentJobsRoute: typeof ApiPublicProcessEnrichmentJobsRoute
   ApiPublicProcessSmsInvoiceRoute: typeof ApiPublicProcessSmsInvoiceRoute
   ApiPublicStagingReleaseRoute: typeof ApiPublicStagingReleaseRoute
@@ -984,6 +997,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicAcquisitionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/business-logo': {
+      id: '/api/public/business-logo'
+      path: '/api/public/business-logo'
+      fullPath: '/api/public/business-logo'
+      preLoaderRoute: typeof ApiPublicBusinessLogoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/process-enrichment-jobs': {
       id: '/api/public/process-enrichment-jobs'
       path: '/api/public/process-enrichment-jobs'
@@ -1203,6 +1223,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDashboardVerifyPinRoute: ApiDashboardVerifyPinRoute,
   ApiDemoTriggerSmsRoute: ApiDemoTriggerSmsRoute,
   ApiPublicAcquisitionRoute: ApiPublicAcquisitionRoute,
+  ApiPublicBusinessLogoRoute: ApiPublicBusinessLogoRoute,
   ApiPublicProcessEnrichmentJobsRoute: ApiPublicProcessEnrichmentJobsRoute,
   ApiPublicProcessSmsInvoiceRoute: ApiPublicProcessSmsInvoiceRoute,
   ApiPublicStagingReleaseRoute: ApiPublicStagingReleaseRoute,

@@ -19,6 +19,7 @@ import { AppShell } from "@/components/AppShell";
 import { useMyTenantBrand } from "@/hooks/use-my-tenant-brand";
 import { supabase } from "@/integrations/supabase/client";
 import { TEXT_LINK_SMS_UNIT_PRICE_MINOR } from "@/lib/call-handling";
+import { usageRateLines, usageWorkedExample } from "@/lib/commercial-pricing";
 
 type BillingSummary = {
   account: {
@@ -366,6 +367,20 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
                   }
                 />
               </div>
+              {summary.billing.selectedPlan && (
+                <details className="mt-4 rounded-lg border border-border bg-card p-4 text-sm">
+                  <summary className="cursor-pointer font-black">Exact usage rates</summary>
+                  <ul className="mt-3 list-disc space-y-2 pl-5">
+                    {usageRateLines(summary.billing.selectedPlan).map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-3 text-muted-foreground">
+                    {usageWorkedExample(summary.billing.selectedPlan)} No separate AI-model,
+                    inbound-call or phone-number customer charge is implemented.
+                  </p>
+                </details>
+              )}
             </section>
 
             <section

@@ -34,6 +34,7 @@ function resources() {
         active: true,
         currency: "aud",
         unit_amount: null,
+        unit_amount_decimal: "0.983333",
         product: "prod_air_usage",
         recurring: { interval: "month", usage_type: "metered" },
       },
@@ -73,6 +74,12 @@ describe("Stripe checkout staging resource validation", () => {
       couponScopedToBaseProducts: true,
       foundingCouponThreeMonths: true,
       usageProductsExcludedFromFoundingCoupon: true,
+      commercialPricing: {
+        mcrMonthlyAud: 9,
+        aiMonthlyAud: 15,
+        aiUsageAudPerMinute: 0.5899998,
+        taxBehavior: { mcr: "unspecified", ai: "unspecified", aiUsage: "unspecified" },
+      },
     });
   });
 

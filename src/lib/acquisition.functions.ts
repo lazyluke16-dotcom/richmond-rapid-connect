@@ -6,6 +6,7 @@ import {
   normalizePromoCode,
   type AcquisitionPlan,
 } from "@/lib/acquisition";
+import { resolveDemoVariant, type DemoVariant } from "@/lib/demo-variants";
 
 export interface AuthenticatedAcquisitionContext {
   businessName: string | null;
@@ -67,6 +68,7 @@ export const redeemMyAcquisitionOffer = createServerFn({ method: "POST" })
         campaign?: string | null;
         content?: string | null;
       };
+      demoVariant?: DemoVariant | null;
     }) => data,
   )
   .handler(async ({ data, context }) => {
@@ -88,6 +90,21 @@ export const redeemMyAcquisitionOffer = createServerFn({ method: "POST" })
       } as never,
     );
     if (error) throw new Error(error.message);
+    // Match redeem_acquisition_offer's authoritative business selection exactly:
+    // the caller's earliest membership, never an arbitrary browser-provided ID.
+    const { data: membership, error: membershipError } = await context.supabase
+      .from("business_users")
+      .select("business_id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (membershipError) throw new Error(membershipError.message);
+    if (!membership?.business_id) throw new Error("No business membership found");
+    const { error: variantError } = await context.supabase
+      .from("businesses")
+      .update({ acquisition_demo_variant: resolveDemoVariant(data.demoVariant) } as never)
+      .eq("id", membership.business_id);
+    if (variantError) throw new Error(variantError.message);
     return result as unknown as {
       success: true;
       promotionCode: string;

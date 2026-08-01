@@ -1,6 +1,9 @@
 import { z } from "zod";
+import { COMMERCIAL_PRICING, platformFeeCents } from "./commercial-pricing";
+import { resolveDemoVariant } from "./demo-variants";
 
 export const ACQUISITION_STORAGE_KEY = "rapid-connect:acquisition:v1";
+export const ACQUISITION_SAFE_STORAGE_KEY = "rapid-connect:acquisition-safe:v2";
 export const ACQUISITION_SESSION_KEY = "rapid-connect:acquisition-session:v1";
 export const DEFAULT_PROMO_CODE = "FOUNDINGPLUMBER";
 
@@ -22,8 +25,8 @@ export const ACQUISITION_PLANS: Record<
   missed_call_recovery: {
     name: "Missed-Call Recovery",
     shortName: "Missed calls",
-    setupFeeCents: 49_900,
-    platformFeeCents: 900,
+    setupFeeCents: COMMERCIAL_PRICING.setupFeeCents,
+    platformFeeCents: platformFeeCents("missed_call_recovery"),
     usage: "A$0.25 ex GST per accepted recovery SMS. Usage starts when activated.",
     explanation:
       "When you miss a call, we immediately text the customer, collect their job details and place the opportunity in your Missed Jobs inbox.",
@@ -36,9 +39,9 @@ export const ACQUISITION_PLANS: Record<
   ai_receptionist: {
     name: "AI Receptionist",
     shortName: "AI answers",
-    setupFeeCents: 49_900,
-    platformFeeCents: 1_500,
-    usage: "A$0.59 per AI voice minute plus applicable SMS usage. Usage starts when activated.",
+    setupFeeCents: COMMERCIAL_PRICING.setupFeeCents,
+    platformFeeCents: platformFeeCents("ai_receptionist"),
+    usage: "A$0.59 per AI voice minute, metered by the second. Usage starts when activated.",
     explanation:
       "Our AI answers the call for you, speaks with the customer, gathers the job details and alerts you—24/7.",
     includes: [
@@ -50,8 +53,8 @@ export const ACQUISITION_PLANS: Record<
   both: {
     name: "Both services",
     shortName: "Complete cover",
-    setupFeeCents: 49_900,
-    platformFeeCents: 2_400,
+    setupFeeCents: COMMERCIAL_PRICING.setupFeeCents,
+    platformFeeCents: platformFeeCents("both"),
     usage: "The disclosed SMS and AI voice usage rates apply from activation.",
     explanation:
       "Use AI Receptionist to answer calls and Missed-Call Recovery as your follow-up path for calls that are still missed.",
@@ -91,6 +94,7 @@ export const AcquisitionEventNameSchema = z.enum([
   "test_job_initiated",
   "test_job_received",
   "first_genuine_job_received",
+  "service_card_clicked",
 ]);
 export type AcquisitionEventName = z.infer<typeof AcquisitionEventNameSchema>;
 
@@ -120,6 +124,7 @@ export const AcquisitionEventSchema = z.object({
   plan: AcquisitionPlanSchema.optional().nullable(),
   promoCode: z.string().trim().max(64).optional().nullable(),
   wizardStep: z.number().int().min(0).max(6).optional().nullable(),
+  demoVariant: z.enum(["demo-original", "demo-real-world-v2"]).optional().nullable(),
   attribution: AcquisitionAttributionSchema,
 });
 
@@ -138,6 +143,7 @@ export const AcquisitionSignupDraftSchema = z.object({
   firstName: z.string().max(80),
   lastName: z.string().max(80),
   email: z.string().max(254),
+  contactEmail: z.string().max(254),
   mobile: z.string().max(40),
   businessPhone: z.string().max(40),
   handlingTiming: z.enum(["missed_calls", "after_hours", "all_calls"]),
@@ -154,6 +160,9 @@ export const AcquisitionSignupDraftSchema = z.object({
     .max(1000)
     .default("Job type, suburb, urgency and best callback time"),
   notificationPreference: z.enum(["sms", "email", "both"]).default("sms"),
+  licenceNumber: z.string().trim().max(64).default(""),
+  licenceState: z.enum(["", "ACT", "NSW", "NT", "QLD", "SA", "TAS", "VIC", "WA"]).default(""),
+  demoVariant: z.enum(["demo-original", "demo-real-world-v2"]).default("demo-real-world-v2"),
   attribution: AcquisitionAttributionSchema,
 });
 export type AcquisitionSignupDraft = z.infer<typeof AcquisitionSignupDraftSchema>;
@@ -268,6 +277,7 @@ export function getAcquisitionAttribution(search: URLSearchParams): AcquisitionA
 export function createDefaultAcquisitionDraft(
   attribution: AcquisitionAttribution,
   promoCode = DEFAULT_PROMO_CODE,
+  demoVariant: unknown = "demo-real-world-v2",
 ): AcquisitionSignupDraft {
   return {
     version: 1,
@@ -278,6 +288,7 @@ export function createDefaultAcquisitionDraft(
     firstName: "",
     lastName: "",
     email: "",
+    contactEmail: "",
     mobile: "",
     businessPhone: "",
     handlingTiming: "missed_calls",
@@ -288,6 +299,9 @@ export function createDefaultAcquisitionDraft(
     afterHoursPreference: "collect_and_notify",
     customerQuestions: "Job type, suburb, urgency and best callback time",
     notificationPreference: "sms",
+    licenceNumber: "",
+    licenceState: "",
+    demoVariant: resolveDemoVariant(demoVariant),
     attribution,
   };
 }
@@ -309,6 +323,50 @@ export function readAcquisitionDraft(
         ),
       },
       promoCode: fallback.promoCode || parsed.data.promoCode,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Browser storage is deliberately limited to non-identifying campaign choices.
+ * Names, email addresses, phone numbers and business details are never restored
+ * for an unauthenticated browser. Authenticated resume comes from the signed-in
+ * user's server-scoped metadata and business record instead.
+ */
+export function safeAcquisitionDraftForBrowser(draft: AcquisitionSignupDraft) {
+  return {
+    version: 2 as const,
+    plan: draft.plan,
+    promoCode: normalizePromoCode(draft.promoCode),
+    attribution: draft.attribution,
+    demoVariant: draft.demoVariant,
+  };
+}
+
+export function readSafeAcquisitionDraft(
+  raw: string | null,
+  fallback: AcquisitionSignupDraft,
+): AcquisitionSignupDraft {
+  if (!raw) return fallback;
+  try {
+    const parsed = z
+      .object({
+        version: z.literal(2),
+        plan: AcquisitionPlanSchema,
+        promoCode: z.string().max(64),
+        attribution: AcquisitionAttributionSchema,
+        demoVariant: z.enum(["demo-original", "demo-real-world-v2"]),
+      })
+      .safeParse(JSON.parse(raw));
+    if (!parsed.success) return fallback;
+    return {
+      ...fallback,
+      plan: parsed.data.plan,
+      promoCode: normalizePromoCode(parsed.data.promoCode) || fallback.promoCode,
+      attribution: { ...parsed.data.attribution, ...fallback.attribution },
+      demoVariant: parsed.data.demoVariant,
     };
   } catch {
     return fallback;
@@ -337,6 +395,10 @@ export function acquisitionUserMetadata(draft: AcquisitionSignupDraft) {
     after_hours_preference: draft.afterHoursPreference,
     customer_questions: draft.customerQuestions,
     notification_preference: draft.notificationPreference,
+    business_contact_email: draft.contactEmail.trim(),
+    licence_number: draft.licenceNumber,
+    licence_state: draft.licenceState,
+    acquisition_demo_variant: draft.demoVariant,
   };
 }
 
@@ -362,6 +424,7 @@ export function recoverAcquisitionDraftFromUser(
     firstName: value("first_name", fallback.firstName),
     lastName: value("last_name", fallback.lastName),
     email: user.email ?? fallback.email,
+    contactEmail: value("business_contact_email", user.email ?? fallback.contactEmail),
     mobile: value("contact_mobile_e164", fallback.mobile),
     businessPhone: value("business_phone_e164", fallback.businessPhone),
     plan: plan.data,
@@ -374,6 +437,9 @@ export function recoverAcquisitionDraftFromUser(
     afterHoursPreference: value("after_hours_preference", fallback.afterHoursPreference),
     customerQuestions: value("customer_questions", fallback.customerQuestions),
     notificationPreference: value("notification_preference", fallback.notificationPreference),
+    licenceNumber: value("licence_number", fallback.licenceNumber),
+    licenceState: value("licence_state", fallback.licenceState),
+    demoVariant: value("acquisition_demo_variant", fallback.demoVariant),
     attribution: {
       source: nullableValue("acquisition_source", fallback.attribution.source),
       medium: nullableValue("acquisition_medium", fallback.attribution.medium),
@@ -383,4 +449,19 @@ export function recoverAcquisitionDraftFromUser(
     },
   });
   return recovered.success ? recovered.data : null;
+}
+
+export function firstIncompleteAcquisitionStep(draft: AcquisitionSignupDraft): number {
+  if (
+    draft.businessName.trim().length < 2 ||
+    draft.firstName.trim().length < 2 ||
+    draft.lastName.trim().length < 2 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email.trim()) ||
+    !draft.mobile.trim()
+  ) {
+    return 1;
+  }
+  if (!draft.businessPhone.trim() || !draft.serviceArea.trim()) return 2;
+  if (!draft.promoCode.trim()) return 3;
+  return 4;
 }

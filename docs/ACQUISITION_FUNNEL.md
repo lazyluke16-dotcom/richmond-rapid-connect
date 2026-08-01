@@ -66,6 +66,10 @@ The setup waiver never discounts platform or usage charges.
 
 ## Commercial script (58 seconds)
 
+Demo version storage and selection are documented in `DEMO_VARIANTS.md`. The original animated
+commercial is preserved as `demo-original`; `demo-real-world-v2` is the configurable staging
+candidate. No performance winner is claimed until sufficient variant data exists.
+
 | Time   | Picture                                                | On-screen message                                    |
 | ------ | ------------------------------------------------------ | ---------------------------------------------------- |
 | 0–7s   | Plumber working under a sink; phone rings out of reach | You’re under a sink. Your next customer is calling.  |

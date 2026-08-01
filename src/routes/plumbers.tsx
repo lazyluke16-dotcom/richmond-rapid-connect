@@ -14,23 +14,26 @@ import {
 import heroPlumberAvif from "@/assets/hero-plumber.avif";
 import heroPlumber from "@/assets/hero-plumber.jpg";
 import heroPlumberWebp from "@/assets/hero-plumber.webp";
-import { DemoCommercial } from "@/components/acquisition/DemoCommercial";
+import { DemoExperience } from "@/components/acquisition/DemoExperience";
 import { AcquisitionWizard } from "@/components/acquisition/AcquisitionWizard";
 import {
   ACQUISITION_PLANS,
   ACQUISITION_SESSION_KEY,
   ACQUISITION_STORAGE_KEY,
+  ACQUISITION_SAFE_STORAGE_KEY,
   DEFAULT_PROMO_CODE,
   createDefaultAcquisitionDraft,
   calculateAcquisitionRoi,
   getAcquisitionAttribution,
   moneyFromCents,
   normalizePromoCode,
-  readAcquisitionDraft,
+  readSafeAcquisitionDraft,
+  safeAcquisitionDraftForBrowser,
   type AcquisitionEventName,
   type AcquisitionPlan,
   type AcquisitionSignupDraft,
 } from "@/lib/acquisition";
+import { resolveDemoVariant, type DemoVariant } from "@/lib/demo-variants";
 
 export const Route = createFileRoute("/plumbers")({
   head: () => ({
@@ -58,6 +61,8 @@ export const Route = createFileRoute("/plumbers")({
       utm_content: value("utm_content"),
       ref: value("ref"),
       resume: value("resume"),
+      billing: value("billing"),
+      demo: value("demo"),
     };
   },
   component: PlumberAcquisitionPage,
@@ -67,6 +72,9 @@ const SERVICES = ["missed_call_recovery", "ai_receptionist"] as const;
 
 function PlumberAcquisitionPage() {
   const search = Route.useSearch();
+  const demoVariant = resolveDemoVariant(
+    search.demo ?? import.meta.env.VITE_ACQUISITION_DEMO_VARIANT,
+  );
   const attribution = useMemo(() => {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(search)) if (value) params.set(key, value);
@@ -77,14 +85,17 @@ function PlumberAcquisitionPage() {
       createDefaultAcquisitionDraft(
         attribution,
         normalizePromoCode(search.code ?? DEFAULT_PROMO_CODE),
+        demoVariant,
       ),
-    [attribution, search.code],
+    [attribution, demoVariant, search.code],
   );
 
   const [draft, setDraft] = useState<AcquisitionSignupDraft>(fallbackDraft);
   const [sessionId, setSessionId] = useState("");
   const [demoOpen, setDemoOpen] = useState(false);
-  const [wizardOpen, setWizardOpen] = useState(search.resume === "signup");
+  const [wizardOpen, setWizardOpen] = useState(
+    search.resume === "signup" || search.resume === "payment",
+  );
   const [jobValue, setJobValue] = useState(350);
   const landingTracked = useRef(false);
   const comparisonTracked = useRef(false);
@@ -94,13 +105,22 @@ function PlumberAcquisitionPage() {
     const id = existingSession || crypto.randomUUID();
     if (!existingSession) sessionStorage.setItem(ACQUISITION_SESSION_KEY, id);
     setSessionId(id);
-    setDraft(readAcquisitionDraft(localStorage.getItem(ACQUISITION_STORAGE_KEY), fallbackDraft));
+    // v1 stored names, email addresses and phone numbers in localStorage. It is
+    // never authoritative identity and must not survive into another browser user.
+    localStorage.removeItem(ACQUISITION_STORAGE_KEY);
+    setDraft(
+      readSafeAcquisitionDraft(sessionStorage.getItem(ACQUISITION_SAFE_STORAGE_KEY), fallbackDraft),
+    );
   }, [fallbackDraft]);
 
   const track = useCallback(
     (
       eventName: AcquisitionEventName,
-      details?: { plan?: AcquisitionSignupDraft["plan"]; wizardStep?: number },
+      details?: {
+        plan?: AcquisitionSignupDraft["plan"];
+        wizardStep?: number;
+        demoVariant?: DemoVariant;
+      },
     ) => {
       if (!sessionId) return;
       void fetch("/api/public/acquisition", {
@@ -115,12 +135,13 @@ function PlumberAcquisitionPage() {
           plan: details?.plan ?? draft.plan,
           promoCode: draft.promoCode,
           wizardStep: details?.wizardStep ?? null,
+          demoVariant: details?.demoVariant ?? demoVariant,
           attribution,
         }),
         keepalive: true,
       }).catch(() => undefined);
     },
-    [attribution, draft.plan, draft.promoCode, sessionId],
+    [attribution, demoVariant, draft.plan, draft.promoCode, sessionId],
   );
 
   useEffect(() => {
@@ -131,7 +152,10 @@ function PlumberAcquisitionPage() {
 
   const persistDraft = (next: AcquisitionSignupDraft) => {
     setDraft(next);
-    localStorage.setItem(ACQUISITION_STORAGE_KEY, JSON.stringify(next));
+    sessionStorage.setItem(
+      ACQUISITION_SAFE_STORAGE_KEY,
+      JSON.stringify(safeAcquisitionDraftForBrowser(next)),
+    );
   };
 
   const selectPlan = (plan: AcquisitionPlan) => {
@@ -140,8 +164,18 @@ function PlumberAcquisitionPage() {
     track("package_selected", { plan, wizardStep: 0 });
   };
 
+  const selectPlanAndStart = (plan: AcquisitionPlan) => {
+    const next = { ...draft, plan, step: 0 as const };
+    persistDraft(next);
+    track("service_card_clicked", { plan, wizardStep: 0, demoVariant });
+    track("service_selected", { plan, wizardStep: 0 });
+    track("package_selected", { plan, wizardStep: 0 });
+    track("signup_opened", { plan, wizardStep: 0 });
+    setWizardOpen(true);
+  };
+
   const openDemo = () => {
-    track("demo_started");
+    track("demo_started", { demoVariant });
     setDemoOpen(true);
   };
 
@@ -198,10 +232,20 @@ function PlumberAcquisitionPage() {
               call for you. Both put the captured opportunity in Missed Jobs.
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <HeroService icon={MessageSquareText} title="Missed-Call Recovery" price="A$9/mo">
+              <HeroService
+                icon={MessageSquareText}
+                title="Missed-Call Recovery"
+                price="A$9/mo"
+                onStart={() => selectPlanAndStart("missed_call_recovery")}
+              >
                 Missed call → immediate customer text
               </HeroService>
-              <HeroService icon={Bot} title="AI Receptionist" price="A$15/mo">
+              <HeroService
+                icon={Bot}
+                title="AI Receptionist"
+                price="A$15/mo"
+                onStart={() => selectPlanAndStart("ai_receptionist")}
+              >
                 Incoming call → AI answers 24/7
               </HeroService>
             </div>
@@ -280,7 +324,7 @@ function PlumberAcquisitionPage() {
                 key={service}
                 service={service}
                 selected={draft.plan === service || draft.plan === "both"}
-                onSelect={() => selectPlan(service)}
+                onSelect={() => selectPlanAndStart(service)}
               />
             ))}
           </div>
@@ -423,10 +467,11 @@ function PlumberAcquisitionPage() {
         Rapid Connect · Prices in AUD · Variable usage is disclosed before activation
       </footer>
 
-      <DemoCommercial
+      <DemoExperience
+        variant={demoVariant}
         open={demoOpen}
         onClose={() => setDemoOpen(false)}
-        onTrack={track}
+        onTrack={(event) => track(event, { demoVariant })}
         onSignup={() => {
           setDemoOpen(false);
           openWizard();
@@ -439,6 +484,7 @@ function PlumberAcquisitionPage() {
         onClose={() => setWizardOpen(false)}
         onDraftChange={persistDraft}
         onTrack={track}
+        checkoutCancelled={search.billing === "cancelled"}
       />
     </main>
   );
@@ -449,20 +495,29 @@ function HeroService({
   title,
   price,
   children,
+  onStart,
 }: {
   icon: typeof PhoneCall;
   title: string;
   price: string;
   children: React.ReactNode;
+  onStart: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-white/12 bg-black/25 p-4 backdrop-blur">
+    <div className="rounded-xl border border-white/12 bg-black/25 p-4 backdrop-blur transition hover:border-yellow-300/60 focus-within:ring-4 focus-within:ring-yellow-300/30">
       <div className="flex items-center justify-between gap-3">
         <Icon className="h-5 w-5 text-yellow-300" />
         <span className="font-black text-yellow-300">{price}</span>
       </div>
       <div className="mt-3 font-black">{title}</div>
       <div className="mt-1 text-xs text-white/60">{children}</div>
+      <button
+        type="button"
+        onClick={onStart}
+        className="mt-4 min-h-11 w-full rounded-lg bg-white/10 px-3 text-sm font-black outline-none hover:bg-yellow-400 hover:text-slate-950 focus-visible:ring-2 focus-visible:ring-yellow-300"
+      >
+        Choose {title}
+      </button>
     </div>
   );
 }

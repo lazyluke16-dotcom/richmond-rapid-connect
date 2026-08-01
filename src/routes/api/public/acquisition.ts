@@ -94,6 +94,7 @@ export const Route = createFileRoute("/api/public/acquisition")({
               plan: event.plan ?? null,
               promo_code: event.promoCode ? normalizePromoCode(event.promoCode) : null,
               wizard_step: event.wizardStep ?? null,
+              demo_variant: event.demoVariant ?? null,
               source: event.attribution.source,
               medium: event.attribution.medium,
               campaign: event.attribution.campaign,
