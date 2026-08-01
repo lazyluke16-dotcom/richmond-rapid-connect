@@ -295,6 +295,14 @@ jobs:
           --environment-id "${{ inputs.environment_id }}"
           --evidence-out staging-deployment-evidence.json
 
+      - name: Point the existing Stripe test webhook at isolated staging
+        env:
+          DEPLOYMENT_TARGET: staging
+          STRIPE_MODE: test
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: node scripts/configure-staging-stripe-webhook.mjs
+
       - name: Upload non-secret deployment evidence
         uses: actions/upload-artifact@v4
         with:

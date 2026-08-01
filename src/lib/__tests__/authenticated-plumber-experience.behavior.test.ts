@@ -113,3 +113,20 @@ describe("authenticated plumber application shell", () => {
     );
   });
 });
+
+describe("isolated staging Stripe webhook repair", () => {
+  it("updates one existing test endpoint after the exact hosted release and never creates one", () => {
+    const workflow = source(".github/workflows/staging-deployment.yml");
+    const script = source("scripts/configure-staging-stripe-webhook.mjs");
+    expect(workflow.indexOf("Verify exact hosted release identity")).toBeLessThan(
+      workflow.indexOf("Point the existing Stripe test webhook at isolated staging"),
+    );
+    expect(workflow).toContain("node scripts/configure-staging-stripe-webhook.mjs");
+    expect(script).toContain('env.DEPLOYMENT_TARGET !== "staging"');
+    expect(script).toContain('env.STRIPE_MODE !== "test"');
+    expect(script).toContain('key.startsWith("sk_test_")');
+    expect(script).toContain("eligible.length !== 1");
+    expect(script).toContain("stripe.webhookEndpoints.update");
+    expect(script).not.toContain("stripe.webhookEndpoints.create");
+  });
+});
