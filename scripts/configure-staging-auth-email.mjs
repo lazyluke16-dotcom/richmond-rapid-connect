@@ -15,20 +15,28 @@ function assert(condition, message) {
 }
 
 async function managementRequest(url, token, init = {}) {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
+  const attempts = 3;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        ...init.headers,
+      },
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok) return body;
+
     const safeDetail = [body?.code, body?.message, body?.error]
       .find((value) => typeof value === "string")
       ?.replace(/[\r\n]+/g, " ")
       .slice(0, 240);
+    const retryable = response.status === 429 || response.status >= 500;
+    if (retryable && attempt < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      continue;
+    }
     const error = new Error(
       `Supabase Auth configuration returned HTTP ${response.status}${safeDetail ? `: ${safeDetail}` : ""}`,
     );
@@ -36,7 +44,7 @@ async function managementRequest(url, token, init = {}) {
     error.safeDetail = safeDetail ?? "";
     throw error;
   }
-  return body;
+  throw new Error("Supabase Auth configuration retry loop ended unexpectedly");
 }
 
 export async function configureStagingAuthEmail(env = process.env) {

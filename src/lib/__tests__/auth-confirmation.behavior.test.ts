@@ -26,6 +26,7 @@ describe("Rapid Connect email confirmation", () => {
     expect(source("scripts/configure-staging-auth-email.mjs")).toContain(
       'boundary: "supabase_default_email_provider"',
     );
+    expect(source("scripts/configure-staging-auth-email.mjs")).toContain("const attempts = 3");
   });
 
   it("accepts code, token-hash and implicit same/new-tab confirmation responses", () => {
