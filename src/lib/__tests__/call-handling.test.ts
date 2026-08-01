@@ -27,6 +27,10 @@ const recoveredVapiMappingMigration = readFileSync(
   ),
   "utf8",
 );
+const seamlessMigration = readFileSync(
+  resolve(process.cwd(), "supabase/migrations/20260801130000_seamless_acquisition_activation.sql"),
+  "utf8",
+);
 
 describe("fresh migration replay safety", () => {
   it("guards the recovered Vapi mapping when its historical business is absent", () => {
@@ -65,9 +69,15 @@ describe("Australian customer phone normalisation", () => {
 });
 
 describe("entitlements and one authoritative mode", () => {
-  it("allows the AI plan to include both customer services", () => {
+  it("keeps the two subscriptions distinct and supports choosing both", () => {
     expect(
       entitlementsForPlan("ai_receptionist", {
+        missedCall: true,
+        aiReceptionist: true,
+      }),
+    ).toEqual({ textLink: false, aiReceptionist: true });
+    expect(
+      entitlementsForPlan("both", {
         missedCall: true,
         aiReceptionist: true,
       }),
@@ -215,6 +225,24 @@ describe("Text Link idempotency, tenant isolation and usage", () => {
       "REVOKE INSERT, UPDATE, DELETE ON public.business_telephony_settings FROM authenticated",
     );
     expect(migration).toContain("GRANT EXECUTE ON FUNCTION public.set_my_call_handling_mode");
+  });
+
+  it("adds independent operational switches without cancelling subscriptions", () => {
+    expect(seamlessMigration).toContain("missed_call_recovery_enabled boolean");
+    expect(seamlessMigration).toContain("ai_receptionist_enabled boolean");
+    expect(seamlessMigration).toContain("set_my_service_enabled");
+    expect(seamlessMigration).toContain("Verify call forwarding before switching this service on");
+    expect(seamlessMigration).not.toMatch(
+      /set_my_service_enabled[\s\S]*stripe\.subscriptions\.del/,
+    );
+  });
+
+  it("creates tenant-scoped, notification-safe, repeat-safe test jobs", () => {
+    expect(seamlessMigration).toContain("create_my_test_job");
+    expect(seamlessMigration).toContain("leads_business_test_run_unique");
+    expect(seamlessMigration).toContain("'test:no-send'");
+    expect(seamlessMigration).toContain("is_test");
+    expect(seamlessMigration).toContain("IF NEW.is_test THEN RETURN NEW");
   });
 
   it("keeps the guarded backfill idempotent and free of production ids", () => {

@@ -93,5 +93,7 @@ export const redeemMyAcquisitionOffer = createServerFn({ method: "POST" })
       promotionCode: string;
       plan: AcquisitionPlan;
       setupFeeWaivedCents: number;
+      offerVersion: string;
+      subscriptionMonthsFree: number;
     };
   });

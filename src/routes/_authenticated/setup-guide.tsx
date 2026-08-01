@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Bot, Building2, CheckCircle2, PhoneCall } from "lucide-react";
+import { ArrowRight, Bot, Building2, CheckCircle2, ClipboardList, PhoneCall } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/setup-guide")({
   head: () => ({ meta: [{ title: "Setup guide — Rapid Connect" }] }),
@@ -8,11 +8,18 @@ export const Route = createFileRoute("/_authenticated/setup-guide")({
 
 const steps = [
   {
-    title: "Connect call handling",
-    description: "Tell us which business number receives calls and where unanswered calls go.",
+    title: "Set up and switch on your service",
+    description: "Verify your existing business number, then use the large service switch.",
     to: "/call-handling",
-    action: "Set up call handling",
+    action: "Open Services",
     icon: PhoneCall,
+  },
+  {
+    title: "Send your first safe test job",
+    description: "Create a clearly marked test entry and see the exact details in Missed Jobs.",
+    to: "/call-handling",
+    action: "Send a test job",
+    icon: ClipboardList,
   },
   {
     title: "Check your customer reply",
@@ -43,7 +50,7 @@ function SetupGuidePage() {
       <p className="text-xs font-black uppercase tracking-[0.2em] text-primary">
         Help & setup guide
       </p>
-      <h1 className="mt-2 text-3xl font-black">Get ready for your next missed call</h1>
+      <h1 className="mt-2 text-3xl font-black">Get to your first captured job</h1>
       <p className="mt-2 max-w-2xl text-muted-foreground">
         Work through these short steps. Your settings stay editable, so you do not need to get
         everything perfect the first time.
@@ -52,7 +59,7 @@ function SetupGuidePage() {
         {steps.map((step, index) => {
           const Icon = step.icon;
           return (
-            <li key={step.to} className="rounded-xl border border-border bg-card p-5">
+            <li key={step.title} className="rounded-xl border border-border bg-card p-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-primary/15 font-black text-primary">
                   <Icon className="h-5 w-5" aria-hidden="true" />

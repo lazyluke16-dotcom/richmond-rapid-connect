@@ -21,10 +21,11 @@ type VerifiedPurchase = {
   verified: true;
   status: "active";
   billingStatus: "active";
-  plan: "missed_call_recovery" | "ai_receptionist";
+  plan: "missed_call_recovery" | "ai_receptionist" | "both";
   planName: string;
   monthlyPriceAud: number;
   foundingBenefit: string | null;
+  normalBillingStartsAt: string | null;
 };
 
 type State =
@@ -167,7 +168,7 @@ export function SubscriptionSuccess({ search }: { search: CheckoutReturnSearch }
             </div>
             <div>
               <dt className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Monthly
+                Normal monthly
               </dt>
               <dd className="mt-1 font-black">A${purchase.monthlyPriceAud}/month</dd>
             </div>
@@ -186,11 +187,25 @@ export function SubscriptionSuccess({ search }: { search: CheckoutReturnSearch }
               </div>
             </div>
           )}
+          {purchase.normalBillingStartsAt && (
+            <p className="rounded-lg bg-muted p-3 text-sm">
+              Your first three monthly platform fees are A$0. Usage charges apply from activation.
+              Normal subscription billing begins{" "}
+              <b>
+                {new Date(purchase.normalBillingStartsAt).toLocaleDateString("en-AU", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </b>
+              .
+            </p>
+          )}
           <div>
-            <h3 className="font-black">Next: connect your missed-call service</h3>
+            <h3 className="font-black">Next: finish setup and switch your service on</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Tell us where your calls should go and how customers should be followed up. You can
-              change these details at any time.
+              Verify forwarding, review the sensible defaults, then send your first safe test job.
+              You can refine advanced details later.
             </p>
           </div>
           <DialogFooter className="gap-2 sm:space-x-0">

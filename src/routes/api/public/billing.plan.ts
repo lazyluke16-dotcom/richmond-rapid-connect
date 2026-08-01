@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { extractBearerToken, requireAuthAndBusiness } from "@/lib/billing.server";
 import type { SelectedPlan } from "@/lib/billing-types";
 
-const ALLOWED_PLANS = new Set<SelectedPlan>(["missed_call_recovery", "ai_receptionist"]);
+const ALLOWED_PLANS = new Set<SelectedPlan>(["missed_call_recovery", "ai_receptionist", "both"]);
 
 export const Route = createFileRoute("/api/public/billing/plan")({
   server: {

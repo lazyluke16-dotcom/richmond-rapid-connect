@@ -46,6 +46,16 @@ function resources() {
       duration: "once",
       applies_to: { products: ["prod_air_base", "prod_mcr"] },
     },
+    foundingCoupon: {
+      object: "coupon",
+      livemode: false,
+      valid: true,
+      percent_off: 100,
+      amount_off: null,
+      duration: "repeating",
+      duration_in_months: 3,
+      applies_to: { products: ["prod_air_base", "prod_mcr"] },
+    },
   };
 }
 
@@ -61,6 +71,8 @@ describe("Stripe checkout staging resource validation", () => {
       accountId: "acct_test",
       priceCount: 3,
       couponScopedToBaseProducts: true,
+      foundingCouponThreeMonths: true,
+      usageProductsExcludedFromFoundingCoupon: true,
     });
   });
 
@@ -90,12 +102,7 @@ describe("staging FOUNDINGPLUMBER coupon safety", () => {
     const input = resources();
     return {
       prices: input.prices,
-      coupon: {
-        ...input.coupon,
-        amount_off: null,
-        duration: "repeating",
-        duration_in_months: 3,
-      },
+      coupon: input.foundingCoupon,
     };
   }
 

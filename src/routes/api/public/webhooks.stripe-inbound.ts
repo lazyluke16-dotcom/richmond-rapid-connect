@@ -2,7 +2,7 @@
 // Fail closed: any signature failure returns 400 and does not process the event.
 import { createFileRoute } from "@tanstack/react-router";
 import type Stripe from "stripe";
-import { getStripe } from "@/lib/stripe.server";
+import { getFoundingThreeMonthCouponId, getStripe } from "@/lib/stripe.server";
 import { setGracePeriod, clearGraceAndActivate, suspendBusiness } from "@/lib/billing.server";
 
 function jsonOk(body: unknown, status = 200) {
@@ -21,6 +21,12 @@ function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
   ).subscription;
   const subscription = current ?? legacy;
   return typeof subscription === "string" ? subscription : (subscription?.id ?? null);
+}
+
+function couponIdForDiscount(discount: string | Stripe.Discount): string | null {
+  if (typeof discount === "string") return null;
+  const coupon = discount.source?.coupon;
+  return typeof coupon === "string" ? coupon : (coupon?.id ?? null);
 }
 
 async function getBusinessIdFromSubscription(
@@ -117,7 +123,30 @@ export const Route = createFileRoute("/api/public/webhooks/stripe-inbound")({
                 break;
               }
 
-              const sub = await stripe.subscriptions.retrieve(subscriptionId);
+              const sub = await stripe.subscriptions.retrieve(subscriptionId, {
+                expand: ["discounts"],
+              });
+              const foundingOffer =
+                session.metadata?.offer_version === "founding-2026-three-months";
+              const foundingCouponId = foundingOffer ? getFoundingThreeMonthCouponId() : null;
+              const foundingDiscount = foundingOffer
+                ? sub.discounts.find(
+                    (discount) => couponIdForDiscount(discount) === foundingCouponId,
+                  )
+                : undefined;
+              const foundingDiscountObject =
+                foundingDiscount && typeof foundingDiscount !== "string" ? foundingDiscount : null;
+              if (foundingOffer && (!foundingCouponId || !foundingDiscountObject?.end)) {
+                throw new Error(
+                  "Founding offer discount could not be verified on the subscription",
+                );
+              }
+              const foundingStartsAt = foundingDiscountObject?.start
+                ? new Date(foundingDiscountObject.start * 1000).toISOString()
+                : null;
+              const foundingEndsAt = foundingDiscountObject?.end
+                ? new Date(foundingDiscountObject.end * 1000).toISOString()
+                : null;
 
               const { error: activationError } = await supabaseAdmin
                 .from("business_billing")
@@ -163,10 +192,32 @@ export const Route = createFileRoute("/api/public/webhooks/stripe-inbound")({
                   grace_expires_at: null,
                   suspended_at: null,
                   last_synced_at: new Date().toISOString(),
+                  ...(foundingOffer
+                    ? {
+                        founding_offer_redeemed_at: foundingStartsAt,
+                        founding_offer_ends_at: foundingEndsAt,
+                        normal_billing_starts_at: foundingEndsAt,
+                      }
+                    : {}),
                 })
                 .eq("business_id", businessId);
               if (activationError) {
                 throw new Error(`Failed to activate paid subscription: ${activationError.message}`);
+              }
+
+              if (foundingOffer) {
+                const { error: redemptionError } = await supabaseAdmin
+                  .from("acquisition_promo_redemptions" as never)
+                  .update({
+                    subscription_promo_redeemed_at: foundingStartsAt,
+                    subscription_promo_ends_at: foundingEndsAt,
+                  } as never)
+                  .eq("business_id", businessId);
+                if (redemptionError) {
+                  throw new Error(
+                    `Failed to record founding offer redemption: ${redemptionError.message}`,
+                  );
+                }
               }
 
               const { data: billingRow } = await supabaseAdmin
@@ -200,6 +251,27 @@ export const Route = createFileRoute("/api/public/webhooks/stripe-inbound")({
                   .eq("business_id", businessId);
                 if (offerError) {
                   throw new Error(`Failed to record union offer redemption: ${offerError.message}`);
+                }
+              }
+
+              const { data: acquisitionBusiness } = await supabaseAdmin
+                .from("businesses")
+                .select("acquisition_session_id")
+                .eq("id", businessId)
+                .maybeSingle();
+              const sessionId = (
+                acquisitionBusiness as { acquisition_session_id?: string | null } | null
+              )?.acquisition_session_id;
+              if (sessionId) {
+                for (const eventName of ["checkout_completed", "activation_completed"]) {
+                  await supabaseAdmin.from("acquisition_events" as never).insert({
+                    event_id: crypto.randomUUID(),
+                    session_id: sessionId,
+                    business_id: businessId,
+                    event_name: eventName,
+                    path: "/dashboard",
+                    plan,
+                  } as never);
                 }
               }
 

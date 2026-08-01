@@ -15,7 +15,14 @@ import {
   X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { createMyBusiness, getOnboardingStatus } from "@/lib/onboarding.functions";
+import {
+  completeOnboarding,
+  createMyBusiness,
+  getOnboardingStatus,
+  setMyAreas,
+  setMyHours,
+  setMyServices,
+} from "@/lib/onboarding.functions";
 import { updateMyBusiness } from "@/lib/business-settings.functions";
 import { normalizeAustralianPhone } from "@/lib/call-handling";
 import { redeemMyAcquisitionOffer } from "@/lib/acquisition.functions";
@@ -24,15 +31,26 @@ import {
   ACQUISITION_STORAGE_KEY,
   AcquisitionSignupDraftSchema,
   moneyFromCents,
+  normalBillingDate,
   normalizePromoCode,
   recoverAcquisitionDraftFromUser,
+  acquisitionUserMetadata,
+  acquisitionAreaRows,
+  acquisitionHourRows,
+  acquisitionServiceRows,
   type AcquisitionEventName,
   type AcquisitionSignupDraft,
 } from "@/lib/acquisition";
 
 type PromoState =
   | { status: "checking" }
-  | { status: "valid"; waivedSetupFeeCents: number; expiresAt: string | null }
+  | {
+      status: "valid";
+      waivedSetupFeeCents: number;
+      subscriptionMonthsFree: number;
+      offerVersion: string;
+      expiresAt: string | null;
+    }
   | { status: "invalid"; message: string };
 
 export function AcquisitionWizard({
@@ -62,11 +80,16 @@ export function AcquisitionWizard({
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
   const resumeAttempted = useRef(false);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const wizardStarted = useRef(false);
 
   useEffect(() => setDraft(initialDraft), [initialDraft]);
 
   useEffect(() => {
     if (!open) return;
+    if (!wizardStarted.current) {
+      wizardStarted.current = true;
+      onTrack("wizard_started", { plan: draft.plan, wizardStep: draft.step });
+    }
     onTrack("wizard_step_viewed", { plan: draft.plan, wizardStep: draft.step });
   }, [draft.plan, draft.step, onTrack, open]);
 
@@ -96,6 +119,8 @@ export function AcquisitionWizard({
           const payload = (await response.json()) as {
             valid?: boolean;
             waivedSetupFeeCents?: number;
+            subscriptionMonthsFree?: number;
+            offerVersion?: string;
             expiresAt?: string | null;
             error?: string;
           };
@@ -106,6 +131,8 @@ export function AcquisitionWizard({
           setPromo({
             status: "valid",
             waivedSetupFeeCents: payload.waivedSetupFeeCents,
+            subscriptionMonthsFree: payload.subscriptionMonthsFree ?? 0,
+            offerVersion: payload.offerVersion ?? "setup-waiver-v1",
             expiresAt: payload.expiresAt ?? null,
           });
           onTrack("promo_validated", { plan: draft.plan, wizardStep: draft.step });
@@ -160,6 +187,7 @@ export function AcquisitionWizard({
       return;
     }
     const nextStep = Math.min(4, draft.step + 1);
+    onTrack("wizard_stage_completed", { plan: draft.plan, wizardStep: draft.step });
     update({ step: nextStep });
   };
 
@@ -196,22 +224,7 @@ export function AcquisitionWizard({
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/plumbers?resume=signup`,
-          data: {
-            first_name: draft.firstName.trim(),
-            last_name: draft.lastName.trim(),
-            business_name: draft.businessName.trim(),
-            business_phone_e164: businessPhone,
-            contact_mobile_e164: mobile,
-            acquisition_plan: draft.plan,
-            acquisition_promo_code: normalizePromoCode(draft.promoCode),
-            acquisition_source: draft.attribution.source,
-            acquisition_medium: draft.attribution.medium,
-            acquisition_campaign: draft.attribution.campaign,
-            acquisition_content: draft.attribution.content,
-            referral_code: draft.attribution.referralCode,
-            call_handling_timing: draft.handlingTiming,
-            current_answering_arrangement: draft.currentArrangement,
-          },
+          data: acquisitionUserMetadata(metadataDraft),
         },
       });
       if (signupError) throw signupError;
@@ -367,6 +380,7 @@ async function continueAuthenticatedSignup(
   ) => void,
 ) {
   const status = await getOnboardingStatus();
+  const shouldSeedSetup = !status.onboarding_completed;
   if (!status.hasBusiness) {
     await createMyBusiness({
       data: {
@@ -377,13 +391,27 @@ async function continueAuthenticatedSignup(
         referral_code: draft.attribution.referralCode,
       },
     });
+  }
+  if (shouldSeedSetup) {
     await updateMyBusiness({
       data: {
         name: draft.businessName.trim(),
         public_phone: normalizeAustralianPhone(draft.businessPhone),
         public_email: draft.email.trim(),
+        short_description: draft.servicesOffered.trim(),
+        hero_heading: `${draft.businessName.trim()} plumbing help`,
+        hero_subheading: `Local help across ${draft.serviceArea.trim()}.`,
+        emergency_message:
+          draft.afterHoursPreference === "next_business_day"
+            ? "Leave your job details and we will respond next business day."
+            : "Tell us what is urgent and we will alert the plumber.",
       },
     });
+    await Promise.all([
+      setMyServices({ data: { services: acquisitionServiceRows(draft.servicesOffered) } }),
+      setMyAreas({ data: { areas: acquisitionAreaRows(draft.serviceArea) } }),
+      setMyHours({ data: { hours: acquisitionHourRows(draft.businessHours) } }),
+    ]);
   }
   await redeemMyAcquisitionOffer({
     data: {
@@ -393,6 +421,7 @@ async function continueAuthenticatedSignup(
       attribution: draft.attribution,
     },
   });
+  if (shouldSeedSetup) await completeOnboarding();
   onTrack("account_created", { plan: draft.plan, wizardStep: 4 });
   localStorage.removeItem(ACQUISITION_STORAGE_KEY);
 
@@ -403,6 +432,7 @@ async function continueAuthenticatedSignup(
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
+  onTrack("checkout_started", { plan: draft.plan, wizardStep: 4 });
   const payload = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
   if (!response.ok || !payload.url) {
     onTrack("checkout_failed", { plan: draft.plan, wizardStep: 4 });
@@ -482,10 +512,10 @@ function WizardFrame({ children, onClose }: { children: React.ReactNode; onClose
 }
 
 const STEP_TITLES = [
-  "Choose your receptionist",
+  "Choose the service that fits",
   "Tell us about your business",
   "How should calls be handled?",
-  "Confirm your fee waiver",
+  "Confirm your founding offer",
   "Create your secure account",
 ] as const;
 
@@ -520,9 +550,9 @@ function PlanStep({
                 : "border-border bg-card hover:border-primary/50"
             }`}
           >
-            {plan === "ai_receptionist" && (
+            {plan === "both" && (
               <span className="absolute right-4 top-4 rounded-full bg-primary px-2.5 py-1 text-[10px] font-black text-primary-foreground">
-                MOST COMPLETE
+                BOTH SERVICES
               </span>
             )}
             <span
@@ -539,6 +569,9 @@ function PlanStep({
               {moneyFromCents(config.platformFeeCents)}
               <span className="text-sm font-medium text-muted-foreground">/month</span>
             </div>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              {config.explanation}
+            </p>
             <p className="mt-1 text-xs text-muted-foreground">{config.usage}</p>
             <ul className="mt-5 space-y-2 text-sm">
               {config.includes.map((item) => (
@@ -641,6 +674,61 @@ function PhoneStep({
           ["answering_service", "An external answering service"],
         ]}
       />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Services you offer"
+          value={draft.servicesOffered}
+          onChange={(servicesOffered) => update({ servicesOffered })}
+          hint="A short list is enough. You can refine this later."
+        />
+        <Field
+          label="Service area"
+          value={draft.serviceArea}
+          onChange={(serviceArea) => update({ serviceArea })}
+          hint="For example: Richmond and suburbs within 15 km."
+        />
+      </div>
+      <ChoiceGroup
+        label="Business hours"
+        value={draft.businessHours}
+        onChange={(businessHours) => update({ businessHours })}
+        options={[
+          ["Monday to Friday, 8am–5pm", "Weekdays, 8am–5pm"],
+          ["Monday to Saturday, 8am–5pm", "Monday–Saturday, 8am–5pm"],
+          ["Every day, 8am–5pm", "Every day, 8am–5pm"],
+          ["24/7", "24 hours, every day"],
+        ]}
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ChoiceGroup
+          label="After-hours jobs"
+          value={draft.afterHoursPreference}
+          onChange={(afterHoursPreference) => update({ afterHoursPreference })}
+          options={[
+            ["collect_and_notify", "Collect details and alert me"],
+            ["urgent_only", "Alert me only when urgent"],
+            ["next_business_day", "Hold for the next business day"],
+          ]}
+        />
+        <ChoiceGroup
+          label="Job alerts"
+          value={draft.notificationPreference}
+          onChange={(notificationPreference) => update({ notificationPreference })}
+          options={[
+            ["sms", "Text message"],
+            ["email", "Email"],
+            ["both", "Text and email"],
+          ]}
+        />
+      </div>
+      {draft.plan !== "missed_call_recovery" && (
+        <Field
+          label="What should the AI collect?"
+          value={draft.customerQuestions}
+          onChange={(customerQuestions) => update({ customerQuestions })}
+          hint="The sensible default covers job, suburb, urgency and callback time."
+        />
+      )}
       <div className="rounded-xl border border-sky-400/20 bg-sky-400/10 p-4 text-sm">
         <div className="flex gap-3">
           <Phone className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
@@ -675,7 +763,7 @@ function OfferStep({
             <div className="text-xs font-black uppercase tracking-widest text-primary">
               Launch offer
             </div>
-            <h3 className="text-xl font-black">Waive your complete setup fee</h3>
+            <h3 className="text-xl font-black">No sign-on fee. Three subscription months free.</h3>
           </div>
         </div>
         <div className="mt-6 flex items-end justify-between gap-4 rounded-xl bg-background/60 p-4">
@@ -689,7 +777,7 @@ function OfferStep({
           </div>
           <div className="text-right">
             <div className="text-xs uppercase tracking-widest text-muted-foreground">With code</div>
-            <div className="mt-1 text-4xl font-black text-primary">$0</div>
+            <div className="mt-1 text-4xl font-black text-primary">A$0</div>
           </div>
         </div>
         <label className="mt-5 block">
@@ -725,13 +813,13 @@ function OfferStep({
           {promo.status === "checking"
             ? "Checking code…"
             : promo.status === "valid"
-              ? `${moneyFromCents(promo.waivedSetupFeeCents)} setup fee waived.`
+              ? `${moneyFromCents(promo.waivedSetupFeeCents)} sign-on fee waived and ${promo.subscriptionMonthsFree} subscription months free.`
               : promo.message}
         </p>
       </div>
       <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-        The setup waiver does not discount recurring platform or usage charges. Your selected
-        package remains {moneyFromCents(plan.platformFeeCents)}/month plus the usage shown.
+        Usage charges apply from activation. Your platform subscription is A$0 for the first three
+        monthly billing periods, then {moneyFromCents(plan.platformFeeCents)}/month. Cancel anytime.
       </p>
     </div>
   );
@@ -782,9 +870,9 @@ function AccountStep({
           className="mt-0.5 h-5 w-5 accent-yellow-400"
         />
         <span>
-          I agree to the displayed recurring price and usage charges, and I authorise Rapid Connect
-          to open Stripe’s secure payment setup. The setup fee shown above will be $0 while the
-          verified offer remains valid.
+          I agree to A$0 sign-on, A$0 platform subscription fees for the first three monthly billing
+          periods, usage charges from activation, and then {moneyFromCents(plan.platformFeeCents)}
+          /month until cancelled. I authorise Rapid Connect to open Stripe’s secure payment setup.
         </span>
       </label>
       <div className="flex gap-3 rounded-xl bg-muted/60 p-4 text-xs text-muted-foreground">
@@ -796,7 +884,7 @@ function AccountStep({
       </div>
       {promo.status !== "valid" && (
         <p className="text-sm text-destructive">
-          A verified offer code is required to continue with the $0 setup offer.
+          A verified offer code is required to continue with the A$0 setup offer.
         </p>
       )}
     </div>
@@ -812,7 +900,11 @@ function OrderSummary({ draft, promo }: { draft: AcquisitionSignupDraft; promo: 
       </div>
       <h3 className="mt-2 text-lg font-black">{plan.name}</h3>
       <div className="mt-5 space-y-3 border-y border-border py-4 text-sm">
-        <SummaryRow label="Platform" value={`${moneyFromCents(plan.platformFeeCents)}/month`} />
+        <SummaryRow
+          label="Normal subscription"
+          value={`${moneyFromCents(plan.platformFeeCents)}/month`}
+        />
+        <SummaryRow label="First three months" value="A$0 platform fees" accent />
         <SummaryRow label="Usage" value={plan.usage} />
         <SummaryRow label="Setup fee" value={moneyFromCents(plan.setupFeeCents)} strike />
         <SummaryRow
@@ -824,14 +916,15 @@ function OrderSummary({ draft, promo }: { draft: AcquisitionSignupDraft; promo: 
         />
       </div>
       <div className="mt-4 flex items-end justify-between">
-        <span className="text-sm font-bold">Due for setup</span>
+        <span className="text-sm font-bold">Sign-on fee</span>
         <span className="text-3xl font-black text-primary">
-          {promo.status === "valid" ? "$0" : "—"}
+          {promo.status === "valid" ? "A$0" : "—"}
         </span>
       </div>
       <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-        Prices are AUD. Usage is metered separately. GST is applied at the invoice boundary where
-        required.
+        If activated today, normal subscription billing begins {normalBillingDate()}. Prices are
+        AUD. Usage is metered separately from day one. GST is applied where required. Cancel
+        anytime.
       </p>
     </aside>
   );
@@ -954,6 +1047,10 @@ function validateStep(
     } catch {
       return "Enter a valid Australian business phone number.";
     }
+    if (acquisitionServiceRows(draft.servicesOffered).length === 0)
+      return "Add at least one plumbing service.";
+    if (acquisitionAreaRows(draft.serviceArea).length === 0)
+      return "Enter the suburb or service area you cover.";
   }
   if (draft.step === 3 && promo.status !== "valid")
     return "Enter a valid offer code to waive the setup fee.";

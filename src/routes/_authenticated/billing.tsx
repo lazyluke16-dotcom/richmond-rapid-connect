@@ -27,7 +27,7 @@ type BillingSummary = {
     publicPhone: string | null;
   };
   billing: {
-    selectedPlan: "missed_call_recovery" | "ai_receptionist" | null;
+    selectedPlan: "missed_call_recovery" | "ai_receptionist" | "both" | null;
     billingStatus: string;
     effectiveState: string;
     billingExempt: boolean;
@@ -36,6 +36,7 @@ type BillingSummary = {
     hasStripeCustomer: boolean;
     hasStripeSubscription: boolean;
     foundingPlumberBenefit: string | null;
+    normalBillingStartsAt: string | null;
   };
   usage: {
     periodStart: string | null;
@@ -54,6 +55,8 @@ type BillingSummary = {
     phoneStatus: string;
     aiReceptionist: boolean;
     sms: boolean;
+    missedCallRecoveryEnabled: boolean;
+    aiReceptionistEnabled: boolean;
   };
 };
 
@@ -80,9 +83,9 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"checkout" | "portal" | null>(null);
-  const [selectedPlan, setSelectedPlan] = useState<"missed_call_recovery" | "ai_receptionist">(
-    "missed_call_recovery",
-  );
+  const [selectedPlan, setSelectedPlan] = useState<
+    "missed_call_recovery" | "ai_receptionist" | "both"
+  >("missed_call_recovery");
   const [planBusy, setPlanBusy] = useState(false);
   const [securityMessage, setSecurityMessage] = useState<string | null>(null);
 
@@ -214,11 +217,13 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
                     Current plan
                   </div>
                   <div className="mt-1 text-xl font-black">
-                    {summary.billing.selectedPlan === "ai_receptionist"
-                      ? "AI Receptionist"
-                      : summary.billing.selectedPlan === "missed_call_recovery"
-                        ? "Missed-Call Recovery"
-                        : "No plan selected"}
+                    {summary.billing.selectedPlan === "both"
+                      ? "Missed-Call Recovery + AI Receptionist"
+                      : summary.billing.selectedPlan === "ai_receptionist"
+                        ? "AI Receptionist"
+                        : summary.billing.selectedPlan === "missed_call_recovery"
+                          ? "Missed-Call Recovery"
+                          : "No plan selected"}
                   </div>
                   <div className="mt-2 text-sm">
                     Status:{" "}
@@ -235,6 +240,16 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
                     <div className="text-xs text-muted-foreground">
                       Current period ends{" "}
                       {new Date(summary.billing.currentPeriodEnd).toLocaleDateString()}
+                    </div>
+                  )}
+                  {summary.billing.normalBillingStartsAt && (
+                    <div className="mt-2 text-sm font-bold text-primary">
+                      Normal subscription billing begins{" "}
+                      {new Date(summary.billing.normalBillingStartsAt).toLocaleDateString("en-AU", {
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric",
+                      })}
                     </div>
                   )}
                   {summary.billing.graceExpiresAt && (
@@ -275,20 +290,27 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
                     <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
                       Your account is ready, but it has no subscription. Choose a plan to continue.
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-3 sm:grid-cols-3">
                       <PlanChoice
                         active={selectedPlan === "missed_call_recovery"}
-                        title="Text Receptionist"
+                        title="Missed-Call Recovery"
                         price="A$9/month"
                         detail="Missed-call text recovery and lead capture."
                         onClick={() => setSelectedPlan("missed_call_recovery")}
                       />
                       <PlanChoice
                         active={selectedPlan === "ai_receptionist"}
-                        title="Text + AI Receptionist"
+                        title="AI Receptionist"
                         price="A$15/month"
-                        detail="AI phone answering plus text recovery and usage."
+                        detail="Answers calls and captures the job."
                         onClick={() => setSelectedPlan("ai_receptionist")}
+                      />
+                      <PlanChoice
+                        active={selectedPlan === "both"}
+                        title="Both services"
+                        price="A$24/month"
+                        detail="AI answering plus missed-call follow-up."
+                        onClick={() => setSelectedPlan("both")}
                       />
                     </div>
                     <button
@@ -446,7 +468,7 @@ export function BillingAccountPage({ initialSection }: { initialSection?: "usage
                   to="/call-handling"
                   className="mt-5 inline-block text-sm font-bold text-primary underline"
                 >
-                  Manage call handling
+                  Manage service switches
                 </Link>
               </section>
             </div>

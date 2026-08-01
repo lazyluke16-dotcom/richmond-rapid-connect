@@ -1,12 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Check, PhoneCall, Play, ShieldCheck, Sparkles, Wrench } from "lucide-react";
+import {
+  ArrowRight,
+  Bot,
+  Check,
+  ClipboardList,
+  MessageSquareText,
+  PhoneCall,
+  Play,
+  ShieldCheck,
+  Wrench,
+} from "lucide-react";
 import heroPlumberAvif from "@/assets/hero-plumber.avif";
 import heroPlumber from "@/assets/hero-plumber.jpg";
 import heroPlumberWebp from "@/assets/hero-plumber.webp";
-import heroPlumberMobileAvif from "@/assets/hero-plumber-mobile.avif";
-import heroPlumberMobile from "@/assets/hero-plumber-mobile.jpg";
-import heroPlumberMobileWebp from "@/assets/hero-plumber-mobile.webp";
 import { DemoCommercial } from "@/components/acquisition/DemoCommercial";
 import { AcquisitionWizard } from "@/components/acquisition/AcquisitionWizard";
 import {
@@ -15,28 +22,24 @@ import {
   ACQUISITION_STORAGE_KEY,
   DEFAULT_PROMO_CODE,
   createDefaultAcquisitionDraft,
+  calculateAcquisitionRoi,
   getAcquisitionAttribution,
   moneyFromCents,
   normalizePromoCode,
   readAcquisitionDraft,
   type AcquisitionEventName,
+  type AcquisitionPlan,
   type AcquisitionSignupDraft,
 } from "@/lib/acquisition";
 
 export const Route = createFileRoute("/plumbers")({
   head: () => ({
     meta: [
-      { title: "Stop losing plumbing jobs — Rapid Connect" },
+      { title: "Turn missed calls into plumbing jobs — Rapid Connect" },
       {
         name: "description",
         content:
-          "See how Rapid Connect’s Text and AI Receptionists turn missed calls into complete plumbing leads.",
-      },
-      { property: "og:title", content: "Keep working. Keep answering. Stop losing good jobs." },
-      {
-        property: "og:description",
-        content:
-          "Watch the one-minute Rapid Connect demo and claim the founding plumber setup offer.",
+          "Compare Missed-Call Recovery and AI Receptionist, see the founding offer, and set up your first captured test job.",
       },
     ],
   }),
@@ -60,13 +63,13 @@ export const Route = createFileRoute("/plumbers")({
   component: PlumberAcquisitionPage,
 });
 
+const SERVICES = ["missed_call_recovery", "ai_receptionist"] as const;
+
 function PlumberAcquisitionPage() {
   const search = Route.useSearch();
   const attribution = useMemo(() => {
     const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(search)) {
-      if (value) params.set(key, value);
-    }
+    for (const [key, value] of Object.entries(search)) if (value) params.set(key, value);
     return getAcquisitionAttribution(params);
   }, [search]);
   const fallbackDraft = useMemo(
@@ -82,15 +85,16 @@ function PlumberAcquisitionPage() {
   const [sessionId, setSessionId] = useState("");
   const [demoOpen, setDemoOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(search.resume === "signup");
+  const [jobValue, setJobValue] = useState(350);
   const landingTracked = useRef(false);
+  const comparisonTracked = useRef(false);
 
   useEffect(() => {
     const existingSession = sessionStorage.getItem(ACQUISITION_SESSION_KEY);
     const id = existingSession || crypto.randomUUID();
     if (!existingSession) sessionStorage.setItem(ACQUISITION_SESSION_KEY, id);
     setSessionId(id);
-    const stored = localStorage.getItem(ACQUISITION_STORAGE_KEY);
-    setDraft(readAcquisitionDraft(stored, fallbackDraft));
+    setDraft(readAcquisitionDraft(localStorage.getItem(ACQUISITION_STORAGE_KEY), fallbackDraft));
   }, [fallbackDraft]);
 
   const track = useCallback(
@@ -99,21 +103,20 @@ function PlumberAcquisitionPage() {
       details?: { plan?: AcquisitionSignupDraft["plan"]; wizardStep?: number },
     ) => {
       if (!sessionId) return;
-      const body = {
-        action: "track",
-        eventId: crypto.randomUUID(),
-        sessionId,
-        eventName,
-        path: "/plumbers",
-        plan: details?.plan ?? draft.plan,
-        promoCode: draft.promoCode,
-        wizardStep: details?.wizardStep ?? null,
-        attribution,
-      };
       void fetch("/api/public/acquisition", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          action: "track",
+          eventId: crypto.randomUUID(),
+          sessionId,
+          eventName,
+          path: "/plumbers",
+          plan: details?.plan ?? draft.plan,
+          promoCode: draft.promoCode,
+          wizardStep: details?.wizardStep ?? null,
+          attribution,
+        }),
         keepalive: true,
       }).catch(() => undefined);
     },
@@ -131,10 +134,15 @@ function PlumberAcquisitionPage() {
     localStorage.setItem(ACQUISITION_STORAGE_KEY, JSON.stringify(next));
   };
 
+  const selectPlan = (plan: AcquisitionPlan) => {
+    persistDraft({ ...draft, plan });
+    track("service_selected", { plan, wizardStep: 0 });
+    track("package_selected", { plan, wizardStep: 0 });
+  };
+
   const openDemo = () => {
     track("demo_started");
     setDemoOpen(true);
-    void document.documentElement.requestFullscreen?.().catch(() => undefined);
   };
 
   const openWizard = () => {
@@ -142,194 +150,283 @@ function PlumberAcquisitionPage() {
     setWizardOpen(true);
   };
 
+  const plan = ACQUISITION_PLANS[draft.plan];
+  const roi = calculateAcquisitionRoi(jobValue, draft.plan);
+
   return (
-    <main className="acquisition-experience min-h-dvh overflow-x-hidden bg-[#091019] text-white">
-      <header className="absolute inset-x-0 top-0 z-20">
-        <div className="mx-auto flex max-w-[1500px] items-center justify-between px-5 py-5 sm:px-8">
+    <main className="acquisition-experience min-h-dvh overflow-x-hidden bg-[#07111a] text-white">
+      <header className="absolute inset-x-0 top-0 z-30">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
           <a href="/plumbers" className="flex items-center gap-3" aria-label="Rapid Connect home">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-yellow-400 text-slate-950">
-              <PhoneCall className="h-5 w-5" />
+              <Wrench className="h-5 w-5" aria-hidden="true" />
             </span>
-            <div>
-              <div className="text-sm font-black tracking-tight">RAPID CONNECT</div>
-              <div className="text-[9px] font-bold uppercase tracking-[0.24em] text-white/45">
+            <span>
+              <span className="block text-sm font-black tracking-tight">RAPID CONNECT</span>
+              <span className="block text-[9px] font-bold uppercase tracking-[0.24em] text-white/50">
                 Built for plumbers
-              </div>
-            </div>
+              </span>
+            </span>
           </a>
-          <button
-            type="button"
-            onClick={openWizard}
-            className="hidden rounded-full border border-white/15 bg-white/[0.06] px-5 py-2.5 text-sm font-black backdrop-blur transition hover:border-yellow-300/60 sm:block"
+          <a
+            href="/auth"
+            className="rounded-lg px-3 py-2 text-sm font-bold text-white/75 outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-yellow-300"
           >
-            Claim $0 setup
-          </button>
+            Log in
+          </a>
         </div>
       </header>
 
-      <section className="grid min-h-dvh lg:grid-cols-2">
-        <div className="relative flex min-h-[74vh] items-end overflow-hidden px-5 pb-12 pt-28 sm:px-10 sm:pb-16 lg:min-h-dvh lg:px-14 xl:px-20">
-          <picture className="absolute inset-0">
-            <source media="(max-width: 767px)" srcSet={heroPlumberMobileAvif} type="image/avif" />
-            <source media="(max-width: 767px)" srcSet={heroPlumberMobileWebp} type="image/webp" />
-            <source media="(max-width: 767px)" srcSet={heroPlumberMobile} type="image/jpeg" />
-            <source srcSet={heroPlumberAvif} type="image/avif" />
-            <source srcSet={heroPlumberWebp} type="image/webp" />
-            <img
-              src={heroPlumber}
-              alt=""
-              width={1600}
-              height={900}
-              fetchPriority="high"
-              decoding="async"
-              className="h-full w-full object-cover object-center"
-            />
-          </picture>
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,10,16,0.32)_0%,rgba(5,10,16,0.58)_40%,rgba(5,10,16,0.97)_100%)] lg:bg-[linear-gradient(90deg,rgba(5,10,16,0.35)_0%,rgba(5,10,16,0.72)_70%,rgba(5,10,16,0.98)_100%)]" />
-          <div className="absolute left-8 top-28 hidden h-24 w-24 rounded-full border border-yellow-300/20 bg-yellow-400/10 blur-2xl sm:block" />
-
-          <div className="relative z-10 max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/25 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300 backdrop-blur">
-              <Wrench className="h-3.5 w-3.5" /> See it in action
+      <section className="relative isolate min-h-dvh overflow-hidden px-5 pb-14 pt-28 sm:px-8 lg:pt-32">
+        <picture className="absolute inset-0 -z-20 opacity-35">
+          <source srcSet={heroPlumberAvif} type="image/avif" />
+          <source srcSet={heroPlumberWebp} type="image/webp" />
+          <img src={heroPlumber} alt="" className="h-full w-full object-cover object-center" />
+        </picture>
+        <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,#07111a_0%,rgba(7,17,26,.96)_48%,rgba(7,17,26,.7)_100%)]" />
+        <div className="mx-auto grid max-w-7xl items-center gap-10 lg:grid-cols-[1.05fr_.95fr]">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-yellow-300/30 bg-yellow-300/10 px-3 py-1.5 text-xs font-black uppercase tracking-[.16em] text-yellow-300">
+              <PhoneCall className="h-4 w-4" /> One simple job inbox
             </div>
-            <h1 className="mt-5 text-balance text-4xl font-black leading-[0.98] tracking-[-0.04em] sm:text-6xl xl:text-7xl">
-              Stop losing good jobs because you’re{" "}
-              <span className="text-yellow-300">on the tools.</span>
+            <h1 className="mt-5 text-balance text-4xl font-black leading-[.98] tracking-[-.045em] sm:text-6xl">
+              Two simple ways to stop calls becoming{" "}
+              <span className="text-yellow-300">lost jobs.</span>
             </h1>
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-white/68 sm:text-lg">
-              See how a missed call becomes a complete lead—and how an AI receptionist answers
-              naturally when you can’t.
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-white/72 sm:text-lg">
+              Missed-Call Recovery follows up after you miss a call. AI Receptionist answers the
+              call for you. Both put the captured opportunity in Missed Jobs.
             </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <HeroService icon={MessageSquareText} title="Missed-Call Recovery" price="A$9/mo">
+                Missed call → immediate customer text
+              </HeroService>
+              <HeroService icon={Bot} title="AI Receptionist" price="A$15/mo">
+                Incoming call → AI answers 24/7
+              </HeroService>
+            </div>
             <button
               type="button"
               onClick={openDemo}
-              className="group mt-8 inline-flex w-full items-center justify-center gap-4 rounded-2xl bg-white px-6 py-5 text-left text-slate-950 shadow-[0_25px_80px_rgba(0,0,0,0.35)] transition hover:-translate-y-0.5 sm:w-auto sm:min-w-[310px]"
+              className="mt-7 inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-xl bg-yellow-400 px-6 text-base font-black text-slate-950 shadow-[0_20px_60px_rgba(250,204,21,.2)] outline-none transition hover:bg-yellow-300 focus-visible:ring-4 focus-visible:ring-yellow-200/50 sm:w-auto"
             >
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-yellow-400 transition group-hover:scale-105">
-                <Play className="ml-1 h-5 w-5 fill-current" />
-              </span>
-              <span>
-                <span className="block text-lg font-black">Watch the one-minute demo</span>
-                <span className="mt-0.5 block text-xs font-medium text-slate-500">
-                  Text + AI Receptionist in action
-                </span>
-              </span>
+              <Play className="h-5 w-5 fill-current" /> See how it works
             </button>
+            <p className="mt-3 text-sm font-bold text-white/65">
+              No sign-on fee · First 3 subscription months free · Usage applies from day one ·
+              Cancel anytime
+            </p>
+          </div>
+
+          <div className="rounded-[2rem] border border-white/12 bg-slate-950/75 p-5 shadow-2xl backdrop-blur sm:p-7">
+            <div className="text-xs font-black uppercase tracking-[.2em] text-yellow-300">
+              What happens to the call?
+            </div>
+            <div className="mt-5 space-y-3">
+              <CallPath
+                step="1"
+                title="A customer needs a plumber"
+                detail="They call your business number."
+              />
+              <div className="ml-5 h-4 border-l border-dashed border-white/25" />
+              <CallPath
+                step="2"
+                title="Your chosen service responds"
+                detail="An immediate follow-up text after a missed call, or an AI that answers."
+              />
+              <div className="ml-5 h-4 border-l border-dashed border-white/25" />
+              <CallPath
+                step="3"
+                title="A useful job lands in Missed Jobs"
+                detail="Customer, suburb, job, urgency and callback details—ready for you."
+                final
+              />
+            </div>
+            <div className="mt-6 rounded-xl bg-emerald-400/12 p-4 text-sm text-emerald-100">
+              <b>A typical A$350 job</b> could cover about 38 months of A$9 Missed-Call Recovery
+              subscription fees, excluding variable usage.
+            </div>
           </div>
         </div>
+      </section>
 
-        <div className="relative flex min-h-[78vh] items-center overflow-hidden border-t border-white/10 bg-[radial-gradient(circle_at_100%_0%,rgba(250,204,21,0.12),transparent_34%),#0b131d] px-5 py-14 sm:px-10 lg:min-h-dvh lg:border-l lg:border-t-0 lg:px-14 xl:px-20">
-          <div className="mx-auto w-full max-w-xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-yellow-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-950">
-              <Sparkles className="h-3.5 w-3.5" /> Founding plumber offer
+      <section
+        id="compare"
+        className="bg-white px-5 py-16 text-slate-950 sm:px-8 sm:py-24"
+        ref={(node) => {
+          if (!node || comparisonTracked.current) return;
+          const observer = new IntersectionObserver(([entry]) => {
+            if (entry.isIntersecting) {
+              comparisonTracked.current = true;
+              track("service_comparison_viewed");
+              observer.disconnect();
+            }
+          });
+          observer.observe(node);
+        }}
+      >
+        <div className="mx-auto max-w-6xl">
+          <div className="max-w-2xl">
+            <div className="text-xs font-black uppercase tracking-[.2em] text-sky-700">
+              Choose by what happens to the call
             </div>
-            <h2 className="mt-5 text-balance text-4xl font-black leading-[1.02] tracking-[-0.035em] sm:text-5xl xl:text-6xl">
-              Your receptionist setup is <span className="text-yellow-300">on us.</span>
+            <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
+              One follows up. One answers.
             </h2>
-            <p className="mt-4 max-w-lg text-base leading-relaxed text-white/62">
-              Choose Text Receptionist or the complete Text + AI package. Enter the launch code and
-              your one-off setup fee becomes $0.
+          </div>
+          <div className="mt-9 grid gap-5 lg:grid-cols-2">
+            {SERVICES.map((service) => (
+              <ServiceCard
+                key={service}
+                service={service}
+                selected={draft.plan === service || draft.plan === "both"}
+                onSelect={() => selectPlan(service)}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => selectPlan("both")}
+            aria-pressed={draft.plan === "both"}
+            className={`mt-5 flex w-full flex-col justify-between gap-3 rounded-2xl border p-5 text-left outline-none transition focus-visible:ring-4 focus-visible:ring-yellow-300/50 sm:flex-row sm:items-center ${
+              draft.plan === "both"
+                ? "border-yellow-500 bg-yellow-50"
+                : "border-slate-200 hover:border-yellow-500"
+            }`}
+          >
+            <span>
+              <span className="block text-lg font-black">Use both services</span>
+              <span className="mt-1 block text-sm text-slate-600">
+                AI answers configured calls; Missed-Call Recovery follows up calls that are still
+                missed. Both feed the same inbox.
+              </span>
+            </span>
+            <span className="shrink-0 text-xl font-black">A$24/month normally</span>
+          </button>
+        </div>
+      </section>
+
+      <section className="bg-[#dff3ff] px-5 py-16 text-slate-950 sm:px-8 sm:py-24">
+        <div className="mx-auto grid max-w-6xl gap-9 lg:grid-cols-[.8fr_1.2fr] lg:items-center">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[.2em] text-sky-800">
+              Cost of one missed job
+            </div>
+            <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
+              Put your own job value in.
+            </h2>
+            <p className="mt-4 text-slate-600">
+              This is a simple comparison, not an income promise. It assumes one job would otherwise
+              have been lost and excludes variable usage charges.
             </p>
-
-            <div className="mt-7 grid gap-3 sm:grid-cols-2">
-              {(Object.keys(ACQUISITION_PLANS) as AcquisitionSignupDraft["plan"][]).map((plan) => {
-                const config = ACQUISITION_PLANS[plan];
-                return (
-                  <button
-                    type="button"
-                    key={plan}
-                    onClick={() => {
-                      const next = { ...draft, plan };
-                      persistDraft(next);
-                      track("package_selected", { plan, wizardStep: 0 });
-                    }}
-                    className={`rounded-2xl border p-4 text-left transition ${
-                      draft.plan === plan
-                        ? "border-yellow-300/60 bg-yellow-400/10"
-                        : "border-white/10 bg-white/[0.035] hover:border-white/25"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-black">{config.name}</span>
-                      {draft.plan === plan && (
-                        <span className="grid h-6 w-6 place-items-center rounded-full bg-yellow-400 text-slate-950">
-                          <Check className="h-3.5 w-3.5" />
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-4 flex items-end justify-between gap-3">
-                      <span>
-                        <span className="block text-xs text-white/40">One-off setup</span>
-                        <span className="mt-0.5 block text-xl font-black text-white/45 line-through">
-                          {moneyFromCents(config.setupFeeCents)}
-                        </span>
-                      </span>
-                      <span className="text-right">
-                        <span className="block text-xs text-white/40">With offer</span>
-                        <span className="mt-0.5 block text-3xl font-black text-yellow-300">$0</span>
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+          </div>
+          <div className="rounded-3xl border border-sky-200 bg-white p-5 shadow-xl sm:p-7">
+            <label className="block font-black" htmlFor="job-value">
+              My typical plumbing job is worth
+            </label>
+            <div className="mt-3 flex items-center gap-3">
+              <span className="text-2xl font-black">A$</span>
+              <input
+                id="job-value"
+                type="number"
+                min={50}
+                max={10000}
+                step={25}
+                value={jobValue}
+                onChange={(event) => {
+                  setJobValue(Math.max(50, Number(event.currentTarget.value) || 50));
+                  track("roi_calculator_used");
+                }}
+                className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3 text-2xl font-black outline-none focus:ring-4 focus:ring-sky-200"
+              />
             </div>
-
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-dashed border-yellow-300/35 bg-black/20 p-4">
-              <div>
-                <div className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40">
-                  Your offer code
-                </div>
-                <div className="mt-1 font-mono text-lg font-black tracking-[0.12em] text-yellow-300">
-                  {normalizePromoCode(draft.promoCode)}
-                </div>
-              </div>
-              <ShieldCheck className="h-7 w-7 text-emerald-400" />
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <Metric
+                label="Normal monthly subscription"
+                value={moneyFromCents(plan.platformFeeCents)}
+              />
+              <Metric
+                label="Approx. ahead after one job"
+                value={`A$${roi.approximateAmountAheadAud.toFixed(0)}`}
+              />
+              <Metric label="Months one job could cover" value={`About ${roi.monthsCovered}`} />
             </div>
-
-            <button
-              type="button"
-              onClick={openWizard}
-              className="mt-5 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-yellow-400 px-6 py-5 text-lg font-black text-slate-950 shadow-[0_24px_70px_rgba(250,204,21,0.18)] transition hover:-translate-y-0.5"
-            >
-              Sign up now <ArrowRight className="h-5 w-5" />
-            </button>
-
-            <div className="mt-5 grid grid-cols-3 gap-2 text-center text-[10px] font-bold text-white/45">
-              <span className="rounded-lg bg-white/[0.035] p-2">No number port today</span>
-              <span className="rounded-lg bg-white/[0.035] p-2">Secure Stripe checkout</span>
-              <span className="rounded-lg bg-white/[0.035] p-2">Guided activation</span>
-            </div>
-
-            <p className="mt-5 text-center text-[11px] leading-relaxed text-white/38">
-              Recurring platform and metered usage charges apply. All prices are displayed before
-              payment setup.
+            <p className="mt-5 text-sm leading-relaxed text-slate-600">
+              Your typical job is worth A${jobValue}. {plan.name} normally costs{" "}
+              {moneyFromCents(plan.platformFeeCents)} per month. Recovering one job that would
+              otherwise have been lost could cover about {roi.monthsCovered} months of subscription
+              fees. Usage charges are separate: recovery SMS is A$0.25 ex GST per accepted SMS; AI
+              voice is A$0.59 per minute plus applicable SMS usage.
             </p>
           </div>
         </div>
       </section>
 
-      <div className="fixed inset-x-3 bottom-3 z-30 lg:hidden">
-        <button
-          type="button"
-          onClick={openWizard}
-          className="flex w-full items-center justify-between rounded-2xl bg-yellow-400 px-5 py-4 text-left text-slate-950 shadow-2xl"
-        >
-          <span>
-            <span className="block text-[10px] font-black uppercase tracking-widest">
-              Setup fee waived
-            </span>
-            <span className="block text-base font-black">
-              Sign up with {normalizePromoCode(draft.promoCode)}
-            </span>
-          </span>
-          <ArrowRight className="h-5 w-5" />
-        </button>
-      </div>
+      <section className="px-5 py-16 sm:px-8 sm:py-24">
+        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-2 lg:items-center">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[.2em] text-yellow-300">
+              Safe product demonstration
+            </div>
+            <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
+              Watch the whole captured-job outcome.
+            </h2>
+            <p className="mt-4 text-white/68">
+              This is a clearly labelled simulation. It shows the customer contact, captured
+              details, plumber alert and final Missed Jobs entry. It does not contact a real
+              customer or turn on a real service.
+            </p>
+            <button
+              type="button"
+              onClick={openDemo}
+              className="mt-6 inline-flex min-h-12 items-center gap-2 rounded-xl border border-white/20 px-5 font-black outline-none hover:border-yellow-300 focus-visible:ring-4 focus-visible:ring-yellow-300/40"
+            >
+              <Play className="h-4 w-4 fill-current" /> Start the simulated demo
+            </button>
+          </div>
+          <div className="rounded-3xl border border-yellow-300/25 bg-yellow-300/10 p-6 sm:p-8">
+            <div className="flex items-center gap-3 text-yellow-300">
+              <ShieldCheck className="h-7 w-7" />
+              <span className="font-black uppercase tracking-widest">FOUNDINGPLUMBER</span>
+            </div>
+            <h3 className="mt-5 text-3xl font-black">No sign-on fee.</h3>
+            <p className="mt-2 text-xl font-black">
+              Your first 3 months of subscription fees are free.
+            </p>
+            <ul className="mt-5 space-y-3 text-sm text-white/75">
+              <li className="flex gap-2">
+                <Check className="h-5 w-5 text-yellow-300" /> A$499 sign-on fee becomes A$0
+              </li>
+              <li className="flex gap-2">
+                <Check className="h-5 w-5 text-yellow-300" /> Usage charges apply from activation
+              </li>
+              <li className="flex gap-2">
+                <Check className="h-5 w-5 text-yellow-300" /> Normal pricing is A$9, A$15 or
+                A$24/month
+              </li>
+              <li className="flex gap-2">
+                <Check className="h-5 w-5 text-yellow-300" /> Cancel anytime
+              </li>
+            </ul>
+            <button
+              type="button"
+              onClick={openWizard}
+              className="mt-7 inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-yellow-400 px-6 font-black text-slate-950 outline-none hover:bg-yellow-300 focus-visible:ring-4 focus-visible:ring-yellow-200/50"
+            >
+              Set up my service <ArrowRight className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-white/10 px-5 py-8 text-center text-xs text-white/45">
+        Rapid Connect · Prices in AUD · Variable usage is disclosed before activation
+      </footer>
 
       <DemoCommercial
         open={demoOpen}
         onClose={() => setDemoOpen(false)}
-        onTrack={(event) => track(event)}
+        onTrack={track}
         onSignup={() => {
           setDemoOpen(false);
           openWizard();
@@ -344,5 +441,106 @@ function PlumberAcquisitionPage() {
         onTrack={track}
       />
     </main>
+  );
+}
+
+function HeroService({
+  icon: Icon,
+  title,
+  price,
+  children,
+}: {
+  icon: typeof PhoneCall;
+  title: string;
+  price: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-white/12 bg-black/25 p-4 backdrop-blur">
+      <div className="flex items-center justify-between gap-3">
+        <Icon className="h-5 w-5 text-yellow-300" />
+        <span className="font-black text-yellow-300">{price}</span>
+      </div>
+      <div className="mt-3 font-black">{title}</div>
+      <div className="mt-1 text-xs text-white/60">{children}</div>
+    </div>
+  );
+}
+
+function CallPath({
+  step,
+  title,
+  detail,
+  final = false,
+}: {
+  step: string;
+  title: string;
+  detail: string;
+  final?: boolean;
+}) {
+  return (
+    <div
+      className={`flex gap-4 rounded-xl border p-4 ${final ? "border-emerald-400/30 bg-emerald-400/10" : "border-white/10 bg-white/[.04]"}`}
+    >
+      <span
+        className={`grid h-10 w-10 shrink-0 place-items-center rounded-full font-black ${final ? "bg-emerald-400 text-slate-950" : "bg-white/10"}`}
+      >
+        {final ? <ClipboardList className="h-5 w-5" /> : step}
+      </span>
+      <span>
+        <span className="block font-black">{title}</span>
+        <span className="mt-1 block text-sm text-white/60">{detail}</span>
+      </span>
+    </div>
+  );
+}
+
+function ServiceCard({
+  service,
+  selected,
+  onSelect,
+}: {
+  service: (typeof SERVICES)[number];
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const config = ACQUISITION_PLANS[service];
+  const Icon = service === "missed_call_recovery" ? MessageSquareText : Bot;
+  return (
+    <article
+      className={`rounded-3xl border p-6 ${selected ? "border-sky-500 bg-sky-50" : "border-slate-200"}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <span className="grid h-12 w-12 place-items-center rounded-xl bg-slate-950 text-yellow-300">
+          <Icon className="h-6 w-6" />
+        </span>
+        <span className="text-2xl font-black">{moneyFromCents(config.platformFeeCents)}/mo</span>
+      </div>
+      <h3 className="mt-5 text-2xl font-black">{config.name}</h3>
+      <p className="mt-3 leading-relaxed text-slate-600">{config.explanation}</p>
+      <div className="mt-5 rounded-xl bg-slate-100 p-3 text-sm font-bold">
+        {service === "missed_call_recovery"
+          ? "It does not answer the original call. It follows up after the call is missed."
+          : "It answers the original call and speaks with the customer."}
+      </div>
+      <p className="mt-4 text-xs text-slate-500">{config.usage}</p>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={selected}
+        className="mt-5 min-h-11 w-full rounded-xl border border-slate-300 px-4 font-black outline-none hover:border-sky-600 focus-visible:ring-4 focus-visible:ring-sky-200"
+      >
+        {selected ? "Selected" : `Choose ${config.name}`}
+      </button>
+    </article>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-slate-950 p-4 text-white">
+      <div className="text-xs text-white/55">{label}</div>
+      <div className="mt-2 text-2xl font-black text-yellow-300">{value}</div>
+    </div>
   );
 }

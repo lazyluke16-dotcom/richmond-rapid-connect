@@ -1,22 +1,17 @@
 export type BillingStatus =
-  | 'setup'
-  | 'checkout_pending'
-  | 'active'
-  | 'past_due'
-  | 'suspended'
-  | 'canceled';
+  "setup" | "checkout_pending" | "active" | "past_due" | "suspended" | "canceled";
 
 export type EffectiveBillingState =
-  | 'unknown'
-  | 'suspended'
-  | 'billing_exempt_test'
-  | 'setup'
-  | 'canceled'
-  | 'past_due_grace'
-  | 'checkout_pending'
-  | 'active';
+  | "unknown"
+  | "suspended"
+  | "billing_exempt_test"
+  | "setup"
+  | "canceled"
+  | "past_due_grace"
+  | "checkout_pending"
+  | "active";
 
-export type SelectedPlan = 'missed_call_recovery' | 'ai_receptionist';
+export type SelectedPlan = "missed_call_recovery" | "ai_receptionist" | "both";
 
 // Alert thresholds (AUD). Never expose Vapi wholesale cost in UI.
 export const USAGE_ALERT_THRESHOLDS_AUD = [25, 50, 100] as const;
@@ -35,6 +30,10 @@ export interface BillingStateSummary {
   unionOfferEligible: boolean;
   unionOfferRedeemedAt: string | null;
   platformFeeWaiverEndsAt: string | null;
+  foundingOfferVersion?: string | null;
+  foundingOfferEligible?: boolean;
+  foundingOfferRedeemedAt?: string | null;
+  normalBillingStartsAt?: string | null;
   currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
   graceExpiresAt: string | null;

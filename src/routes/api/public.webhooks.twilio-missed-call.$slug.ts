@@ -49,18 +49,18 @@ export async function handleTwilioMissedCall(request: Request, slug: string): Pr
   const [{ data: telephony }, { data: textLinkAccess }] = await Promise.all([
     supabaseAdmin
       .from("business_telephony_settings")
-      .select("answering_mode,inbound_number")
+      .select("missed_call_recovery_enabled,inbound_number")
       .eq("business_id", business.id)
       .maybeSingle(),
     supabaseAdmin.rpc("has_missed_call_access", { _business_id: business.id } as never),
   ]);
   const routing = telephony as {
-    answering_mode?: string;
+    missed_call_recovery_enabled?: boolean;
     inbound_number?: string | null;
   } | null;
   if (
     !textLinkAccess ||
-    routing?.answering_mode !== "text_link" ||
+    routing?.missed_call_recovery_enabled !== true ||
     !calledNumber ||
     routing.inbound_number !== calledNumber
   ) {

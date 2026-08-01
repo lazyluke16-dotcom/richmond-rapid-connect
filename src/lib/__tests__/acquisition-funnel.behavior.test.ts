@@ -3,9 +3,14 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ACQUISITION_PLANS,
+  acquisitionAreaRows,
+  acquisitionHourRows,
+  acquisitionServiceRows,
   acquisitionUserMetadata,
+  calculateAcquisitionRoi,
   createDefaultAcquisitionDraft,
   getAcquisitionAttribution,
+  normalBillingDate,
   normalizePromoCode,
   readAcquisitionDraft,
   recoverAcquisitionDraftFromUser,
@@ -13,15 +18,52 @@ import {
 import { acquisitionContextFromClaims } from "@/lib/acquisition.functions";
 
 describe("acquisition funnel pricing and attribution", () => {
-  it("uses the approved setup fees and preserves the existing recurring prices", () => {
+  it("uses the approved A$499 waiver and authoritative recurring prices", () => {
     expect(ACQUISITION_PLANS.missed_call_recovery).toMatchObject({
       setupFeeCents: 49_900,
       platformFeeCents: 900,
     });
     expect(ACQUISITION_PLANS.ai_receptionist).toMatchObject({
-      setupFeeCents: 119_900,
+      setupFeeCents: 49_900,
       platformFeeCents: 1_500,
     });
+    expect(ACQUISITION_PLANS.both).toMatchObject({
+      setupFeeCents: 49_900,
+      platformFeeCents: 2_400,
+    });
+  });
+
+  it("calculates editable ROI without treating variable usage as guaranteed income", () => {
+    expect(calculateAcquisitionRoi(350, "missed_call_recovery")).toEqual({
+      normalMonthlySubscriptionAud: 9,
+      valueOfOneJobAud: 350,
+      approximateAmountAheadAud: 341,
+      monthsCovered: 38,
+      excludesUsageCharges: true,
+    });
+  });
+
+  it("turns the guided answers into deduplicated operational setup rows", () => {
+    expect(acquisitionServiceRows("Blocked drains, blocked-drains, Hot water")).toEqual([
+      { service_key: "blocked-drains", display_name: "Blocked drains", active: true },
+      { service_key: "blocked-drains-2", display_name: "blocked-drains", active: true },
+      { service_key: "hot-water", display_name: "Hot water", active: true },
+    ]);
+    expect(acquisitionAreaRows("Richmond, Burnley, Richmond")).toHaveLength(2);
+    expect(acquisitionHourRows("Monday to Saturday, 8am–5pm")).toMatchObject([
+      { day_of_week: 0, closed: true },
+      { day_of_week: 1, closed: false, open_time: "08:00", close_time: "17:00" },
+      {},
+      {},
+      {},
+      {},
+      { day_of_week: 6, closed: false },
+    ]);
+  });
+
+  it("shows three calendar months, including an end-of-month activation", () => {
+    expect(normalBillingDate(new Date(2026, 7, 1))).toContain("1 November 2026");
+    expect(normalBillingDate(new Date(2026, 7, 31))).toContain("30 November 2026");
   });
 
   it("normalizes a human-entered promotion code to its server key", () => {
@@ -188,6 +230,10 @@ describe("acquisition database boundary", () => {
     resolve("supabase/migrations/20260728140000_acquisition_funnel.sql"),
     "utf8",
   );
+  const currentMigration = readFileSync(
+    resolve("supabase/migrations/20260801130000_seamless_acquisition_activation.sql"),
+    "utf8",
+  );
 
   it("keeps promotion and analytics tables private", () => {
     expect(migration).toContain(
@@ -207,35 +253,45 @@ describe("acquisition database boundary", () => {
     expect(migration).toContain("UNIQUE (promo_code_id, business_id)");
   });
 
-  it("seeds the approved public launch code with both fee amounts", () => {
+  it("upgrades the approved public offer without retroactively enrolling old redemptions", () => {
     expect(migration).toContain("'FOUNDINGPLUMBER'");
-    expect(migration).toContain("49900");
-    expect(migration).toContain("119900");
+    expect(currentMigration).toContain("founding-2026-three-months");
+    expect(currentMigration).toContain(
+      "subscription_promo_eligible boolean NOT NULL DEFAULT false",
+    );
+    expect(currentMigration).toContain("subscription_months_free = 3");
+    expect(currentMigration).toContain("waived := 49900");
+    expect(currentMigration).toContain("stripe_subscription_id IS NULL");
   });
 });
 
 describe("confirmed acquisition account recovery", () => {
   const recoveryMigration = readFileSync(
-    resolve("supabase/migrations/20260731120000_acquisition_account_recovery.sql"),
+    resolve("supabase/migrations/20260801130000_seamless_acquisition_activation.sql"),
     "utf8",
   );
   const billingServer = readFileSync(resolve("src/lib/billing.server.ts"), "utf8");
   const billingSummary = readFileSync(resolve("src/routes/api/public/billing.summary.ts"), "utf8");
 
   it("serializes and idempotently recovers only the signed-in acquisition user", () => {
-    expect(recoveryMigration).toContain("uid uuid := auth.uid()");
-    expect(recoveryMigration).toContain("auth.jwt() -> 'user_metadata'");
-    expect(recoveryMigration).toContain("pg_advisory_xact_lock");
-    expect(recoveryMigration).toContain("IF bid IS NOT NULL THEN");
-    expect(recoveryMigration).toContain("public.create_business_for_current_user");
-    expect(recoveryMigration).toContain("public.redeem_acquisition_offer");
-    expect(recoveryMigration).not.toMatch(/_user_id|_business_id/);
+    const recoveryFunction = recoveryMigration.slice(
+      recoveryMigration.indexOf(
+        "CREATE OR REPLACE FUNCTION public.recover_my_acquisition_business",
+      ),
+    );
+    expect(recoveryFunction).toContain("uid uuid := auth.uid()");
+    expect(recoveryFunction).toContain("auth.jwt() -> 'user_metadata'");
+    expect(recoveryFunction).toContain("pg_advisory_xact_lock");
+    expect(recoveryFunction).toContain("IF bid IS NOT NULL THEN");
+    expect(recoveryFunction).toContain("public.create_business_for_current_user");
+    expect(recoveryFunction).toContain("public.redeem_acquisition_offer");
+    expect(recoveryFunction).not.toMatch(/_user_id|_business_id/);
   });
 
   it("rejects unrelated accounts without complete acquisition metadata", () => {
     expect(recoveryMigration).toContain("business_name IS NULL");
     expect(recoveryMigration).toContain(
-      "acquisition_plan NOT IN ('missed_call_recovery', 'ai_receptionist')",
+      "acquisition_plan NOT IN ('missed_call_recovery','ai_receptionist','both')",
     );
     expect(recoveryMigration).toContain("promotion_code !~ '^[A-Z0-9_-]{3,64}$'");
     expect(recoveryMigration).toContain("No recoverable acquisition signup found");
@@ -256,16 +312,21 @@ describe("acquisition experience source", () => {
   const onboarding = readFileSync(resolve("src/routes/_authenticated/onboarding.tsx"), "utf8");
   const checkout = readFileSync(resolve("src/routes/api/public/billing.checkout.ts"), "utf8");
 
-  it("keeps the requested split experience and mobile signup action", () => {
-    expect(landing).toContain("lg:grid-cols-2");
-    expect(landing).toContain("Watch the one-minute demo");
-    expect(landing).toContain("fixed inset-x-3 bottom-3");
+  it("explains both services, exact prices, ROI and the founding offer before signup", () => {
+    expect(landing).toContain("One follows up. One answers.");
+    expect(landing).toContain("A$9/mo");
+    expect(landing).toContain("A$15/mo");
+    expect(landing).toContain("A$24/month normally");
+    expect(landing).toContain("Cost of one missed job");
+    expect(landing).toContain("First 3 subscription months free");
+    expect(landing).toContain("Usage applies from day one");
   });
 
   it("uses a viewport demo with completion tracking and a persistent final call to action", () => {
     expect(demo).toContain("fixed inset-0");
     expect(demo).toContain('"demo_completed"');
-    expect(demo).toContain("Set up my receptionist");
+    expect(demo).toContain("Set up my service");
+    expect(demo).toContain("Safe simulated demo");
     expect(demo).toContain("Watch again");
     expect(demo).toContain("document.exitFullscreen()");
     expect(demo).toContain("onClose()");
@@ -289,6 +350,7 @@ describe("acquisition experience source", () => {
   it("preserves the funnel plan when the customer later continues onboarding", () => {
     expect(onboarding).toContain('full.selected_plan === "missed_call_recovery"');
     expect(onboarding).toContain('full.selected_plan === "ai_receptionist"');
+    expect(onboarding).toContain('full.selected_plan === "both"');
     expect(onboarding).toContain("setPlan(full.selected_plan)");
   });
 
@@ -298,5 +360,7 @@ describe("acquisition experience source", () => {
     );
     expect(checkout).toContain("promotion_code: acquisition.promotion_code");
     expect(checkout).toContain("...acquisitionMetadata");
+    expect(checkout).toContain("getFoundingThreeMonthCouponId");
+    expect(checkout).toContain("offer_version: shouldApplyFoundingOffer");
   });
 });

@@ -326,7 +326,7 @@ const vapiRouteConfig = {
         const [{ data: telephony }, { data: aiAccess }] = await Promise.all([
           supabaseAdmin
             .from("business_telephony_settings")
-            .select("answering_mode")
+            .select("ai_receptionist_enabled")
             .eq("business_id", businessId)
             .maybeSingle(),
           supabaseAdmin.rpc("has_ai_receptionist_access", {
@@ -335,12 +335,10 @@ const vapiRouteConfig = {
         ]);
         if (
           !canCreateAiEndOfCallRecords({
-            mode:
-              (
-                telephony as {
-                  answering_mode?: "off" | "text_link" | "ai_receptionist";
-                } | null
-              )?.answering_mode ?? "off",
+            mode: (telephony as { ai_receptionist_enabled?: boolean } | null)
+              ?.ai_receptionist_enabled
+              ? "ai_receptionist"
+              : "off",
             aiReceptionistEntitled: Boolean(aiAccess),
           })
         ) {

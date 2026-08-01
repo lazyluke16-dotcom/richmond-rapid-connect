@@ -63,20 +63,18 @@ describe("authenticated checkout return experience", () => {
     expect(endpoint).toContain('billingStatus: "active"');
     expect(checkoutSetupRoute("missed_call_recovery")).toBe("/call-handling");
     expect(checkoutSetupRoute("ai_receptionist")).toBe("/ai-receptionist");
+    expect(checkoutSetupRoute("both")).toBe("/call-handling");
   });
 });
 
 describe("authenticated plumber application shell", () => {
   it("contains every essential plumber-friendly destination", () => {
     expect(plumberNavigationItems.map((item) => item.label)).toEqual([
-      "Home",
-      "Missed jobs",
-      "Call handling",
-      "AI Receptionist",
+      "Dashboard",
+      "Missed Jobs",
+      "Services",
       "Account & Billing",
-      "Usage and costs",
-      "Business profile",
-      "Help & setup guide",
+      "Help / Setup",
     ]);
     expect(source("src/components/AuthenticatedAppShell.tsx")).toContain("Log out");
   });
@@ -95,6 +93,8 @@ describe("authenticated plumber application shell", () => {
     const help = plumberNavigationItems.find((item) => item.to === "/setup-guide")!;
     expect(isPlumberNavigationItemActive("/billing", billing)).toBe(true);
     expect(isPlumberNavigationItemActive("/account", billing)).toBe(true);
+    expect(isPlumberNavigationItemActive("/usage", billing)).toBe(true);
+    expect(isPlumberNavigationItemActive("/settings", billing)).toBe(true);
     expect(isPlumberNavigationItemActive("/onboarding", help)).toBe(true);
     expect(isPlumberNavigationItemActive("/dashboard", billing)).toBe(false);
     expect(source("src/components/AuthenticatedAppShell.tsx")).toContain(
@@ -110,6 +110,12 @@ describe("authenticated plumber application shell", () => {
     expect(source("src/routes/_authenticated/route.tsx")).toContain("AuthenticatedAppShell");
     expect(source("src/routes/_authenticated/dashboard.tsx")).toContain(
       "Your first job: connect call handling",
+    );
+    expect(source("src/routes/_authenticated/call-handling.tsx")).toContain(
+      "Send me my first test job",
+    );
+    expect(source("src/routes/_authenticated/call-handling.tsx")).toContain(
+      "for (const service of activeServices)",
     );
   });
 });

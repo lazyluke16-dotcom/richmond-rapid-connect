@@ -1,6 +1,7 @@
 import { pathToFileURL } from "node:url";
 
 import Stripe from "stripe";
+import { validateFoundingCoupon } from "./configure-staging-founding-coupon.mjs";
 
 const STRIPE_API_VERSION = "2026-06-24.dahlia";
 
@@ -18,7 +19,7 @@ function sorted(values) {
   return [...new Set(values)].sort();
 }
 
-export function validateStripeCheckoutResources({ account, prices, coupon }) {
+export function validateStripeCheckoutResources({ account, prices, coupon, foundingCoupon }) {
   const mcrBase = prices.MCR_BASE;
   const airBase = prices.AIR_BASE;
   const airUsage = prices.AIR_USAGE;
@@ -53,11 +54,15 @@ export function validateStripeCheckoutResources({ account, prices, coupon }) {
   );
   assert(!scopedProducts.includes(airUsage.product), "Union waiver Coupon must exclude AI usage");
 
+  validateFoundingCoupon({ coupon: foundingCoupon, prices });
+
   return {
     mode: "test",
     accountId: account.id,
     priceCount: Object.keys(prices).length,
     couponScopedToBaseProducts: true,
+    foundingCouponThreeMonths: true,
+    usageProductsExcludedFromFoundingCoupon: true,
   };
 }
 
@@ -82,18 +87,21 @@ export async function verifyStripeCheckoutConfig(env = process.env) {
     AIR_USAGE: required(env, "STRIPE_PRICE_AIR_USAGE"),
   };
   const couponId = required(env, "STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE");
-  const [account, mcrBase, airBase, airUsage, coupon] = await Promise.all([
+  const foundingCouponId = required(env, "STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES");
+  const [account, mcrBase, airBase, airUsage, coupon, foundingCoupon] = await Promise.all([
     stripe.accounts.retrieve(),
     stripe.prices.retrieve(priceIds.MCR_BASE),
     stripe.prices.retrieve(priceIds.AIR_BASE),
     stripe.prices.retrieve(priceIds.AIR_USAGE),
     stripe.coupons.retrieve(couponId, { expand: ["applies_to"] }),
+    stripe.coupons.retrieve(foundingCouponId, { expand: ["applies_to"] }),
   ]);
 
   return validateStripeCheckoutResources({
     account,
     prices: { MCR_BASE: mcrBase, AIR_BASE: airBase, AIR_USAGE: airUsage },
     coupon,
+    foundingCoupon,
   });
 }
 

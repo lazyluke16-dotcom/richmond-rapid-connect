@@ -111,7 +111,7 @@ export function getOnboardingReadinessFailures(input: OnboardingReadinessInput):
   if (input.servicesCount < 1) failures.push("at least one service");
   if (input.areasCount < 1) failures.push("at least one service area");
   if (input.hoursCount < 1) failures.push("business hours");
-  if (!["missed_call_recovery", "ai_receptionist"].includes(input.selectedPlan ?? "")) {
+  if (!["missed_call_recovery", "ai_receptionist", "both"].includes(input.selectedPlan ?? "")) {
     failures.push("a valid plan");
   }
   if ((input.heroHeading ?? "").trim().length < 2) failures.push("website headline");
@@ -178,7 +178,7 @@ export const HoursPayloadSchema = z.object({
 });
 
 export const PlanPayloadSchema = z.object({
-  plan: z.enum(["missed_call_recovery", "ai_receptionist"]),
+  plan: z.enum(["missed_call_recovery", "ai_receptionist", "both"]),
 });
 
 export const AustralianPhoneSchema = z

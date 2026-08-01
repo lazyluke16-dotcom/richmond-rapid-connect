@@ -21,7 +21,7 @@ const SCENES = [
   },
   {
     duration: 8,
-    eyebrow: "Text Receptionist",
+    eyebrow: "Missed-Call Recovery",
     title: "The missed call becomes a conversation—in seconds.",
   },
   {
@@ -37,7 +37,7 @@ const SCENES = [
   {
     duration: 10,
     eyebrow: "AI Receptionist",
-    title: "Or let a natural voice answer the call, 24/7.",
+    title: "AI Receptionist answers the original call and speaks with the customer, 24/7.",
   },
   {
     duration: 8,
@@ -198,7 +198,7 @@ export function DemoCommercial({
           <div>
             <div className="text-sm font-black tracking-tight">RAPID CONNECT</div>
             <div className="text-[10px] uppercase tracking-[0.24em] text-white/50">
-              Product demo
+              Safe simulated demo
             </div>
           </div>
         </div>
@@ -234,7 +234,7 @@ export function DemoCommercial({
                 }}
                 className="rounded-xl bg-yellow-400 px-7 py-4 text-base font-black text-slate-950 shadow-[0_20px_60px_rgba(250,204,21,0.25)]"
               >
-                Set up my receptionist
+                Set up my service
               </button>
               <button
                 type="button"

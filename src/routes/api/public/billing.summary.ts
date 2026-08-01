@@ -71,7 +71,7 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           supabaseAdmin
             .from("business_billing")
             .select(
-              "selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at, platform_fee_waiver_ends_at, current_period_start, current_period_end, grace_started_at, grace_expires_at, usage_limit_cents",
+              "selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at, platform_fee_waiver_ends_at, founding_offer_version, founding_offer_eligible, founding_offer_redeemed_at, founding_offer_ends_at, normal_billing_starts_at, current_period_start, current_period_end, grace_started_at, grace_expires_at, usage_limit_cents",
             )
             .eq("business_id", businessId)
             .maybeSingle(),
@@ -82,7 +82,9 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           } as never),
           supabaseAdmin
             .from("business_telephony_settings")
-            .select("inbound_number,forwarding_setup_status")
+            .select(
+              "inbound_number,forwarding_setup_status,missed_call_recovery_enabled,ai_receptionist_enabled",
+            )
             .eq("business_id", businessId)
             .maybeSingle(),
           supabaseAdmin
@@ -112,6 +114,11 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           grace_started_at?: string | null;
           grace_expires_at?: string | null;
           usage_limit_cents?: number;
+          founding_offer_version?: string | null;
+          founding_offer_eligible?: boolean;
+          founding_offer_redeemed_at?: string | null;
+          founding_offer_ends_at?: string | null;
+          normal_billing_starts_at?: string | null;
         };
 
         const effectiveState = (effectiveStateResult.data as unknown as string) ?? "unknown";
@@ -193,6 +200,8 @@ export const Route = createFileRoute("/api/public/billing/summary")({
         const telephony = (telephonyRow ?? {}) as {
           inbound_number?: string | null;
           forwarding_setup_status?: string | null;
+          missed_call_recovery_enabled?: boolean;
+          ai_receptionist_enabled?: boolean;
         };
         const ai = (aiRow ?? {}) as {
           provider_assistant_id?: string | null;
@@ -215,6 +224,11 @@ export const Route = createFileRoute("/api/public/billing/summary")({
               unionOfferEligible: Boolean(bb.union_offer_eligible),
               unionOfferRedeemedAt: bb.union_offer_redeemed_at ?? null,
               platformFeeWaiverEndsAt: bb.platform_fee_waiver_ends_at ?? null,
+              foundingOfferVersion: bb.founding_offer_version ?? null,
+              foundingOfferEligible: Boolean(bb.founding_offer_eligible),
+              foundingOfferRedeemedAt: bb.founding_offer_redeemed_at ?? null,
+              foundingOfferEndsAt: bb.founding_offer_ends_at ?? null,
+              normalBillingStartsAt: bb.normal_billing_starts_at ?? null,
               currentPeriodStart: bb.current_period_start ?? null,
               currentPeriodEnd: bb.current_period_end ?? null,
               graceExpiresAt: bb.grace_expires_at ?? null,
@@ -223,7 +237,9 @@ export const Route = createFileRoute("/api/public/billing/summary")({
               foundingPlumberBenefit:
                 business.promotion_code === "FOUNDINGPLUMBER" &&
                 Number(business.setup_fee_waived_cents) > 0
-                  ? `A$${(Number(business.setup_fee_waived_cents) / 100).toFixed(0)} setup fee waived`
+                  ? bb.founding_offer_version === "founding-2026-three-months"
+                    ? `A$${(Number(business.setup_fee_waived_cents) / 100).toFixed(0)} sign-on fee waived and first three subscription months free`
+                    : `A$${(Number(business.setup_fee_waived_cents) / 100).toFixed(0)} setup fee waived`
                   : null,
             },
             usage: {
@@ -243,6 +259,8 @@ export const Route = createFileRoute("/api/public/billing/summary")({
               phoneNumber: telephony.inbound_number ?? null,
               phoneStatus: telephony.forwarding_setup_status ?? "unallocated",
               aiReceptionist: Boolean(ai.provider_assistant_id && ai.status === "active"),
+              missedCallRecoveryEnabled: Boolean(telephony.missed_call_recovery_enabled),
+              aiReceptionistEnabled: Boolean(telephony.ai_receptionist_enabled),
               sms: process.env.SMS_MODE === "twilio",
             },
           }),

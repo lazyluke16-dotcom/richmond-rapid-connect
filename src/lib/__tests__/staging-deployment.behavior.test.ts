@@ -164,11 +164,12 @@ describe("staging deployment boundary", () => {
   });
 
   it("requires the complete encrypted GitHub staging secret contract", () => {
-    expect(requiredSecretNames).toHaveLength(21);
+    expect(requiredSecretNames).toHaveLength(22);
     expect(new Set(requiredSecretNames).size).toBe(requiredSecretNames.length);
     expect(requiredSecretNames).toContain("STAGING_SUPABASE_DB_PASSWORD");
     expect(requiredSecretNames).toContain("SMS_INVOICE_PROCESSOR_KEY");
     expect(requiredSecretNames).toContain("STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE");
+    expect(requiredSecretNames).toContain("STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES");
   });
 
   it("validates and uploads the scoped union waiver coupon", () => {
@@ -180,8 +181,12 @@ describe("staging deployment boundary", () => {
 
     expect(workflow).toContain("node scripts/verify-stripe-checkout-config.mjs");
     expect(uploadStep).toContain('"STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE"');
+    expect(uploadStep).toContain('"STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES"');
     expect(workflow).toContain(
       "STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE: ${{ secrets.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE }}",
+    );
+    expect(workflow).toContain(
+      "STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES: ${{ secrets.STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES }}",
     );
   });
 });

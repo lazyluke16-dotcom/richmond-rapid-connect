@@ -104,14 +104,14 @@ export function normalizeAustralianPhone(input: string): string {
 }
 
 export function entitlementsForPlan(
-  selectedPlan: "missed_call_recovery" | "ai_receptionist" | null,
+  selectedPlan: "missed_call_recovery" | "ai_receptionist" | "both" | null,
   access: { missedCall: boolean; aiReceptionist: boolean },
 ): ServiceEntitlements {
   return {
     textLink:
-      access.missedCall &&
-      (selectedPlan === "missed_call_recovery" || selectedPlan === "ai_receptionist"),
-    aiReceptionist: access.aiReceptionist && selectedPlan === "ai_receptionist",
+      access.missedCall && (selectedPlan === "missed_call_recovery" || selectedPlan === "both"),
+    aiReceptionist:
+      access.aiReceptionist && (selectedPlan === "ai_receptionist" || selectedPlan === "both"),
   };
 }
 

@@ -130,15 +130,25 @@ export function getUnionCouponId(): string | null {
   return stripeEnvValue("STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE") ?? null;
 }
 
+export function getFoundingThreeMonthCouponId(): string | null {
+  return stripeEnvValue("STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES") ?? null;
+}
+
 export const STRIPE_METER_EVENT_NAME = "ai_voice_seconds";
 
 // Base price amounts in AUD cents — must match Stripe config exactly.
-export const PLAN_BASE_PRICE_CENTS: Record<"missed_call_recovery" | "ai_receptionist", number> = {
+export const PLAN_BASE_PRICE_CENTS: Record<StripePlan, number> = {
   missed_call_recovery: 900, // A$9/month
   ai_receptionist: 1500, // A$15/month
+  both: 2400, // A$9 + A$15/month
 };
 
-export type StripePlan = "missed_call_recovery" | "ai_receptionist";
+export type StripePlan = "missed_call_recovery" | "ai_receptionist" | "both";
+
+export function planServices(plan: StripePlan): ("missed_call_recovery" | "ai_receptionist")[] {
+  if (plan === "both") return ["missed_call_recovery", "ai_receptionist"];
+  return [plan];
+}
 
 // Server selects line items — client never provides price IDs.
 // Throws if required Stripe price env vars are not configured.
@@ -148,6 +158,13 @@ export function getCheckoutLineItems(
   const prices = getStripePrices();
   if (plan === "missed_call_recovery") {
     return [{ price: prices.MCR_BASE, quantity: 1 }];
+  }
+  if (plan === "both") {
+    return [
+      { price: prices.MCR_BASE, quantity: 1 },
+      { price: prices.AIR_BASE, quantity: 1 },
+      { price: prices.AIR_USAGE },
+    ];
   }
   return [
     { price: prices.AIR_BASE, quantity: 1 },

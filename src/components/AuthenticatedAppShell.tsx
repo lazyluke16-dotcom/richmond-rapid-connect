@@ -6,7 +6,6 @@ import { useMyTenantBrand } from "@/hooks/use-my-tenant-brand";
 import {
   isPlumberNavigationItemActive,
   plumberNavigationItems,
-  plumberServiceTool,
   type PlumberNavigationItem,
 } from "@/lib/plumber-navigation";
 import {
@@ -22,12 +21,13 @@ import {
 type ShellBilling = {
   billingStatus: string;
   effectiveState: string;
-  selectedPlan: "missed_call_recovery" | "ai_receptionist" | null;
+  selectedPlan: "missed_call_recovery" | "ai_receptionist" | "both" | null;
 };
 
 function planName(plan: ShellBilling["selectedPlan"]) {
   if (plan === "ai_receptionist") return "AI Receptionist";
   if (plan === "missed_call_recovery") return "Missed-call recovery";
+  if (plan === "both") return "Both services";
   return "Plan not selected";
 }
 
@@ -104,21 +104,6 @@ function NavigationPanel({
           ),
         )}
       </nav>
-
-      <div className="mt-5 border-t border-sidebar-border pt-4">
-        <div className="mb-2 px-3 text-[10px] font-black uppercase tracking-[0.2em] text-sidebar-foreground/45">
-          Service tools
-        </div>
-        {closeOnNavigate ? (
-          <SheetClose asChild>
-            <div>
-              <NavLink item={plumberServiceTool} />
-            </div>
-          </SheetClose>
-        ) : (
-          <NavLink item={plumberServiceTool} />
-        )}
-      </div>
 
       <button
         type="button"

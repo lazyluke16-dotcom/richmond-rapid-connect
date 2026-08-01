@@ -147,6 +147,30 @@ export const fetchLeads = createServerFn({ method: "GET" })
   });
 
 /**
+ * Authenticated, tenant-scoped and notification-safe first-job test. The RPC
+ * exercises the production Missed Jobs persistence path, records a simulated
+ * notification, and is idempotent by caller-generated request ID.
+ */
+export const createMyTestJob = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (data: { service: "missed_call_recovery" | "ai_receptionist"; requestId: string }) => data,
+  )
+  .handler(async ({ data, context }) => {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(data.requestId)
+    ) {
+      throw new Error("Invalid test request");
+    }
+    const { data: leadId, error } = await context.supabase.rpc(
+      "create_my_test_job" as never,
+      { _service: data.service, _request_id: data.requestId } as never,
+    );
+    if (error) throw new Error(error.message);
+    return { success: true, leadId: String(leadId) };
+  });
+
+/**
  * The database deliberately uses snake_case while the customer-facing app uses
  * a camelCase Lead contract. Keeping the conversion here prevents every caller
  * from accidentally rendering undefined fields from a raw database row.
@@ -182,5 +206,7 @@ export function mapLeadRow(row: Record<string, unknown>): Lead {
     external_call_id: typeof row.external_call_id === "string" ? row.external_call_id : undefined,
     call_recording_url:
       typeof row.call_recording_url === "string" ? row.call_recording_url : undefined,
+    isTest: row.is_test === true,
+    testRunId: typeof row.test_run_id === "string" ? row.test_run_id : undefined,
   };
 }

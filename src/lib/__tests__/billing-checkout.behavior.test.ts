@@ -113,8 +113,13 @@ describe("billing checkout idempotency and waiver ordering", () => {
     expect(source.indexOf("shouldApplyUnionOffer")).toBeLessThan(
       source.indexOf("stripe.customers.create"),
     );
-    expect(source).toContain(
-      "billing?.union_offer_eligible === true && !billing?.union_offer_redeemed_at",
+    expect(source.indexOf("shouldApplyFoundingOffer")).toBeLessThan(
+      source.indexOf("stripe.customers.create"),
+    );
+    expect(source).toContain('billing?.founding_offer_version === "founding-2026-three-months"');
+    expect(source).toContain("getFoundingThreeMonthCouponId()");
+    expect(source).toMatch(
+      /billing\?\.union_offer_eligible === true\s*&&\s*!billing\?\.union_offer_redeemed_at/,
     );
     expect(source).toContain("{ idempotencyKey: idempotencyKeys.customer }");
     expect(source).toContain("{ idempotencyKey: idempotencyKeys.session }");

@@ -177,6 +177,14 @@
       "file": "20260731120000_acquisition_account_recovery.sql",
       "sha256": "fce7898efa1adb3d805a2791105237ab8df2368ec3173cb9d5f5b7d3ebc6b2fb",
       "dependsOn": ["20260728140000_acquisition_funnel.sql"]
+    },
+    {
+      "file": "20260801130000_seamless_acquisition_activation.sql",
+      "sha256": "2c8a24b8175a4fb93093e38eacfb892849f6f9aaf5c6a0855636150084885089",
+      "dependsOn": [
+        "20260725160000_customer_call_handling.sql",
+        "20260731120000_acquisition_account_recovery.sql"
+      ]
     }
   ]
 }

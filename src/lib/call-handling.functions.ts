@@ -15,9 +15,13 @@ export interface CallHandlingContext {
     id: string;
     name: string;
     publicPhone: string | null;
-    selectedPlan: "missed_call_recovery" | "ai_receptionist" | null;
+    selectedPlan: "missed_call_recovery" | "ai_receptionist" | "both" | null;
   };
   mode: CallHandlingMode;
+  operational: {
+    missedCallRecovery: boolean;
+    aiReceptionist: boolean;
+  };
   entitlements: ServiceEntitlements;
   canManage: boolean;
   forwarding: {
@@ -59,7 +63,7 @@ async function requireOwnBusiness(context: { userId: string; supabase: SupabaseC
       id: string;
       name: string;
       public_phone: string | null;
-      selected_plan: "missed_call_recovery" | "ai_receptionist" | null;
+      selected_plan: "missed_call_recovery" | "ai_receptionist" | "both" | null;
     },
     canManage: Boolean(
       membership && ["owner", "admin"].includes((membership as { role?: string }).role ?? ""),
@@ -77,7 +81,7 @@ export const getMyCallHandlingContext = createServerFn({ method: "GET" })
         context.supabase
           .from("business_telephony_settings")
           .select(
-            "answering_mode,inbound_number,forwarding_setup_status,forwarding_verification_expires_at,forwarding_verified_at",
+            "answering_mode,inbound_number,forwarding_setup_status,forwarding_verification_expires_at,forwarding_verified_at,missed_call_recovery_enabled,ai_receptionist_enabled",
           )
           .eq("business_id", businessId)
           .maybeSingle(),
@@ -110,6 +114,8 @@ export const getMyCallHandlingContext = createServerFn({ method: "GET" })
       forwarding_setup_status?: CallHandlingContext["forwarding"]["status"];
       forwarding_verified_at?: string | null;
       forwarding_verification_expires_at?: string | null;
+      missed_call_recovery_enabled?: boolean;
+      ai_receptionist_enabled?: boolean;
     };
     const ai = aiResult.data as {
       provider_assistant_id?: string | null;
@@ -132,6 +138,10 @@ export const getMyCallHandlingContext = createServerFn({ method: "GET" })
         selectedPlan: own.business.selected_plan,
       },
       mode: CallHandlingModeSchema.catch("off").parse(telephony.answering_mode),
+      operational: {
+        missedCallRecovery: Boolean(telephony.missed_call_recovery_enabled),
+        aiReceptionist: Boolean(telephony.ai_receptionist_enabled),
+      },
       entitlements,
       canManage: own.canManage,
       forwarding: {
@@ -203,6 +213,20 @@ export const setMyCallHandlingMode = createServerFn({ method: "POST" })
     );
     if (error) throw new Error(error.message);
     return { success: true, mode };
+  });
+
+export const setMyOperationalService = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (data: { service: "missed_call_recovery" | "ai_receptionist"; enabled: boolean }) => data,
+  )
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase.rpc(
+      "set_my_service_enabled" as never,
+      { _service: data.service, _enabled: Boolean(data.enabled) } as never,
+    );
+    if (error) throw new Error(error.message);
+    return { success: true, ...data };
   });
 
 export const startMyForwardingVerification = createServerFn({ method: "POST" })

@@ -2,13 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   getStripe,
   getCheckoutLineItems,
+  getFoundingThreeMonthCouponId,
   getUnionCouponId,
   type StripePlan,
 } from "@/lib/stripe.server";
 import type Stripe from "stripe";
 import { extractBearerToken, requireAuthAndBusiness } from "@/lib/billing.server";
 
-const ALLOWED_PLANS = new Set<StripePlan>(["missed_call_recovery", "ai_receptionist"]);
+const ALLOWED_PLANS = new Set<StripePlan>(["missed_call_recovery", "ai_receptionist", "both"]);
 const STRIPE_INTEGRATION_IDENTIFIER = "plumbing_ai_receptionist_vqkhtnra";
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -157,7 +158,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
           const { data: billingData, error: billingErr } = await supabaseAdmin
             .from("business_billing")
             .select(
-              "selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at",
+              "selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at, founding_offer_version, founding_offer_eligible, founding_offer_redeemed_at",
             )
             .eq("business_id", businessId)
             .maybeSingle();
@@ -176,6 +177,9 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
             stripe_subscription_id?: string | null;
             union_offer_eligible?: boolean;
             union_offer_redeemed_at?: string | null;
+            founding_offer_version?: string | null;
+            founding_offer_eligible?: boolean;
+            founding_offer_redeemed_at?: string | null;
           } | null;
 
           // Server selects the plan from DB — client cannot inject a plan.
@@ -231,9 +235,28 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
 
           // Resolve the discount and all Stripe configuration before the first
           // provider write. A retry after a partial failure must keep the waiver.
+          const shouldApplyFoundingOffer =
+            billing?.founding_offer_version === "founding-2026-three-months" &&
+            billing?.founding_offer_eligible === true &&
+            !billing?.founding_offer_redeemed_at;
           const shouldApplyUnionOffer =
-            billing?.union_offer_eligible === true && !billing?.union_offer_redeemed_at;
-          const couponId = shouldApplyUnionOffer ? getUnionCouponId() : null;
+            !shouldApplyFoundingOffer &&
+            billing?.union_offer_eligible === true &&
+            !billing?.union_offer_redeemed_at;
+          const couponId = shouldApplyFoundingOffer
+            ? getFoundingThreeMonthCouponId()
+            : shouldApplyUnionOffer
+              ? getUnionCouponId()
+              : null;
+          if (shouldApplyFoundingOffer && !couponId) {
+            return new Response(
+              JSON.stringify({
+                error: "Billing is temporarily unavailable. Please try again shortly.",
+                code: "founding_coupon_not_configured",
+              }),
+              { status: 503, headers: JSON_HEADERS },
+            );
+          }
           if (shouldApplyUnionOffer && !couponId) {
             return new Response(
               JSON.stringify({
@@ -294,10 +317,9 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
             }
           }
 
-          // Union offer: apply a Stripe coupon that discounts the first month's base
-          // platform fee to $0. The coupon must be pre-configured in Stripe with:
-          //   - percent_off: 100, duration: 'once'
-          //   - applies_to: { products: [MCR_BASE_PRODUCT_ID, AIR_BASE_PRODUCT_ID] }
+          // Founding offer: a test-mode, product-scoped repeating coupon discounts
+          // exactly three monthly platform invoices. Union accounts retain their
+          // separate one-invoice coupon. Neither coupon includes usage products.
           //
           // REQUIRED STRIPE PRODUCT STRUCTURE:
           //   prod_MCR_BASE  — Missed Call Recovery Base     → in applies_to
@@ -306,9 +328,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
           //
           // Stripe product-scoped coupons apply at Product level. AI Receptionist Voice
           // Usage must be on a separate product that is omitted from applies_to — that
-          // is the structural guarantee usage is never discounted. duration:'once' adds a
-          // secondary constraint (first invoice only) but does not substitute for the
-          // product-level separation.
+          // is the structural guarantee usage is charged from activation.
           //
           // payment_method_collection:'always' ensures a card is saved even when
           // the first invoice total is $0 (required for future usage billing).
@@ -322,13 +342,31 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
               line_items: getCheckoutLineItems(plan),
               ...(checkoutDiscounts ? { discounts: checkoutDiscounts } : {}),
               subscription_data: {
-                metadata: { business_id: businessId, plan, ...acquisitionMetadata },
+                metadata: {
+                  business_id: businessId,
+                  plan,
+                  offer_version: shouldApplyFoundingOffer
+                    ? "founding-2026-three-months"
+                    : shouldApplyUnionOffer
+                      ? "union-first-platform-fee"
+                      : "standard",
+                  ...acquisitionMetadata,
+                },
               },
               customer_update: { address: "auto" },
               tax_id_collection: { enabled: false },
               success_url: `${origin}/dashboard?billing=success&session_id={CHECKOUT_SESSION_ID}`,
               cancel_url: `${origin}/dashboard?billing=cancelled`,
-              metadata: { business_id: businessId, plan, ...acquisitionMetadata },
+              metadata: {
+                business_id: businessId,
+                plan,
+                offer_version: shouldApplyFoundingOffer
+                  ? "founding-2026-three-months"
+                  : shouldApplyUnionOffer
+                    ? "union-first-platform-fee"
+                    : "standard",
+                ...acquisitionMetadata,
+              },
             },
             { idempotencyKey: idempotencyKeys.session },
           );

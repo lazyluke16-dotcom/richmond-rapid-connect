@@ -1,13 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bot,
-  Check,
+  CheckCircle2,
   CircleOff,
   Loader2,
   MessageSquareText,
   PhoneCall,
   Save,
+  Send,
   ShieldCheck,
 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
@@ -15,53 +16,26 @@ import { useMyTenantBrand } from "@/hooks/use-my-tenant-brand";
 import {
   getMyCallHandlingContext,
   reserveMyForwardingNumber,
-  setMyCallHandlingMode,
+  setMyOperationalService,
   startMyForwardingVerification,
   updateMyCustomerPhone,
   type CallHandlingContext,
 } from "@/lib/call-handling.functions";
-import { TEXT_LINK_SMS_UNIT_PRICE_MINOR, type CallHandlingMode } from "@/lib/call-handling";
+import { createMyTestJob } from "@/lib/db-leads";
 
 export const Route = createFileRoute("/_authenticated/call-handling")({
   head: () => ({
     meta: [
-      { title: "Call Handling — Your AI Trade Assistant" },
-      {
-        name: "description",
-        content: "Choose how unanswered customer calls are handled.",
-      },
+      { title: "Services — Rapid Connect" },
+      { name: "description", content: "Switch your purchased plumber services on or off." },
     ],
   }),
-  component: CallHandlingPage,
+  component: ServicesPage,
 });
 
-const OPTIONS: {
-  mode: CallHandlingMode;
-  label: string;
-  description: string;
-  icon: typeof CircleOff;
-}[] = [
-  {
-    mode: "off",
-    label: "Off",
-    description: "No Text Link or AI workflow runs.",
-    icon: CircleOff,
-  },
-  {
-    mode: "text_link",
-    label: "Text Link",
-    description: "Send one secure job-request link when a call reaches the platform.",
-    icon: MessageSquareText,
-  },
-  {
-    mode: "ai_receptionist",
-    label: "AI Receptionist",
-    description: "Let your configured receptionist answer and create the job card.",
-    icon: Bot,
-  },
-];
+type ServiceKey = "missed_call_recovery" | "ai_receptionist";
 
-function CallHandlingPage() {
+function ServicesPage() {
   const tenant = useMyTenantBrand();
   const [context, setContext] = useState<CallHandlingContext | null>(null);
   const [phone, setPhone] = useState("");
@@ -77,7 +51,7 @@ function CallHandlingPage() {
 
   useEffect(() => {
     void load().catch((cause) =>
-      setError(cause instanceof Error ? cause.message : "Could not load call handling"),
+      setError(cause instanceof Error ? cause.message : "Could not load your services"),
     );
   }, []);
 
@@ -95,70 +69,139 @@ function CallHandlingPage() {
     }
   };
 
+  const services = useMemo(() => {
+    if (!context) return [];
+    return [
+      {
+        key: "missed_call_recovery" as const,
+        name: "Missed-Call Recovery",
+        purpose:
+          "After you miss a call, immediately text the customer and capture the job in Missed Jobs.",
+        icon: MessageSquareText,
+        purchased: context.entitlements.textLink,
+        enabled: context.operational.missedCallRecovery,
+        ready:
+          context.forwarding.status === "verified" &&
+          Boolean(context.forwarding.number) &&
+          context.provider.smsReady,
+        missing:
+          context.forwarding.status !== "verified"
+            ? "Verify call forwarding"
+            : !context.provider.smsReady
+              ? "SMS service is temporarily unavailable"
+              : null,
+      },
+      {
+        key: "ai_receptionist" as const,
+        name: "AI Receptionist",
+        purpose:
+          "Answer the call, speak with the customer, collect the job details and alert you—24/7.",
+        icon: Bot,
+        purchased: context.entitlements.aiReceptionist,
+        enabled: context.operational.aiReceptionist,
+        ready:
+          context.forwarding.status === "verified" &&
+          Boolean(context.forwarding.number) &&
+          context.provider.aiReady,
+        missing:
+          context.forwarding.status !== "verified"
+            ? "Verify call forwarding"
+            : !context.provider.aiReady
+              ? "Finish AI conversation setup"
+              : null,
+      },
+    ];
+  }, [context]);
+
   if (!context) {
     return (
       <AppShell showCallBar={false} tenant={tenant} hidePublicNav>
-        <div className="mx-auto flex max-w-4xl items-center gap-2 px-4 py-10 text-sm text-muted-foreground">
-          {error ? null : <Loader2 className="h-4 w-4 animate-spin" />}
-          {error ?? "Loading call handling…"}
+        <div className="mx-auto flex max-w-5xl items-center gap-2 px-5 py-12 text-sm text-muted-foreground">
+          {!error && <Loader2 className="h-4 w-4 animate-spin" />}
+          {error ?? "Loading your services…"}
         </div>
       </AppShell>
     );
   }
 
-  const canUse = (mode: CallHandlingMode) => {
-    if (mode === "off") return true;
-    if (!context.forwarding.number || context.forwarding.status !== "verified") return false;
-    if (mode === "text_link") return context.entitlements.textLink && context.provider.smsReady;
-    return context.entitlements.aiReceptionist && context.provider.aiReady;
-  };
+  const activeServices = services.filter((service) => service.enabled && service.ready);
 
   return (
     <AppShell showCallBar={false} tenant={tenant} hidePublicNav>
-      <div className="mx-auto max-w-4xl space-y-6 px-4 py-7">
-        <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
-              Your phone line
-            </div>
-            <h1 className="mt-1 text-3xl font-black tracking-tight">Call Handling</h1>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Your subscription can include both services. This switch decides which single workflow
-              answers inbound calls right now.
-            </p>
+      <div className="mx-auto max-w-5xl space-y-7 px-4 py-7 sm:px-6">
+        <header>
+          <div className="text-xs font-black uppercase tracking-[.18em] text-primary">
+            Your two controls
           </div>
-          <Link to="/dashboard" className="text-sm text-muted-foreground underline">
-            ← Job Centre
-          </Link>
+          <h1 className="mt-1 text-3xl font-black tracking-tight">Services</h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            Subscription controls what you have purchased. These switches control what is operating.
+            Switching a service off does not cancel its subscription.
+          </p>
         </header>
 
         {error && (
           <div
             role="alert"
-            className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+            className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
           >
             {error}
           </div>
         )}
         {notice && (
-          <div className="rounded-md border border-primary/40 bg-primary/10 p-3 text-sm text-primary">
+          <div
+            role="status"
+            className="rounded-xl border border-emerald-500/35 bg-emerald-500/10 p-4 text-sm font-bold text-emerald-700 dark:text-emerald-300"
+          >
             {notice}
           </div>
         )}
 
-        <section className="overflow-hidden rounded-xl border border-border bg-card">
+        <section className="grid gap-5 lg:grid-cols-2" aria-label="Operational services">
+          {services.map(({ key, ...service }) => (
+            <ServiceControlCard
+              key={key}
+              {...service}
+              busy={busy === `service:${key}`}
+              canManage={context.canManage}
+              onToggle={() => {
+                if (!service.purchased) return;
+                if (!service.ready && !service.enabled) {
+                  document.getElementById("phone-setup")?.scrollIntoView({ behavior: "smooth" });
+                  return;
+                }
+                void run(`service:${key}`, async () => {
+                  await setMyOperationalService({
+                    data: { service: key, enabled: !service.enabled },
+                  });
+                  setNotice(
+                    service.enabled
+                      ? `${service.name} is off. You can switch it back on whenever you are ready.`
+                      : `${service.name} is on and operating.`,
+                  );
+                });
+              }}
+            />
+          ))}
+        </section>
+
+        <section
+          id="phone-setup"
+          className="overflow-hidden rounded-2xl border border-border bg-card"
+        >
           <div className="border-b border-border bg-muted/30 px-5 py-4">
             <div className="flex items-center gap-2 font-black">
-              <PhoneCall className="h-5 w-5 text-primary" /> Where customers call
+              <PhoneCall className="h-5 w-5 text-primary" /> One-time phone setup
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Keep your existing Australian number. No number is moved or disconnected.
+              Keep your existing number. Forwarding must be verified before either service can be
+              switched on.
             </p>
           </div>
-          <div className="grid gap-5 p-5 md:grid-cols-[1fr_1fr]">
+          <div className="grid gap-5 p-5 md:grid-cols-2">
             <label className="block">
               <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                Existing business number
+                Your business number
               </span>
               <div className="mt-2 flex gap-2">
                 <input
@@ -166,8 +209,7 @@ function CallHandlingPage() {
                   onChange={(event) => setPhone(event.target.value)}
                   inputMode="tel"
                   disabled={!context.canManage || Boolean(busy)}
-                  className="min-w-0 flex-1 rounded-md border border-border bg-input px-3 py-2 text-sm"
-                  placeholder="e.g. 04xx xxx xxx"
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-input px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 />
                 <button
                   type="button"
@@ -178,7 +220,7 @@ function CallHandlingPage() {
                       setNotice(`Business number saved as ${result.phone}.`);
                     })
                   }
-                  className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-bold disabled:opacity-40"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 text-sm font-bold disabled:opacity-40"
                 >
                   {busy === "phone" ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -192,18 +234,16 @@ function CallHandlingPage() {
 
             <div>
               <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                Platform forwarding number
+                Forwarding status
               </div>
               {context.forwarding.number ? (
-                <div className="mt-2 rounded-md border border-primary/40 bg-primary/5 px-4 py-3">
+                <div className="mt-2 rounded-xl border border-primary/35 bg-primary/5 p-4">
                   <div className="font-mono text-lg font-black">{context.forwarding.number}</div>
-                  <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
                     {context.forwarding.status === "verified"
-                      ? "Forwarding verified by a real inbound call"
-                      : context.forwarding.status === "pending_verification"
-                        ? "Verification window open — make the forwarded call now"
-                        : "Reserved — start verification when forwarding is configured"}
+                      ? "Verified and ready"
+                      : "Forward unanswered calls here, then start verification"}
                   </div>
                   {context.forwarding.status !== "verified" && (
                     <button
@@ -211,22 +251,15 @@ function CallHandlingPage() {
                       disabled={!context.canManage || Boolean(busy)}
                       onClick={() =>
                         void run("verify", async () => {
-                          const result = await startMyForwardingVerification();
+                          await startMyForwardingVerification();
                           setNotice(
-                            `Verification is open until ${new Date(result.expiresAt).toLocaleTimeString()}.`,
+                            "Verification is open for 15 minutes. Make the forwarded test call now.",
                           );
                         })
                       }
-                      className="mt-3 inline-flex items-center gap-2 rounded-md border border-primary/50 px-3 py-2 text-xs font-black text-primary disabled:opacity-40"
+                      className="mt-3 min-h-11 rounded-lg border border-primary/50 px-4 text-sm font-black text-primary disabled:opacity-40"
                     >
-                      {busy === "verify" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <ShieldCheck className="h-4 w-4" />
-                      )}
-                      {context.forwarding.status === "pending_verification"
-                        ? "Restart 15-minute verification"
-                        : "Start 15-minute verification"}
+                      Start verification
                     </button>
                   )}
                 </div>
@@ -236,146 +269,186 @@ function CallHandlingPage() {
                   disabled={!context.canManage || !phone || Boolean(busy)}
                   onClick={() =>
                     void run("allocate", async () => {
-                      const result = await reserveMyForwardingNumber();
-                      setNotice(`Forwarding number ${result.forwardingNumber} reserved.`);
+                      await reserveMyForwardingNumber();
+                      setNotice(
+                        "Your forwarding number is reserved. Follow the next on-screen step.",
+                      );
                     })
                   }
-                  className="mt-2 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-black text-primary-foreground disabled:opacity-40"
+                  className="mt-2 min-h-11 rounded-lg bg-primary px-4 text-sm font-black text-primary-foreground disabled:opacity-40"
                 >
-                  {busy === "allocate" ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <PhoneCall className="h-4 w-4" />
-                  )}
-                  Allocate an available number
+                  Reserve my forwarding number
                 </button>
               )}
             </div>
           </div>
-          {context.forwarding.number && context.forwarding.status === "pending_verification" && (
+          {context.forwarding.number && context.forwarding.status !== "verified" && (
             <div className="border-t border-border bg-muted/20 px-5 py-4 text-sm">
-              <b>Verify no-answer forwarding:</b> use your carrier’s no-answer forwarding setup to
-              send unanswered calls to{" "}
-              <span className="font-mono">{context.forwarding.number}</span>. Then call your
-              existing business number from another phone and let it forward. The real inbound call
-              completes verification automatically.
+              Set no-answer forwarding with your phone carrier to{" "}
+              <b className="font-mono">{context.forwarding.number}</b>. Call your business number
+              from another phone and let it forward. The inbound call verifies setup automatically.
             </div>
           )}
         </section>
 
-        <section className="rounded-xl border border-border bg-card p-5">
-          <div className="flex items-end justify-between gap-3">
+        <section className="rounded-2xl border border-primary/35 bg-primary/8 p-5 sm:p-6">
+          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
             <div>
-              <h2 className="font-black">Choose the active mode</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                The server applies this choice atomically; two modes cannot be active together.
+              <div className="flex items-center gap-2 font-black">
+                {activeServices.length > 0 ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                ) : (
+                  <CircleOff className="h-5 w-5 text-muted-foreground" />
+                )}
+                {activeServices.length > 0
+                  ? activeServices.length === 2
+                    ? "Both services are ready for a safe test"
+                    : "Ready for a safe test"
+                  : "Switch a ready service on first"}
+              </div>
+              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                The test uses the captured-job database path and creates a clearly marked entry. Its
+                notification is simulated; no customer message, public call or charge is made.
               </p>
             </div>
-            <div className="rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-black uppercase tracking-widest text-primary">
-              {OPTIONS.find((option) => option.mode === context.mode)?.label}
-            </div>
-          </div>
-
-          <div className="relative mt-5 grid gap-3 md:grid-cols-3">
-            <div
-              aria-hidden
-              className="absolute left-[16.66%] right-[16.66%] top-7 hidden h-px bg-border md:block"
-            />
-            {OPTIONS.map((option) => {
-              const Icon = option.icon;
-              const active = option.mode === context.mode;
-              const available = canUse(option.mode);
-              return (
-                <button
-                  key={option.mode}
-                  type="button"
-                  disabled={!context.canManage || !available || Boolean(busy)}
-                  onClick={() =>
-                    void run(`mode:${option.mode}`, async () => {
-                      await setMyCallHandlingMode({ data: { mode: option.mode } });
-                      setNotice(`${option.label} is now the active call handling mode.`);
-                    })
+            <button
+              type="button"
+              disabled={activeServices.length === 0 || Boolean(busy)}
+              onClick={() => {
+                if (activeServices.length === 0) return;
+                void run("test-job", async () => {
+                  const results: Array<{ leadId: string }> = [];
+                  for (const service of activeServices) {
+                    results.push(
+                      await createMyTestJob({
+                        data: { service: service.key, requestId: crypto.randomUUID() },
+                      }),
+                    );
                   }
-                  className={`relative rounded-lg border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-45 ${
-                    active
-                      ? "border-primary bg-primary/10"
-                      : "border-border bg-background hover:border-primary/50"
-                  }`}
-                >
-                  <span
-                    className={`relative z-10 grid h-11 w-11 place-items-center rounded-full border ${
-                      active
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-card"
-                    }`}
-                  >
-                    {busy === `mode:${option.mode}` ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : active ? (
-                      <Check className="h-5 w-5" />
-                    ) : (
-                      <Icon className="h-5 w-5" />
-                    )}
-                  </span>
-                  <div className="mt-4 font-black">{option.label}</div>
-                  <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {option.description}
-                  </div>
-                </button>
-              );
-            })}
+                  setNotice(
+                    activeServices.length === 2
+                      ? "Both services are working. Opening the captured test jobs now."
+                      : "Your service is working. Opening the captured test job now.",
+                  );
+                  window.setTimeout(() => {
+                    window.location.assign(`/leads#${encodeURIComponent(results[0].leadId)}`);
+                  }, 650);
+                });
+              }}
+              className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-5 font-black text-primary-foreground disabled:opacity-40"
+            >
+              {busy === "test-job" ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Send className="h-5 w-5" />
+              )}
+              {activeServices.length === 2
+                ? "Send my first test jobs"
+                : "Send me my first test job"}
+            </button>
           </div>
         </section>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <section className="rounded-lg border border-border bg-card p-4">
-            <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              Included services
-            </div>
-            <ServiceLine label="Text Link" included={context.entitlements.textLink} />
-            <ServiceLine label="AI Receptionist" included={context.entitlements.aiReceptionist} />
-            <Link to="/billing" className="mt-3 inline-block text-xs text-primary underline">
-              View subscription
-            </Link>
-          </section>
-          <section className="rounded-lg border border-border bg-card p-4">
-            <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              Usage ledger
-            </div>
-            <div className="mt-3 flex justify-between text-sm">
-              <span>AI voice</span>
-              <b>{context.usage.aiVoiceSeconds.toLocaleString()} sec</b>
-            </div>
-            <div className="mt-2 flex justify-between text-sm">
-              <span>Recovery SMS</span>
-              <b>{context.usage.smsMessages.toLocaleString()}</b>
-            </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Each Twilio-accepted recovery SMS is A$
-              {(TEXT_LINK_SMS_UNIT_PRICE_MINOR / 100).toFixed(2)} excluding GST. It is separate from
-              AI voice and lead usage.
-            </p>
-          </section>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <Link to="/billing" className="font-bold text-primary underline">
+            Manage subscription
+          </Link>
+          <Link to="/leads" className="font-bold text-primary underline">
+            Open Missed Jobs
+          </Link>
+          <Link to="/setup-guide" className="font-bold text-primary underline">
+            Read the setup guide
+          </Link>
         </div>
-
-        {!context.canManage && (
-          <p className="text-xs text-muted-foreground">
-            You can view call handling. An owner or administrator must change routing or allocate a
-            number.
-          </p>
-        )}
       </div>
     </AppShell>
   );
 }
 
-function ServiceLine({ label, included }: { label: string; included: boolean }) {
+function ServiceControlCard({
+  name,
+  purpose,
+  icon: Icon,
+  purchased,
+  enabled,
+  ready,
+  missing,
+  busy,
+  canManage,
+  onToggle,
+}: {
+  name: string;
+  purpose: string;
+  icon: typeof Bot;
+  purchased: boolean;
+  enabled: boolean;
+  ready: boolean;
+  missing: string | null;
+  busy: boolean;
+  canManage: boolean;
+  onToggle: () => void;
+}) {
+  const state = !purchased
+    ? "Not purchased"
+    : !ready
+      ? "Setup incomplete"
+      : enabled
+        ? "On and operating"
+        : "Ready — switched off";
   return (
-    <div className="mt-3 flex items-center justify-between text-sm">
-      <span>{label}</span>
-      <span className={included ? "font-bold text-primary" : "text-muted-foreground"}>
-        {included ? "Included" : "Not included"}
-      </span>
-    </div>
+    <article
+      className={`rounded-2xl border p-5 ${enabled && ready ? "border-emerald-500/45 bg-emerald-500/5" : "border-border bg-card"}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <span className="grid h-12 w-12 place-items-center rounded-xl bg-primary/12 text-primary">
+          <Icon className="h-6 w-6" />
+        </span>
+        <span
+          className={`rounded-full px-3 py-1 text-xs font-black ${enabled && ready ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300" : "bg-muted text-muted-foreground"}`}
+        >
+          {state}
+        </span>
+      </div>
+      <h2 className="mt-5 text-xl font-black">{name}</h2>
+      <p className="mt-2 min-h-12 text-sm leading-relaxed text-muted-foreground">{purpose}</p>
+      {missing && purchased && (
+        <p className="mt-3 text-sm font-bold text-amber-700 dark:text-amber-300">Next: {missing}</p>
+      )}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled && ready}
+        disabled={!canManage || !purchased || busy}
+        onClick={onToggle}
+        className={`mt-5 flex min-h-14 w-full items-center justify-between rounded-xl px-4 font-black outline-none focus-visible:ring-4 focus-visible:ring-primary/30 disabled:opacity-45 ${enabled && ready ? "bg-emerald-500 text-slate-950" : "bg-muted text-foreground"}`}
+      >
+        <span>
+          {!purchased
+            ? "Choose a plan in Account & Billing"
+            : enabled
+              ? "Switch off"
+              : ready
+                ? "Switch on"
+                : "Finish setup"}
+        </span>
+        {busy ? (
+          <Loader2 className="h-5 w-5 animate-spin" />
+        ) : (
+          <span
+            className={`relative h-7 w-12 rounded-full ${enabled && ready ? "bg-white/70" : "bg-slate-400/40"}`}
+          >
+            <span
+              className={`absolute top-1 h-5 w-5 rounded-full bg-slate-950 transition-all ${enabled && ready ? "left-6" : "left-1"}`}
+            />
+          </span>
+        )}
+      </button>
+      {enabled && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Switching off stops this operational workflow. It does not cancel billing and is
+          reversible.
+        </p>
+      )}
+    </article>
   );
 }

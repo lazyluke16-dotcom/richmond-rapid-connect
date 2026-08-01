@@ -39,7 +39,7 @@ export const Route = createFileRoute("/api/public/acquisition")({
           const { data, error } = await supabaseAdmin
             .from("acquisition_promo_codes" as never)
             .select(
-              "code,active,starts_at,expires_at,max_redemptions,redemption_count,applicable_plans,text_setup_fee_cents,combined_setup_fee_cents",
+              "code,active,starts_at,expires_at,max_redemptions,redemption_count,applicable_plans,text_setup_fee_cents,combined_setup_fee_cents,subscription_months_free,offer_version",
             )
             .eq("code", code)
             .maybeSingle();
@@ -54,6 +54,8 @@ export const Route = createFileRoute("/api/public/acquisition")({
             applicable_plans: string[];
             text_setup_fee_cents: number;
             combined_setup_fee_cents: number;
+            subscription_months_free: number;
+            offer_version: string;
           } | null;
           const valid =
             Boolean(promo?.active) &&
@@ -65,14 +67,16 @@ export const Route = createFileRoute("/api/public/acquisition")({
             Boolean(promo?.applicable_plans.includes(parsed.data.plan));
           if (!valid || !promo) return json({ valid: false, code, error: "Code is not available" });
           const waivedSetupFeeCents =
-            parsed.data.plan === "ai_receptionist"
-              ? promo.combined_setup_fee_cents
-              : promo.text_setup_fee_cents;
+            parsed.data.plan === "missed_call_recovery"
+              ? promo.text_setup_fee_cents
+              : promo.combined_setup_fee_cents;
           return json({
             valid: true,
             code: promo.code,
             plan: parsed.data.plan,
             waivedSetupFeeCents,
+            subscriptionMonthsFree: promo.subscription_months_free,
+            offerVersion: promo.offer_version,
             expiresAt: promo.expires_at,
           });
         }

@@ -93,7 +93,7 @@ function OnboardingWizard() {
     })),
   );
   // Plan
-  const [plan, setPlan] = useState<"missed_call_recovery" | "ai_receptionist">(
+  const [plan, setPlan] = useState<"missed_call_recovery" | "ai_receptionist" | "both">(
     "missed_call_recovery",
   );
 
@@ -123,7 +123,8 @@ function OnboardingWizard() {
             setShortDesc(full.short_description ?? "");
             if (
               full.selected_plan === "missed_call_recovery" ||
-              full.selected_plan === "ai_receptionist"
+              full.selected_plan === "ai_receptionist" ||
+              full.selected_plan === "both"
             ) {
               setPlan(full.selected_plan);
             }
@@ -762,20 +763,25 @@ function OnboardingWizard() {
                 onSelect={() => setPlan("ai_receptionist")}
                 icon={<Bot className="h-5 w-5" />}
                 title="AI Receptionist"
+                bullets={["AI phone receptionist", "Phone-call job capture", "AI call summary"]}
+              />
+              <PlanCard
+                selected={plan === "both"}
+                onSelect={() => setPlan("both")}
+                icon={<Sparkles className="h-5 w-5" />}
+                title="Both services"
                 bullets={[
-                  "Everything in Missed Call Recovery",
-                  "Both Text Link and AI included",
-                  "AI phone receptionist",
-                  "Phone-call job capture",
-                  "AI call summary",
+                  "AI answers configured calls",
+                  "Missed-call text follow-up",
+                  "One Missed Jobs inbox",
                 ]}
                 highlight
               />
               <p className="text-xs text-muted-foreground">
-                Signup and configuration are free. Usage (SMS, AI minutes) is billed only when you
-                go Live — nothing is charged today.
+                Normal pricing is A$9/month, A$15/month, or A$24/month for both. FOUNDINGPLUMBER
+                receives the first three subscription months free; usage applies from activation.
               </p>
-              {plan === "ai_receptionist" && (
+              {plan !== "missed_call_recovery" && (
                 <div className="rounded-md border border-yellow-500/40 bg-yellow-500/5 p-3 text-xs text-yellow-200 flex gap-2">
                   <Info className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>
@@ -1126,7 +1132,9 @@ function PlanCard({
           </li>
         ))}
       </ul>
-      <div className="mt-2 text-xs text-primary">30-day free trial · No card required</div>
+      <div className="mt-2 text-xs text-primary">
+        Founding offer: first 3 subscription months free · usage applies from activation
+      </div>
     </button>
   );
 }

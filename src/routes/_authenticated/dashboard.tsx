@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { fetchLeads, updateLeadStatus } from "@/lib/db-leads";
 import { jobLabel, urgencyLabel, type Lead } from "@/lib/leads";
 import { SubscriptionSuccess } from "@/components/SubscriptionSuccess";
+import { supabase } from "@/integrations/supabase/client";
 import {
   AlertTriangle,
   Phone,
@@ -17,6 +18,9 @@ import {
   Search,
   ArrowRight,
   Wrench,
+  Power,
+  ClipboardList,
+  MessageSquareText,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
@@ -54,12 +58,25 @@ export function DashboardWorkspace({
   const [sourceFilter, setSourceFilter] = useState<NonNullable<Lead["source"]> | "all">("all");
   const [urgentOnly, setUrgentOnly] = useState(false);
   const tenant = useMyTenantBrand();
+  const [homeSummary, setHomeSummary] = useState<{
+    billing?: { selectedPlan?: string | null; billingStatus?: string };
+    connections?: {
+      missedCallRecoveryEnabled?: boolean;
+      aiReceptionistEnabled?: boolean;
+    };
+  } | null>(null);
 
   const loadAll = async () => {
     try {
       const dbLeads = await fetchLeads();
       setLeads(dbLeads);
-      setActiveId((prev) => prev ?? dbLeads[0]?.id ?? null);
+      const requestedId =
+        typeof window === "undefined" ? null : decodeURIComponent(window.location.hash.slice(1));
+      setActiveId((prev) =>
+        requestedId && dbLeads.some((lead) => lead.id === requestedId)
+          ? requestedId
+          : (prev ?? dbLeads[0]?.id ?? null),
+      );
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load leads");
@@ -75,6 +92,18 @@ export function DashboardWorkspace({
     }, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!home) return;
+    void supabase.auth.getSession().then(async ({ data }) => {
+      const token = data.session?.access_token;
+      if (!token) return;
+      const response = await fetch("/api/public/billing/summary", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) setHomeSummary((await response.json()) as never);
+    });
+  }, [home]);
 
   const active = leads.find((l) => l.id === activeId) ?? null;
   const normalisedSearch = search.trim().toLowerCase();
@@ -127,6 +156,46 @@ export function DashboardWorkspace({
             </div>
           </div>
         </div>
+
+        {home && (
+          <section className="mt-6 grid gap-3 md:grid-cols-3" aria-label="Workspace status">
+            <DashboardStatus
+              icon={MessageSquareText}
+              title="Missed-Call Recovery"
+              state={
+                homeSummary?.connections?.missedCallRecoveryEnabled
+                  ? "On and operating"
+                  : homeSummary?.billing?.selectedPlan === "missed_call_recovery" ||
+                      homeSummary?.billing?.selectedPlan === "both"
+                    ? "Purchased — finish setup or switch on"
+                    : "Not purchased"
+              }
+              active={Boolean(homeSummary?.connections?.missedCallRecoveryEnabled)}
+              to="/call-handling"
+            />
+            <DashboardStatus
+              icon={Bot}
+              title="AI Receptionist"
+              state={
+                homeSummary?.connections?.aiReceptionistEnabled
+                  ? "On and operating"
+                  : homeSummary?.billing?.selectedPlan === "ai_receptionist" ||
+                      homeSummary?.billing?.selectedPlan === "both"
+                    ? "Purchased — finish setup or switch on"
+                    : "Not purchased"
+              }
+              active={Boolean(homeSummary?.connections?.aiReceptionistEnabled)}
+              to="/call-handling"
+            />
+            <DashboardStatus
+              icon={ClipboardList}
+              title="New Missed Jobs"
+              state={`${leads.filter((lead) => lead.status === "new").length} waiting for you`}
+              active={leads.some((lead) => lead.status === "new")}
+              to="/leads"
+            />
+          </section>
+        )}
 
         {home && !loading && leads.length === 0 && !error && (
           <section className="mt-6 rounded-xl border border-primary/30 bg-card p-5 sm:p-6">
@@ -225,6 +294,11 @@ export function DashboardWorkspace({
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="truncate font-bold">{l.name}</div>
+                        {l.isTest && (
+                          <span className="mt-1 inline-flex rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-sky-600 dark:text-sky-300">
+                            Test job
+                          </span>
+                        )}
                         <div className="truncate text-xs text-muted-foreground">
                           {jobLabel(l.jobType)} · {l.suburb}
                         </div>
@@ -278,7 +352,11 @@ function LeadDetail({ lead, onStatus }: { lead: Lead; onStatus: (s: Lead["status
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
             {isUrgent && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
-            {isUrgent ? "Emergency lead" : "New job request"}
+            {lead.isTest
+              ? "Test job — no customer contact"
+              : isUrgent
+                ? "Emergency lead"
+                : "New job request"}
             <SourceChip source={lead.source} />
           </div>
           <h2 className="mt-1 text-xl font-black">{jobLabel(lead.jobType)}</h2>
@@ -294,12 +372,18 @@ function LeadDetail({ lead, onStatus }: { lead: Lead; onStatus: (s: Lead["status
           <SectionTitle>Customer</SectionTitle>
           <div className="mt-2 space-y-1 text-sm">
             <div className="font-bold text-base">{lead.name}</div>
-            <a
-              href={`tel:${lead.phone.replace(/\s/g, "")}`}
-              className="inline-flex items-center gap-2 text-primary font-semibold"
-            >
-              <Phone className="h-4 w-4" /> {lead.phone}
-            </a>
+            {lead.isTest ? (
+              <div className="inline-flex items-center gap-2 font-semibold text-sky-600 dark:text-sky-300">
+                <Phone className="h-4 w-4" /> {lead.phone}
+              </div>
+            ) : (
+              <a
+                href={`tel:${lead.phone.replace(/\s/g, "")}`}
+                className="inline-flex items-center gap-2 text-primary font-semibold"
+              >
+                <Phone className="h-4 w-4" /> {lead.phone}
+              </a>
+            )}
             <div className="text-muted-foreground">Best time: {lead.bestTime || "—"}</div>
             <div className="text-muted-foreground">Urgency: {urgencyLabel(lead.urgency)}</div>
             <div className="text-muted-foreground">Received {timeAgo(lead.createdAt)}</div>
@@ -375,6 +459,38 @@ function LeadDetail({ lead, onStatus }: { lead: Lead; onStatus: (s: Lead["status
         </div>
       </div>
     </div>
+  );
+}
+
+function DashboardStatus({
+  icon: Icon,
+  title,
+  state,
+  active,
+  to,
+}: {
+  icon: typeof Power;
+  title: string;
+  state: string;
+  active: boolean;
+  to: string;
+}) {
+  return (
+    <Link
+      to={to as never}
+      className="rounded-xl border border-border bg-card p-4 outline-none transition hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <span
+          className={`h-2.5 w-2.5 rounded-full ${active ? "bg-emerald-500" : "bg-amber-400"}`}
+        />
+      </div>
+      <div className="mt-3 font-black">{title}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{state}</div>
+    </Link>
   );
 }
 

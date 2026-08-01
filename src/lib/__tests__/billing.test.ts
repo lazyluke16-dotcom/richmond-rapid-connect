@@ -18,6 +18,7 @@ import {
 } from "../billing-types";
 import {
   getStripePrices,
+  getFoundingThreeMonthCouponId,
   getUnionCouponId,
   stripeEnvValue,
   PLAN_BASE_PRICE_CENTS,
@@ -83,6 +84,15 @@ describe("Price ID injection prevention", () => {
   it("plan base prices are correct AUD cents", () => {
     expect(PLAN_BASE_PRICE_CENTS.missed_call_recovery).toBe(900);
     expect(PLAN_BASE_PRICE_CENTS.ai_receptionist).toBe(1500);
+    expect(PLAN_BASE_PRICE_CENTS.both).toBe(2400);
+  });
+
+  it("both services include both bases and metered AI usage exactly once", () => {
+    expect(getCheckoutLineItems("both").map((item) => item.price)).toEqual([
+      TEST_PRICES.MCR_BASE,
+      TEST_PRICES.AIR_BASE,
+      TEST_PRICES.AIR_USAGE,
+    ]);
   });
 });
 
@@ -412,6 +422,22 @@ describe("Union offer uses Stripe coupon (not negative invoice item)", () => {
     const requiredCouponConfig = { duration: "once", percent_off: 100 };
     expect(requiredCouponConfig.duration).toBe("once");
     expect(requiredCouponConfig.percent_off).toBe(100);
+  });
+});
+
+describe("Founding three-month coupon configuration", () => {
+  afterEach(() => {
+    delete process.env.STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES;
+  });
+
+  it("normalizes the staging coupon ID without exposing it to the client", () => {
+    process.env.STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES =
+      "  coupon_test_founding_three_months\r\n";
+    expect(getFoundingThreeMonthCouponId()).toBe("coupon_test_founding_three_months");
+  });
+
+  it("fails closed when the founding coupon is absent", () => {
+    expect(getFoundingThreeMonthCouponId()).toBeNull();
   });
 });
 

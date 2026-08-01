@@ -22,7 +22,7 @@ export interface EditableBusiness {
   hero_heading: string | null;
   hero_subheading: string | null;
   emergency_message: string | null;
-  selected_plan?: "missed_call_recovery" | "ai_receptionist" | null;
+  selected_plan?: "missed_call_recovery" | "ai_receptionist" | "both" | null;
   // Phase 1 — service coverage (optional; nullable when pre-migration).
   base_suburb?: string | null;
   base_state?: string | null;
