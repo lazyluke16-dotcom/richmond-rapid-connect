@@ -23,9 +23,11 @@ function stagingBaseUrl() {
 }
 
 async function validate(baseUrl, code, plan) {
-  const response = await fetch(new URL("/api/public/acquisition", baseUrl), {
+  const validationUrl = new URL("/api/public/acquisition", baseUrl);
+  validationUrl.searchParams.set("validation_request", crypto.randomUUID());
+  const response = await fetch(validationUrl, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "cache-control": "no-cache" },
     body: JSON.stringify({ action: "validate_promo", code, plan }),
   });
   const body = await response.json().catch(() => ({}));

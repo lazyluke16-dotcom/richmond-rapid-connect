@@ -186,7 +186,13 @@ export function AcquisitionWizard({
           controller.abort();
         }, 8_000);
         try {
-          const response = await fetch("/api/public/acquisition", {
+          // The isolated staging edge previously retained a transient POST 503
+          // at the bare route despite origin no-store headers. A per-attempt,
+          // non-sensitive query key prevents an old validation result from
+          // being reused for another code, plan, or retry.
+          const validationUrl = new URL("/api/public/acquisition", window.location.origin);
+          validationUrl.searchParams.set("validation_request", crypto.randomUUID());
+          const response = await fetch(validationUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             signal: controller.signal,

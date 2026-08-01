@@ -8,6 +8,9 @@ import {
 const jsonHeaders = {
   "Content-Type": "application/json",
   "Cache-Control": "no-store",
+  "CDN-Cache-Control": "no-store",
+  "Cloudflare-CDN-Cache-Control": "no-store",
+  Expires: "0",
 };
 
 function json(body: unknown, status = 200) {

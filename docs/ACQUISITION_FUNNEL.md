@@ -72,6 +72,11 @@ the code for retry and requires an explicit choice before standard pricing can b
 paths are committed by authenticated tenant-scoped database functions and independently checked by
 the Checkout endpoint before any Stripe customer or session is created.
 
+Each validation attempt uses a non-sensitive unique request URL and the endpoint emits browser and
+CDN `no-store` directives. This prevents an edge-cached transient outage or a response for another
+plan from being reused as promotion authority; Checkout still relies only on server-owned tenant
+records.
+
 The offer uses two distinct safeguards: the database records the A$499 setup/sign-on-fee waiver,
 and the product-scoped Stripe test coupon discounts only the first three monthly platform billing
 periods. Usage begins at activation and is never included in either discount. Existing accounts

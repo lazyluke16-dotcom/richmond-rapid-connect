@@ -81,7 +81,8 @@ describe("campaign promotion state", () => {
   });
 
   it("auto-validates and distinguishes every non-authoritative state", () => {
-    expect(wizard).toContain('fetch("/api/public/acquisition"');
+    expect(wizard).toContain('new URL("/api/public/acquisition"');
+    expect(wizard).toContain('validationUrl.searchParams.set("validation_request"');
     expect(wizard).toContain('status: "validating"');
     expect(wizard).toContain('status: "no_code"');
     expect(wizard).toContain('status: "invalid"');
@@ -91,6 +92,7 @@ describe("campaign promotion state", () => {
     expect(wizard).toContain("standardPricingChosen");
     expect(validator).toContain('state: "unavailable"');
     expect(validator).toContain('code: "promotion_validation_unavailable"');
+    expect(validator).toContain('"Cloudflare-CDN-Cache-Control": "no-store"');
     expect(validator).toContain('state: "invalid"');
     expect(validator).toContain('state: "valid"');
   });
