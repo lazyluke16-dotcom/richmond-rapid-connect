@@ -84,12 +84,23 @@ export async function runNewAccountCheckoutSmoke(env = process.env) {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const payload = await response.json().catch(() => ({}));
+    const responseText = await response.text();
+    const payload = (() => {
+      try {
+        return JSON.parse(responseText);
+      } catch {
+        return {};
+      }
+    })();
     if (!response.ok || typeof payload.url !== "string") {
       const code = typeof payload.code === "string" ? payload.code : "unknown_checkout_failure";
       const requestId =
         typeof payload.requestId === "string" ? payload.requestId : "no-correlation-id";
-      throw new Error(`Authenticated checkout failed safely: ${code} (${requestId})`);
+      const contentType = response.headers.get("content-type")?.split(";")[0] || "absent";
+      const cloudflareRay = response.headers.get("cf-ray")?.split("-")[0] || "absent";
+      throw new Error(
+        `Authenticated checkout failed safely: ${code} (${requestId}); HTTP ${response.status}; content-type ${contentType}; cf-ray ${cloudflareRay}`,
+      );
     }
     const checkoutUrl = new URL(payload.url);
     if (checkoutUrl.protocol !== "https:" || checkoutUrl.hostname !== "checkout.stripe.com") {

@@ -97,10 +97,13 @@ describe("verified acquisition checkout recovery", () => {
   it("certifies a newly verified tenant through the real authenticated endpoint", () => {
     const workflow = source(".github/workflows/staging-deployment.yml");
     const smoke = source("scripts/staging-new-account-checkout-smoke.mjs");
+    const checkout = source("src/routes/api/public/billing.checkout.ts");
     expect(workflow).toContain("node scripts/staging-new-account-checkout-smoke.mjs");
     expect(smoke).toContain('new URL("/api/public/billing/checkout", baseUrl)');
     expect(smoke).not.toContain("checkout.sessions.create");
     expect(smoke).toContain("checkout.sessions.expire");
     expect(smoke).toContain("noSubscriptionCreated: true");
+    expect(smoke).toContain('response.headers.get("cf-ray")');
+    expect(checkout).toContain('code: "plan_selection_incomplete"');
   });
 });

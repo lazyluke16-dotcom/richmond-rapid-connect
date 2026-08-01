@@ -244,10 +244,22 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
             .maybeSingle();
 
           if (billingErr) {
-            return new Response(JSON.stringify({ error: "Billing lookup failed" }), {
-              status: 500,
-              headers: { "Content-Type": "application/json" },
+            console.error("[billing.checkout] billing lookup failed", {
+              code: "billing_lookup_failed",
+              providerCode: billingErr.code,
+              correlationId: requestId,
             });
+            return new Response(
+              JSON.stringify({
+                error: "Business billing setup is not ready yet.",
+                code: "billing_lookup_failed",
+                requestId,
+              }),
+              {
+                status: 500,
+                headers: JSON_HEADERS,
+              },
+            );
           }
 
           const billing = billingData as {
@@ -266,10 +278,14 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
           const plan = (billing?.selected_plan ?? null) as StripePlan | null;
           if (!plan || !ALLOWED_PLANS.has(plan)) {
             return new Response(
-              JSON.stringify({ error: "No valid plan selected. Complete onboarding first." }),
+              JSON.stringify({
+                error: "No valid plan is ready. Complete service selection first.",
+                code: "plan_selection_incomplete",
+                requestId,
+              }),
               {
                 status: 400,
-                headers: { "Content-Type": "application/json" },
+                headers: JSON_HEADERS,
               },
             );
           }
@@ -299,6 +315,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
               JSON.stringify({
                 error: "Could not verify setup-fee status. No checkout session was created.",
                 code: "setup_fee_verification_failed",
+                requestId,
               }),
               { status: 500, headers: { "Content-Type": "application/json" } },
             );
@@ -319,6 +336,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
               JSON.stringify({
                 error: "Could not verify offer eligibility. No checkout session was created.",
                 code: "offer_eligibility_verification_failed",
+                requestId,
               }),
               { status: 500, headers: JSON_HEADERS },
             );
@@ -352,6 +370,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
               JSON.stringify({
                 error: "Confirm offer or standard pricing before checkout.",
                 code: "pricing_selection_incomplete",
+                requestId,
               }),
               { status: 409, headers: JSON_HEADERS },
             );
@@ -397,6 +416,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
               JSON.stringify({
                 error: "Billing is temporarily unavailable. Please try again shortly.",
                 code: "founding_coupon_not_configured",
+                requestId,
               }),
               { status: 503, headers: JSON_HEADERS },
             );
@@ -406,6 +426,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
               JSON.stringify({
                 error: "Billing is temporarily unavailable. Please try again shortly.",
                 code: "union_coupon_not_configured",
+                requestId,
               }),
               { status: 503, headers: JSON_HEADERS },
             );
@@ -458,6 +479,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
                 JSON.stringify({
                   error: "Could not save billing setup. No checkout session was created.",
                   code: "billing_persistence_failed",
+                  requestId,
                 }),
                 {
                   status: 500,
