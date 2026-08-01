@@ -1,0 +1,92 @@
+import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
+
+const SUBJECT = "Confirm your Rapid Connect account";
+const TEMPLATE_PATH = new URL("../supabase/templates/confirmation.html", import.meta.url);
+
+function required(env, name) {
+  const value = env[name]?.trim();
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+async function managementRequest(url, token, init = {}) {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+  });
+  if (!response.ok) throw new Error(`Supabase Auth configuration returned HTTP ${response.status}`);
+  return response.json();
+}
+
+export async function configureStagingAuthEmail(env = process.env) {
+  assert(env.DEPLOYMENT_TARGET === "staging", "Auth email configuration is staging-only");
+  const projectRef = required(env, "STAGING_SUPABASE_PROJECT_REF");
+  const stagingUrl = new URL(required(env, "CERTIFICATION_BASE_URL"));
+  assert(stagingUrl.protocol === "https:", "Staging Auth confirmation requires HTTPS");
+  assert(stagingUrl.hostname.includes("staging"), "Refusing a non-staging confirmation origin");
+  const token = required(env, "SUPABASE_ACCESS_TOKEN");
+  const template = await readFile(TEMPLATE_PATH, "utf8");
+  for (const requiredCopy of ["Rapid Connect", "Confirm my email", "{{ .ConfirmationURL }}"]) {
+    assert(template.includes(requiredCopy), `Confirmation template is missing: ${requiredCopy}`);
+  }
+  assert(
+    /This inbox is not\s+monitored/.test(template),
+    "Confirmation template must identify the unmonitored sender",
+  );
+  assert(!template.includes("Supabase Auth"), "Provider branding must not appear in the template");
+
+  const endpoint = `https://api.supabase.com/v1/projects/${encodeURIComponent(projectRef)}/config/auth`;
+  const before = await managementRequest(endpoint, token);
+  const allowed = String(before.uri_allow_list ?? "");
+  const siteUrl = String(before.site_url ?? "");
+  assert(
+    siteUrl.startsWith(stagingUrl.origin) || allowed.includes(stagingUrl.origin),
+    "The isolated-staging confirmation origin is not in Supabase Auth redirect configuration",
+  );
+
+  await managementRequest(endpoint, token, {
+    method: "PATCH",
+    body: JSON.stringify({
+      mailer_subjects_confirmation: SUBJECT,
+      mailer_templates_confirmation_content: template,
+    }),
+  });
+  const after = await managementRequest(endpoint, token);
+  assert(after.mailer_subjects_confirmation === SUBJECT, "Confirmation subject was not applied");
+  assert(
+    after.mailer_templates_confirmation_content === template,
+    "Confirmation template was not applied exactly",
+  );
+
+  // Do not mutate sender/SMTP fields here. A Rapid Connect From identity requires
+  // an externally verified domain and SMTP credentials.
+  const customSmtpConfigured = Boolean(String(after.smtp_host ?? "").trim());
+  return {
+    configured: true,
+    projectVerified: true,
+    subject: SUBJECT,
+    providerBrandingAbsent: true,
+    confirmationOriginAllowed: true,
+    customSmtpConfigured,
+    externalSenderConfigurationRequired: !customSmtpConfigured,
+  };
+}
+
+const isDirect = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isDirect) {
+  configureStagingAuthEmail()
+    .then((result) => process.stdout.write(`${JSON.stringify(result)}\n`))
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    });
+}

@@ -50,6 +50,7 @@ import {
   type AcquisitionSignupDraft,
 } from "@/lib/acquisition";
 import { usageRateLines, usageWorkedExample } from "@/lib/commercial-pricing";
+import { checkoutFailureMessage } from "@/lib/checkout-errors";
 
 type IdentityState =
   | { kind: "loading" }
@@ -85,6 +86,7 @@ export function AcquisitionWizard({
   onDraftChange,
   onTrack,
   checkoutCancelled = false,
+  emailConfirmed = false,
 }: {
   open: boolean;
   initialDraft: AcquisitionSignupDraft;
@@ -96,6 +98,7 @@ export function AcquisitionWizard({
     details?: { plan?: AcquisitionSignupDraft["plan"]; wizardStep?: number },
   ) => void;
   checkoutCancelled?: boolean;
+  emailConfirmed?: boolean;
 }) {
   const [draft, setDraft] = useState(initialDraft);
   const [password, setPassword] = useState("");
@@ -126,6 +129,7 @@ export function AcquisitionWizard({
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const wizardStarted = useRef(false);
   const pricingContractRef = useRef("");
+  const confirmationRecoveryStarted = useRef(false);
 
   useEffect(() => {
     setDraft(initialDraft);
@@ -353,6 +357,48 @@ export function AcquisitionWizard({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (
+      !open ||
+      !emailConfirmed ||
+      !sessionId ||
+      identity.kind !== "signed-in" ||
+      confirmationRecoveryStarted.current
+    ) {
+      return;
+    }
+    if (identity.hasStripeSubscription || identity.billingStatus === "active") {
+      window.location.replace("/dashboard?billing=active");
+      return;
+    }
+
+    confirmationRecoveryStarted.current = true;
+    setIdentityAccepted(true);
+    setBusy(true);
+    setError(null);
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      const recovered = recoverAcquisitionDraftFromUser(data.session?.user, draft);
+      if (!recovered) {
+        throw new Error(
+          "Your email is confirmed, but this setup could not be matched to your account. Sign in to continue safely.",
+        );
+      }
+      const ownedDraft = {
+        ...recovered,
+        plan: identity.selectedPlan ?? recovered.plan,
+        email: data.session?.user.email ?? identity.email,
+        step: 4 as const,
+      };
+      setDraft(ownedDraft);
+      onDraftChange(ownedDraft);
+      await continueAuthenticatedSignup(ownedDraft, sessionId, onTrack, null);
+    })().catch((cause) => {
+      setBusy(false);
+      setError(cause instanceof Error ? cause.message : "Secure setup could not be completed.");
+    });
+  }, [draft, emailConfirmed, identity, onDraftChange, onTrack, open, sessionId]);
+
   useEffect(
     () => () => {
       if (logoPreview) URL.revokeObjectURL(logoPreview);
@@ -419,7 +465,9 @@ export function AcquisitionWizard({
         email: draft.email.trim(),
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/plumbers?resume=signup`,
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(
+            "/plumbers?resume=payment",
+          )}`,
           data: acquisitionUserMetadata(metadataDraft),
         },
       });
@@ -454,6 +502,29 @@ export function AcquisitionWizard({
           <div className="text-center">
             <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
             <p className="mt-3 font-bold">Checking your account securely…</p>
+          </div>
+        </div>
+      </WizardFrame>
+    );
+  }
+
+  if (emailConfirmed && identity.kind === "signed-in" && identityAccepted && busy) {
+    return (
+      <WizardFrame onClose={onClose}>
+        <div
+          className="grid min-h-[70vh] place-items-center px-5"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="max-w-lg text-center">
+            <Loader2 className="mx-auto h-10 w-10 animate-spin text-primary" aria-hidden="true" />
+            <h2 className="mt-5 text-3xl font-black">
+              Email confirmed — finishing your secure setup…
+            </h2>
+            <p className="mt-3 text-muted-foreground">
+              We’re matching your verified account to its saved business, service and offer. Stripe
+              will open only when those checks are ready.
+            </p>
           </div>
         </div>
       </WizardFrame>
@@ -824,8 +895,6 @@ async function continueAuthenticatedSignup(
   }
   if (shouldSeedSetup) await completeOnboarding();
   onTrack("account_created", { plan: draft.plan, wizardStep: 4 });
-  localStorage.removeItem(ACQUISITION_STORAGE_KEY);
-  sessionStorage.removeItem(ACQUISITION_SAFE_STORAGE_KEY);
 
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
@@ -849,14 +918,18 @@ async function continueAuthenticatedSignup(
     headers: { Authorization: `Bearer ${token}` },
   });
   onTrack("checkout_started", { plan: draft.plan, wizardStep: 4 });
-  const payload = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+  const payload = (await response.json().catch(() => ({}))) as {
+    url?: string;
+    error?: string;
+    code?: string;
+    requestId?: string;
+  };
   if (!response.ok || !payload.url) {
     onTrack("checkout_failed", { plan: draft.plan, wizardStep: 4 });
-    throw new Error(
-      payload.error ??
-        "Your account was created, but secure payment setup could not open. Sign in and use Plan & Billing to continue.",
-    );
+    throw new Error(checkoutFailureMessage(payload));
   }
+  localStorage.removeItem(ACQUISITION_STORAGE_KEY);
+  sessionStorage.removeItem(ACQUISITION_SAFE_STORAGE_KEY);
   onTrack("checkout_opened", { plan: draft.plan, wizardStep: 4 });
   window.location.assign(payload.url);
 }

@@ -36,6 +36,7 @@ import { Route as AuthenticatedOutreachOperationsRouteImport } from './routes/_a
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSetupGuideRouteImport } from './routes/_authenticated/setup-guide'
 import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/usage'
+import { Route as AuthConfirmRouteImport } from './routes/auth_.confirm'
 import { Route as BSlugRouteImport } from './routes/b.$slug'
 import { Route as ServicesBlockedDrainsRouteImport } from './routes/services.blocked-drains'
 import { Route as ServicesEmergencyRouteImport } from './routes/services.emergency'
@@ -205,6 +206,11 @@ const AuthenticatedUsageRoute = AuthenticatedUsageRouteImport.update({
   id: '/usage',
   path: '/usage',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthConfirmRoute = AuthConfirmRouteImport.update({
+  id: '/auth_/confirm',
+  path: '/auth/confirm',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const BSlugRoute = BSlugRouteImport.update({
   id: '/b/$slug',
@@ -389,6 +395,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/setup-guide': typeof AuthenticatedSetupGuideRoute
   '/usage': typeof AuthenticatedUsageRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/b/$slug': typeof BSlugRouteWithChildren
   '/services/blocked-drains': typeof ServicesBlockedDrainsRoute
   '/services/emergency': typeof ServicesEmergencyRoute
@@ -446,6 +453,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/setup-guide': typeof AuthenticatedSetupGuideRoute
   '/usage': typeof AuthenticatedUsageRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/services/blocked-drains': typeof ServicesBlockedDrainsRoute
   '/services/emergency': typeof ServicesEmergencyRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
@@ -504,6 +512,7 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/setup-guide': typeof AuthenticatedSetupGuideRoute
   '/_authenticated/usage': typeof AuthenticatedUsageRoute
+  '/auth_/confirm': typeof AuthConfirmRoute
   '/b/$slug': typeof BSlugRouteWithChildren
   '/services/blocked-drains': typeof ServicesBlockedDrainsRoute
   '/services/emergency': typeof ServicesEmergencyRoute
@@ -563,6 +572,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/setup-guide'
     | '/usage'
+    | '/auth/confirm'
     | '/b/$slug'
     | '/services/blocked-drains'
     | '/services/emergency'
@@ -620,6 +630,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/setup-guide'
     | '/usage'
+    | '/auth/confirm'
     | '/services/blocked-drains'
     | '/services/emergency'
     | '/.lovable/oauth/consent'
@@ -677,6 +688,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/setup-guide'
     | '/_authenticated/usage'
+    | '/auth_/confirm'
     | '/b/$slug'
     | '/services/blocked-drains'
     | '/services/emergency'
@@ -724,6 +736,7 @@ export interface RootRouteChildren {
   UnsubscribeRoute: typeof UnsubscribeRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  AuthConfirmRoute: typeof AuthConfirmRoute
   BSlugRoute: typeof BSlugRouteWithChildren
   ServicesBlockedDrainsRoute: typeof ServicesBlockedDrainsRoute
   ServicesEmergencyRoute: typeof ServicesEmergencyRoute
@@ -940,6 +953,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/usage'
       preLoaderRoute: typeof AuthenticatedUsageRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/auth_/confirm': {
+      id: '/auth_/confirm'
+      path: '/auth/confirm'
+      fullPath: '/auth/confirm'
+      preLoaderRoute: typeof AuthConfirmRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/b/$slug': {
       id: '/b/$slug'
@@ -1215,6 +1235,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  AuthConfirmRoute: AuthConfirmRoute,
   BSlugRoute: BSlugRouteWithChildren,
   ServicesBlockedDrainsRoute: ServicesBlockedDrainsRoute,
   ServicesEmergencyRoute: ServicesEmergencyRoute,

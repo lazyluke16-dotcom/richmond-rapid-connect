@@ -61,7 +61,7 @@ function SignupPage() {
       email: email.trim(),
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/onboarding`,
+        emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent("/onboarding")}`,
         data: {
           first_name: firstName.trim(),
           last_name: lastName.trim(),

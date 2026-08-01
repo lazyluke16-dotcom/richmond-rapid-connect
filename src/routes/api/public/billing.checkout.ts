@@ -8,7 +8,11 @@ import {
   type StripePlan,
 } from "@/lib/stripe.server";
 import type Stripe from "stripe";
-import { extractBearerToken, requireAuthAndBusiness } from "@/lib/billing.server";
+import {
+  extractBearerToken,
+  recoverAcquisitionBusiness,
+  requireAuthAndBusiness,
+} from "@/lib/billing.server";
 
 const ALLOWED_PLANS = new Set<StripePlan>(["missed_call_recovery", "ai_receptionist", "both"]);
 const STRIPE_INTEGRATION_IDENTIFIER = "plumbing_ai_receptionist_vqkhtnra";
@@ -25,7 +29,10 @@ type BillingCheckoutFailure = {
     | "stripe_prices_not_configured"
     | "stripe_tax_not_configured"
     | "billing_return_url_invalid"
-    | "stripe_request_failed"
+    | "stripe_configuration_unavailable"
+    | "stripe_customer_unavailable"
+    | "stripe_request_rejected"
+    | "stripe_temporarily_unavailable"
     | "billing_checkout_failed";
   error: string;
 };
@@ -39,6 +46,7 @@ export function classifyBillingCheckoutFailure(error: unknown): BillingCheckoutF
   const message = error instanceof Error ? error.message : "";
   const name = error instanceof Error ? error.name : "";
   const providerType = typeof record.type === "string" ? record.type : "";
+  const providerCode = typeof record.code === "string" ? record.code : "";
 
   const configurationCode = (() => {
     if (message.includes("STRIPE_SECRET_KEY is not configured")) {
@@ -81,10 +89,39 @@ export function classifyBillingCheckoutFailure(error: unknown): BillingCheckoutF
   const isStripeFailure =
     name.startsWith("Stripe") || providerType.startsWith("Stripe") || "requestId" in record;
   if (isStripeFailure) {
+    if (
+      providerType === "StripeAuthenticationError" ||
+      providerType === "StripePermissionError" ||
+      providerCode === "api_key_expired"
+    ) {
+      return {
+        status: 503,
+        code: "stripe_configuration_unavailable",
+        error: "Secure payment setup is temporarily unavailable.",
+      };
+    }
+    if (providerCode === "resource_missing" && record.param === "customer") {
+      return {
+        status: 409,
+        code: "stripe_customer_unavailable",
+        error: "Your secure Stripe customer record could not be prepared.",
+      };
+    }
+    if (
+      providerType === "StripeRateLimitError" ||
+      providerType === "StripeAPIError" ||
+      providerType === "StripeConnectionError"
+    ) {
+      return {
+        status: 503,
+        code: "stripe_temporarily_unavailable",
+        error: "Stripe is temporarily unavailable. Please try again shortly.",
+      };
+    }
     return {
-      status: 502,
-      code: "stripe_request_failed",
-      error: "Stripe could not start checkout. Please try again.",
+      status: 422,
+      code: "stripe_request_rejected",
+      error: "Stripe rejected the checkout setup. No subscription was created.",
     };
   }
 
@@ -95,16 +132,22 @@ export function classifyBillingCheckoutFailure(error: unknown): BillingCheckoutF
   };
 }
 
-export function billingCheckoutErrorResponse(error: unknown): Response {
+export function billingCheckoutErrorResponse(
+  error: unknown,
+  requestId: string = crypto.randomUUID(),
+): Response {
   const failure = classifyBillingCheckoutFailure(error);
   const record = errorRecord(error);
   console.error("[billing.checkout] request failed", {
     code: failure.code,
     errorName: error instanceof Error ? error.name : "UnknownError",
     providerCode: typeof record.code === "string" ? record.code : undefined,
+    providerParam: typeof record.param === "string" ? record.param : undefined,
+    providerType: typeof record.type === "string" ? record.type : undefined,
     requestId: typeof record.requestId === "string" ? record.requestId : undefined,
+    correlationId: requestId,
   });
-  return new Response(JSON.stringify({ error: failure.error, code: failure.code }), {
+  return new Response(JSON.stringify({ error: failure.error, code: failure.code, requestId }), {
     status: failure.status,
     headers: JSON_HEADERS,
   });
@@ -141,13 +184,21 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        const requestId = crypto.randomUUID();
         try {
           const token = extractBearerToken(request);
           if (!token) {
-            return new Response(JSON.stringify({ error: "Unauthorized" }), {
-              status: 401,
-              headers: { "Content-Type": "application/json" },
-            });
+            return new Response(
+              JSON.stringify({
+                error: "Sign in is required before secure payment setup can continue.",
+                code: "sign_in_required",
+                requestId,
+              }),
+              {
+                status: 401,
+                headers: JSON_HEADERS,
+              },
+            );
           }
 
           const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -157,10 +208,30 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
             ({ userId, businessId } = await requireAuthAndBusiness(token, supabaseAdmin));
           } catch (e) {
             const err = e as { status?: number; message?: string };
-            return new Response(JSON.stringify({ error: err.message ?? "Auth failed" }), {
-              status: err.status ?? 401,
-              headers: { "Content-Type": "application/json" },
-            });
+            if (err.status === 404) {
+              try {
+                await recoverAcquisitionBusiness(token);
+                ({ userId, businessId } = await requireAuthAndBusiness(token, supabaseAdmin));
+              } catch {
+                return new Response(
+                  JSON.stringify({
+                    error: "Business setup is not ready for secure payment yet.",
+                    code: "business_setup_incomplete",
+                    requestId,
+                  }),
+                  { status: 409, headers: JSON_HEADERS },
+                );
+              }
+            } else {
+              return new Response(
+                JSON.stringify({
+                  error: "Sign in is required before secure payment setup can continue.",
+                  code: "sign_in_required",
+                  requestId,
+                }),
+                { status: err.status ?? 401, headers: JSON_HEADERS },
+              );
+            }
           }
 
           // Load billing row — source of truth for plan and subscription state.
@@ -459,7 +530,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
             headers: { "Content-Type": "application/json" },
           });
         } catch (error) {
-          return billingCheckoutErrorResponse(error);
+          return billingCheckoutErrorResponse(error, requestId);
         }
       },
     },

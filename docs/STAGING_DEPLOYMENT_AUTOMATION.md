@@ -2,6 +2,26 @@
 
 Status: source-controlled and locally testable. No hosted service is changed until an authorized operator manually dispatches the workflow with a complete `staging` GitHub Environment.
 
+## Rapid Connect Auth email
+
+The reviewed signup email is stored at `supabase/templates/confirmation.html`. The guarded
+isolated-staging deployment applies its subject and HTML body to the hosted staging Supabase
+project through `scripts/configure-staging-auth-email.mjs`; it never changes SMTP credentials or
+sender fields. Signup confirmation returns to `/auth/confirm`, which supports Supabase token-hash,
+PKCE code and implicit-session responses, removes one-time tokens from the URL, verifies the user,
+and then resumes the tenant-owned acquisition payment stage.
+
+The active subject is `Confirm your Rapid Connect account`. A fully Rapid Connect-branded From
+identity remains an external mail-delivery configuration: in Supabase Dashboard → Project Settings
+→ Authentication → SMTP Settings, enable Custom SMTP only after a mail provider has verified the
+chosen Rapid Connect domain. Use sender name `Rapid Connect` and a verified non-reply address such
+as `no-reply@<verified Rapid Connect domain>`. Required provider values are host, port, username and
+password; SPF/DKIM records supplied by that provider must be published, and DMARC should remain
+aligned. Do not use an unverified From address. Disable provider click tracking for Auth links.
+
+The deployment reports only whether custom SMTP is configured; it never prints sender addresses,
+SMTP credentials, confirmation tokens or customer data.
+
 ## What the workflow does
 
 `.github/workflows/staging-deployment.yml` accepts an exact 40-character release SHA and performs one serialized staging deployment:

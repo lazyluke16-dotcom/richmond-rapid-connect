@@ -61,6 +61,7 @@ export const Route = createFileRoute("/plumbers")({
       ref: value("ref"),
       resume: value("resume"),
       billing: value("billing"),
+      confirmation: value("confirmation"),
       demo: value("demo"),
     };
   },
@@ -485,6 +486,7 @@ function PlumberAcquisitionPage() {
         onDraftChange={persistDraft}
         onTrack={track}
         checkoutCancelled={search.billing === "cancelled"}
+        emailConfirmed={search.confirmation === "verified"}
       />
     </main>
   );

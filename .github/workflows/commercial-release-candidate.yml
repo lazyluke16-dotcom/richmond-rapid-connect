@@ -54,7 +54,9 @@ jobs:
             .github/workflows/staging-access-preflight.yml \
             .github/workflows/staging-deployment.yml \
             .github/workflows/staging-rollback.yml \
+            scripts/configure-staging-auth-email.mjs \
             scripts/configure-staging-commercial-gst.mjs \
+            scripts/staging-new-account-checkout-smoke.mjs \
             scripts/staging-certification.mjs \
             scripts/staging-deployment.d.mts \
             scripts/staging-deployment.mjs \
@@ -69,7 +71,9 @@ jobs:
             src/routes/api/public/process-sms-invoice.ts \
             src/routes/api/public/staging-release.ts
           npx eslint \
+            scripts/configure-staging-auth-email.mjs \
             scripts/configure-staging-commercial-gst.mjs \
+            scripts/staging-new-account-checkout-smoke.mjs \
             scripts/staging-certification.mjs \
             scripts/staging-deployment.mjs \
             src/lib/sms-invoice-certification.server.ts \

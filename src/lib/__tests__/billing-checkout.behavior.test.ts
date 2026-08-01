@@ -22,12 +22,14 @@ describe("billing checkout failure responses", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const response = billingCheckoutErrorResponse(
       new Error("[stripe] Missing required Stripe price configuration: SECRET_DETAIL"),
+      "corr-config-test",
     );
     expect(response.status).toBe(503);
     expect(response.headers.get("content-type")).toBe("application/json");
     expect(await response.json()).toEqual({
       error: "Billing is temporarily unavailable. Please try again shortly.",
       code: "stripe_prices_not_configured",
+      requestId: "corr-config-test",
     });
     expect(consoleError).not.toHaveBeenCalledWith(expect.stringContaining("SECRET_DETAIL"));
     consoleError.mockRestore();
@@ -71,11 +73,12 @@ describe("billing checkout failure responses", () => {
       requestId: "req_test_123",
     });
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const response = billingCheckoutErrorResponse(stripeFailure);
-    expect(response.status).toBe(502);
+    const response = billingCheckoutErrorResponse(stripeFailure, "corr-stripe-test");
+    expect(response.status).toBe(422);
     expect(await response.json()).toEqual({
-      error: "Stripe could not start checkout. Please try again.",
-      code: "stripe_request_failed",
+      error: "Stripe rejected the checkout setup. No subscription was created.",
+      code: "stripe_request_rejected",
+      requestId: "corr-stripe-test",
     });
     expect(JSON.stringify(await classifyBillingCheckoutFailure(stripeFailure))).not.toContain(
       "price_wrong_account",
