@@ -122,6 +122,7 @@ describe("isolated staging Stripe webhook repair", () => {
       workflow.indexOf("Point the existing Stripe test webhook at isolated staging"),
     );
     expect(workflow).toContain("node scripts/configure-staging-stripe-webhook.mjs");
+    expect(workflow).toContain("for attempt in 1 2 3 4 5");
     expect(script).toContain('env.DEPLOYMENT_TARGET !== "staging"');
     expect(script).toContain('env.STRIPE_MODE !== "test"');
     expect(script).toContain('key.startsWith("sk_test_")');
