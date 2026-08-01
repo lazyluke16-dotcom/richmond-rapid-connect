@@ -27,7 +27,10 @@ import {
 } from "@/lib/onboarding.functions";
 import { setMyLicence, updateMyBusiness } from "@/lib/business-settings.functions";
 import { normalizeAustralianPhone } from "@/lib/call-handling";
-import { redeemMyAcquisitionOffer } from "@/lib/acquisition.functions";
+import {
+  redeemMyAcquisitionOffer,
+  selectMyStandardAcquisitionPricing,
+} from "@/lib/acquisition.functions";
 import {
   ACQUISITION_PLANS,
   ACQUISITION_STORAGE_KEY,
@@ -35,6 +38,7 @@ import {
   AcquisitionSignupDraftSchema,
   moneyFromCents,
   normalBillingDate,
+  standardBillingDate,
   normalizePromoCode,
   recoverAcquisitionDraftFromUser,
   acquisitionUserMetadata,
@@ -59,8 +63,10 @@ type IdentityState =
       selectedPlan: AcquisitionSignupDraft["plan"] | null;
     };
 
-type PromoState =
-  | { status: "checking" }
+export type PromoState =
+  | { status: "no_code" }
+  | { status: "standard_selected"; message: string }
+  | { status: "validating" }
   | {
       status: "valid";
       waivedSetupFeeCents: number;
@@ -68,7 +74,8 @@ type PromoState =
       offerVersion: string;
       expiresAt: string | null;
     }
-  | { status: "invalid"; message: string };
+  | { status: "invalid"; message: string }
+  | { status: "unavailable"; message: string; requestId?: string };
 
 export function AcquisitionWizard({
   open,
@@ -93,7 +100,21 @@ export function AcquisitionWizard({
   const [draft, setDraft] = useState(initialDraft);
   const [password, setPassword] = useState("");
   const [agreed, setAgreed] = useState(false);
-  const [promo, setPromo] = useState<PromoState>({ status: "checking" });
+  const [promo, setPromo] = useState<PromoState>(
+    initialDraft.promoCode
+      ? initialDraft.pricingMode === "standard"
+        ? {
+            status: "standard_selected",
+            message:
+              "Standard pricing is selected. Edit the code or retry it to reconsider the offer.",
+          }
+        : { status: "validating" }
+      : { status: "no_code" },
+  );
+  const [promoRetry, setPromoRetry] = useState(0);
+  const [standardPricingChosen, setStandardPricingChosen] = useState(
+    initialDraft.pricingMode === "standard" && Boolean(initialDraft.promoCode),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
@@ -104,8 +125,14 @@ export function AcquisitionWizard({
   const [logoValidationError, setLogoValidationError] = useState<string | null>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const wizardStarted = useRef(false);
+  const pricingContractRef = useRef("");
 
-  useEffect(() => setDraft(initialDraft), [initialDraft]);
+  useEffect(() => {
+    setDraft(initialDraft);
+    setStandardPricingChosen(
+      initialDraft.pricingMode === "standard" && Boolean(initialDraft.promoCode),
+    );
+  }, [initialDraft]);
 
   useEffect(() => {
     if (open && checkoutCancelled) {
@@ -133,9 +160,31 @@ export function AcquisitionWizard({
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
+    let cancelled = false;
+    let timedOut = false;
+    const normalizedCode = normalizePromoCode(draft.promoCode);
+    if (!normalizedCode) {
+      setPromo({ status: "no_code" });
+      if (draft.pricingMode !== "standard") {
+        setDraft((current) => {
+          const next = { ...current, pricingMode: "standard" as const };
+          onDraftChange(next);
+          return next;
+        });
+      }
+      return () => controller.abort();
+    }
+    // A validator outage keeps the code available for a deliberate retry. Once
+    // the plumber explicitly chooses standard pricing, step navigation must not
+    // silently re-enable or revalidate the offer.
+    if (standardPricingChosen) return () => controller.abort();
+    setPromo({ status: "validating" });
     const timer = window.setTimeout(() => {
       void (async () => {
-        setPromo({ status: "checking" });
+        const requestTimeout = window.setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, 8_000);
         try {
           const response = await fetch("/api/public/acquisition", {
             method: "POST",
@@ -143,20 +192,48 @@ export function AcquisitionWizard({
             signal: controller.signal,
             body: JSON.stringify({
               action: "validate_promo",
-              code: normalizePromoCode(draft.promoCode),
+              code: normalizedCode,
               plan: draft.plan,
             }),
           });
           const payload = (await response.json()) as {
+            state?: "valid" | "invalid" | "unavailable";
             valid?: boolean;
             waivedSetupFeeCents?: number;
             subscriptionMonthsFree?: number;
             offerVersion?: string;
             expiresAt?: string | null;
             error?: string;
+            requestId?: string;
           };
-          if (!response.ok || !payload.valid || payload.waivedSetupFeeCents == null) {
-            setPromo({ status: "invalid", message: payload.error ?? "Code is not available" });
+          if (payload.state === "unavailable" || response.status >= 500) {
+            setPromo({
+              status: "unavailable",
+              message:
+                "We couldn’t verify this offer right now. Try again or continue at the standard price.",
+              requestId: payload.requestId,
+            });
+            return;
+          }
+          if (
+            !response.ok ||
+            payload.state === "invalid" ||
+            !payload.valid ||
+            payload.waivedSetupFeeCents == null
+          ) {
+            setPromo({
+              status: "invalid",
+              message:
+                payload.error ??
+                "That offer code isn’t valid. You can continue at the standard price or try another code.",
+            });
+            setStandardPricingChosen(true);
+            setDraft((current) => {
+              if (current.pricingMode === "standard") return current;
+              const next = { ...current, pricingMode: "standard" as const };
+              onDraftChange(next);
+              return next;
+            });
             return;
           }
           setPromo({
@@ -166,21 +243,52 @@ export function AcquisitionWizard({
             offerVersion: payload.offerVersion ?? "setup-waiver-v1",
             expiresAt: payload.expiresAt ?? null,
           });
+          setStandardPricingChosen(false);
+          setDraft((current) => {
+            if (current.pricingMode === "offer") return current;
+            const next = { ...current, pricingMode: "offer" as const };
+            onDraftChange(next);
+            return next;
+          });
           onTrack("promo_validated", { plan: draft.plan, wizardStep: draft.step });
         } catch (cause) {
-          if ((cause as { name?: string }).name === "AbortError") return;
+          if (cancelled) return;
           setPromo({
-            status: "invalid",
-            message: "We couldn’t verify the code. Check your connection and try again.",
+            status: "unavailable",
+            message:
+              timedOut || (cause as { name?: string }).name === "AbortError"
+                ? "Offer validation timed out. Try again or continue at the standard price."
+                : "We couldn’t verify this offer right now. Try again or continue at the standard price.",
           });
+        } finally {
+          window.clearTimeout(requestTimeout);
         }
       })();
     }, 250);
     return () => {
+      cancelled = true;
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [draft.plan, draft.promoCode, draft.step, onTrack, open]);
+  }, [
+    draft.plan,
+    draft.pricingMode,
+    draft.promoCode,
+    draft.step,
+    onDraftChange,
+    onTrack,
+    open,
+    promoRetry,
+    standardPricingChosen,
+  ]);
+
+  useEffect(() => {
+    const contract = `${draft.plan}:${draft.pricingMode}:${
+      draft.pricingMode === "offer" && promo.status === "valid" ? promo.offerVersion : "standard"
+    }`;
+    if (pricingContractRef.current && pricingContractRef.current !== contract) setAgreed(false);
+    pricingContractRef.current = contract;
+  }, [draft.plan, draft.pricingMode, promo]);
 
   useEffect(() => {
     if (!open) return;
@@ -468,7 +576,14 @@ export function AcquisitionWizard({
           </p>
           <div className="mt-6 rounded-xl border border-border bg-card p-4 text-sm">
             Your <b>{ACQUISITION_PLANS[draft.plan].name}</b> selection and{" "}
-            <b>{normalizePromoCode(draft.promoCode)}</b> waiver are saved with your account.
+            {draft.pricingMode === "offer" ? (
+              <>
+                <b>{normalizePromoCode(draft.promoCode)}</b> offer
+              </>
+            ) : (
+              <b>standard pricing</b>
+            )}{" "}
+            are saved with your account.
           </div>
         </div>
       </WizardFrame>
@@ -538,7 +653,31 @@ export function AcquisitionWizard({
               onLogoValidationError={setLogoValidationError}
             />
           )}
-          {draft.step === 3 && <OfferStep draft={draft} update={update} promo={promo} />}
+          {draft.step === 3 && (
+            <OfferStep
+              draft={draft}
+              promo={promo}
+              onCodeChange={(promoCode) => {
+                setAgreed(false);
+                setStandardPricingChosen(false);
+                update({ promoCode, pricingMode: promoCode ? "offer" : "standard" });
+              }}
+              onRetry={() => {
+                setStandardPricingChosen(false);
+                setPromoRetry((value) => value + 1);
+              }}
+              onContinueStandard={() => {
+                setAgreed(false);
+                setStandardPricingChosen(true);
+                setPromo({
+                  status: "standard_selected",
+                  message:
+                    "Standard pricing is selected. The entered code is retained if you want to retry it.",
+                });
+                update({ pricingMode: "standard" });
+              }}
+            />
+          )}
           {draft.step === 4 && (
             <AccountStep
               draft={draft}
@@ -581,7 +720,7 @@ export function AcquisitionWizard({
               <button
                 type="button"
                 onClick={() => void submit()}
-                disabled={busy || promo.status !== "valid"}
+                disabled={busy}
                 className="inline-flex min-w-44 items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-black text-primary-foreground disabled:opacity-50"
               >
                 {busy ? (
@@ -657,15 +796,26 @@ async function continueAuthenticatedSignup(
       });
     }
   }
-  await redeemMyAcquisitionOffer({
-    data: {
-      code: draft.promoCode,
-      plan: draft.plan,
-      session_id: sessionId,
-      attribution: draft.attribution,
-      demoVariant: draft.demoVariant,
-    },
-  });
+  if (draft.pricingMode === "offer") {
+    await redeemMyAcquisitionOffer({
+      data: {
+        code: draft.promoCode,
+        plan: draft.plan,
+        session_id: sessionId,
+        attribution: draft.attribution,
+        demoVariant: draft.demoVariant,
+      },
+    });
+  } else {
+    await selectMyStandardAcquisitionPricing({
+      data: {
+        plan: draft.plan,
+        session_id: sessionId,
+        attribution: draft.attribution,
+        demoVariant: draft.demoVariant,
+      },
+    });
+  }
   if (shouldSeedSetup) await completeOnboarding();
   onTrack("account_created", { plan: draft.plan, wizardStep: 4 });
   localStorage.removeItem(ACQUISITION_STORAGE_KEY);
@@ -1126,26 +1276,46 @@ function PhoneStep({
 
 function OfferStep({
   draft,
-  update,
   promo,
+  onCodeChange,
+  onRetry,
+  onContinueStandard,
 }: {
   draft: AcquisitionSignupDraft;
-  update: (patch: Partial<AcquisitionSignupDraft>) => void;
   promo: PromoState;
+  onCodeChange: (code: string) => void;
+  onRetry: () => void;
+  onContinueStandard: () => void;
 }) {
   const plan = ACQUISITION_PLANS[draft.plan];
+  const offerConfirmed = draft.pricingMode === "offer" && promo.status === "valid";
+  const standardSelected = draft.pricingMode === "standard";
   return (
     <div>
-      <div className="rounded-2xl border border-primary/30 bg-primary/10 p-5 sm:p-6">
+      <div
+        className={`rounded-2xl border p-5 sm:p-6 ${
+          offerConfirmed
+            ? "border-primary/30 bg-primary/10"
+            : promo.status === "unavailable"
+              ? "border-amber-400/40 bg-amber-400/10"
+              : "border-border bg-card"
+        }`}
+      >
         <div className="flex items-center gap-3">
           <span className="grid h-12 w-12 place-items-center rounded-full bg-primary text-primary-foreground">
             <CheckCircle2 className="h-6 w-6" />
           </span>
           <div>
             <div className="text-xs font-black uppercase tracking-widest text-primary">
-              Launch offer
+              {offerConfirmed ? "Founding offer confirmed" : "Choose your pricing"}
             </div>
-            <h3 className="text-xl font-black">No sign-on fee. Three subscription months free.</h3>
+            <h3 className="text-xl font-black">
+              {offerConfirmed
+                ? "A$0 sign-on. Three subscription months free."
+                : standardSelected
+                  ? `Standard sign-on is ${moneyFromCents(plan.setupFeeCents)} including GST.`
+                  : "Confirm the offer or continue at the standard price."}
+            </h3>
           </div>
         </div>
         <div className="mt-6 flex items-end justify-between gap-4 rounded-xl bg-background/60 p-4">
@@ -1153,13 +1323,19 @@ function OfferStep({
             <div className="text-xs uppercase tracking-widest text-muted-foreground">
               {plan.name} setup
             </div>
-            <div className="mt-1 text-2xl font-black line-through opacity-50">
+            <div
+              className={`mt-1 text-2xl font-black ${offerConfirmed ? "line-through opacity-50" : ""}`}
+            >
               {moneyFromCents(plan.setupFeeCents)}
             </div>
           </div>
           <div className="text-right">
-            <div className="text-xs uppercase tracking-widest text-muted-foreground">With code</div>
-            <div className="mt-1 text-4xl font-black text-primary">A$0</div>
+            <div className="text-xs uppercase tracking-widest text-muted-foreground">
+              {offerConfirmed ? "With confirmed code" : "Current sign-on fee"}
+            </div>
+            <div className="mt-1 text-4xl font-black text-primary">
+              {offerConfirmed ? "A$0" : moneyFromCents(plan.setupFeeCents)}
+            </div>
           </div>
         </div>
         <label className="mt-5 block">
@@ -1169,8 +1345,9 @@ function OfferStep({
           <div className="mt-2 flex gap-2">
             <input
               value={draft.promoCode}
-              onChange={(event) => update({ promoCode: normalizePromoCode(event.target.value) })}
+              onChange={(event) => onCodeChange(normalizePromoCode(event.target.value))}
               className="min-w-0 flex-1 rounded-xl border border-border bg-input px-4 py-3 font-mono text-lg font-black tracking-wider uppercase"
+              aria-describedby="offer-validation-status"
             />
             <span
               className={`grid w-12 place-items-center rounded-xl border ${
@@ -1179,10 +1356,14 @@ function OfferStep({
                   : "border-border"
               }`}
             >
-              {promo.status === "checking" ? (
+              {promo.status === "validating" ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
-              ) : promo.status === "valid" ? (
+              ) : offerConfirmed ? (
                 <Check className="h-5 w-5" />
+              ) : promo.status === "no_code" ? (
+                <span aria-hidden="true">—</span>
+              ) : promo.status === "standard_selected" ? (
+                <CreditCard className="h-5 w-5" />
               ) : (
                 <X className="h-5 w-5 text-destructive" />
               )}
@@ -1190,19 +1371,75 @@ function OfferStep({
           </div>
         </label>
         <p
-          className={`mt-2 text-xs ${promo.status === "invalid" ? "text-destructive" : "text-muted-foreground"}`}
+          id="offer-validation-status"
+          aria-live="polite"
+          className={`mt-2 text-sm ${
+            promo.status === "invalid"
+              ? "text-destructive"
+              : promo.status === "unavailable"
+                ? "text-amber-200"
+                : "text-muted-foreground"
+          }`}
         >
-          {promo.status === "checking"
-            ? "Checking code…"
-            : promo.status === "valid"
-              ? `${moneyFromCents(promo.waivedSetupFeeCents)} sign-on fee waived and ${promo.subscriptionMonthsFree} subscription months free.`
-              : promo.message}
+          {promo.status === "no_code"
+            ? "No offer code applied. Standard pricing is selected."
+            : promo.status === "validating"
+              ? "Checking code…"
+              : offerConfirmed
+                ? `${moneyFromCents(promo.waivedSetupFeeCents)} sign-on fee waived and ${promo.subscriptionMonthsFree} subscription months free.`
+                : promo.status === "invalid" ||
+                    promo.status === "unavailable" ||
+                    promo.status === "standard_selected"
+                  ? promo.message
+                  : "Offer verified."}
         </p>
+        {promo.status === "unavailable" && (
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={onRetry}
+              className="rounded-xl border border-primary px-4 py-2 text-sm font-black text-primary focus-visible:ring-4 focus-visible:ring-primary/30"
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={onContinueStandard}
+              className="rounded-xl bg-foreground px-4 py-2 text-sm font-black text-background focus-visible:ring-4 focus-visible:ring-primary/30"
+            >
+              Continue at standard price
+            </button>
+          </div>
+        )}
+        {promo.status === "unavailable" && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Continuing at the standard price removes the A$0 sign-on and three-free-month claims.
+            You will review and acknowledge the {moneyFromCents(plan.setupFeeCents)} sign-on fee and
+            normal subscription before Stripe opens.
+          </p>
+        )}
       </div>
-      <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-        Usage charges apply from activation. Your platform subscription is A$0 for the first three
-        monthly billing periods, then {moneyFromCents(plan.platformFeeCents)}/month. Cancel anytime.
-      </p>
+      <div className="mt-4 rounded-xl border border-border bg-card p-4 text-sm">
+        {offerConfirmed ? (
+          <p>
+            Usage charges apply from activation. Platform billing is A$0 for the first three monthly
+            periods, then {moneyFromCents(plan.platformFeeCents)}/month including GST from{" "}
+            {normalBillingDate()}. Cancel anytime.
+          </p>
+        ) : standardSelected ? (
+          <p>
+            Due at Checkout: <b>{moneyFromCents(plan.setupFeeCents + plan.platformFeeCents)}</b>{" "}
+            including GST ({moneyFromCents(plan.setupFeeCents)} sign-on plus the first{" "}
+            {moneyFromCents(plan.platformFeeCents)} subscription month). Usage starts at activation.
+            Cancel anytime.
+          </p>
+        ) : (
+          <p>
+            No promotional price is confirmed. Retry validation or explicitly choose standard
+            pricing.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
@@ -1225,6 +1462,7 @@ function AccountStep({
   signedInEmail: string | null;
 }) {
   const plan = ACQUISITION_PLANS[draft.plan];
+  const offerConfirmed = draft.pricingMode === "offer" && promo.status === "valid";
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-border bg-card p-4">
@@ -1256,12 +1494,30 @@ function AccountStep({
       <div className="rounded-xl border border-border bg-card p-4 text-sm">
         <div className="font-black">What you will pay</div>
         <ul className="mt-3 space-y-2">
-          <li>A$0 setup/sign-on fee.</li>
-          <li>A$0 platform fees for the first three monthly billing periods.</li>
-          <li>
-            Normal platform billing begins {normalBillingDate()}:{" "}
-            {moneyFromCents(plan.platformFeeCents)}/month including GST.
-          </li>
+          {offerConfirmed ? (
+            <>
+              <li>A$0 setup/sign-on fee.</li>
+              <li>A$0 platform fees for the first three monthly billing periods.</li>
+              <li>
+                Normal platform billing begins {normalBillingDate()}:{" "}
+                {moneyFromCents(plan.platformFeeCents)}
+                /month including GST.
+              </li>
+            </>
+          ) : (
+            <>
+              <li>{moneyFromCents(plan.setupFeeCents)} setup/sign-on fee including GST.</li>
+              <li>
+                Platform billing begins {standardBillingDate()}:{" "}
+                {moneyFromCents(plan.platformFeeCents)}
+                /month including GST.
+              </li>
+              <li>
+                Due at Checkout: {moneyFromCents(plan.setupFeeCents + plan.platformFeeCents)}
+                including GST, before metered usage.
+              </li>
+            </>
+          )}
           <li>Usage billing starts when the service is activated.</li>
         </ul>
         <details className="mt-4 rounded-lg bg-muted/60 p-3">
@@ -1285,8 +1541,11 @@ function AccountStep({
           className="mt-0.5 h-5 w-5 accent-yellow-400"
         />
         <span>
-          I accept the GST-inclusive pricing above, usage from activation, normal billing from{" "}
-          {normalBillingDate()}, cancel-anytime terms, and Stripe’s secure payment setup.
+          I accept the GST-inclusive pricing above, including the{" "}
+          {offerConfirmed ? "A$0 sign-on and three free platform periods" : "standard sign-on fee"},
+          usage from activation, platform billing from{" "}
+          {offerConfirmed ? normalBillingDate() : standardBillingDate()}, cancel-anytime terms, and
+          Stripe’s secure payment setup.
         </span>
       </label>
       <div className="flex gap-3 rounded-xl bg-muted/60 p-4 text-xs text-muted-foreground">
@@ -1297,9 +1556,9 @@ function AccountStep({
           pauses operation; it does not cancel billing.
         </p>
       </div>
-      {promo.status !== "valid" && (
+      {draft.pricingMode === "offer" && promo.status !== "valid" && (
         <p className="text-sm text-destructive">
-          A verified offer code is required to continue with the A$0 setup offer.
+          The A$0 offer is not confirmed. Go back to retry or choose standard pricing.
         </p>
       )}
     </div>
@@ -1308,6 +1567,8 @@ function AccountStep({
 
 function OrderSummary({ draft, promo }: { draft: AcquisitionSignupDraft; promo: PromoState }) {
   const plan = ACQUISITION_PLANS[draft.plan];
+  const offerConfirmed = draft.pricingMode === "offer" && promo.status === "valid";
+  const standardSelected = draft.pricingMode === "standard";
   return (
     <aside className="h-fit rounded-2xl border border-border bg-card p-5 lg:sticky lg:top-6">
       <div className="text-xs font-black uppercase tracking-widest text-muted-foreground">
@@ -1319,27 +1580,46 @@ function OrderSummary({ draft, promo }: { draft: AcquisitionSignupDraft; promo: 
           label="Normal subscription"
           value={`${moneyFromCents(plan.platformFeeCents)}/month incl GST`}
         />
-        <SummaryRow label="First three months" value="A$0 platform fees" accent />
+        {offerConfirmed && (
+          <SummaryRow label="First three months" value="A$0 platform fees" accent />
+        )}
         <SummaryRow label="Usage" value={plan.usage} />
-        <SummaryRow label="Setup fee" value={moneyFromCents(plan.setupFeeCents)} strike />
         <SummaryRow
-          label="Offer"
-          value={
-            promo.status === "valid" ? `−${moneyFromCents(promo.waivedSetupFeeCents)}` : "Pending"
-          }
-          accent={promo.status === "valid"}
+          label="Setup fee"
+          value={moneyFromCents(plan.setupFeeCents)}
+          strike={offerConfirmed}
         />
+        {offerConfirmed ? (
+          <SummaryRow
+            label="Confirmed offer"
+            value={`−${moneyFromCents(promo.waivedSetupFeeCents)}`}
+            accent
+          />
+        ) : promo.status === "unavailable" && !standardSelected ? (
+          <SummaryRow label="Offer" value="Not confirmed" />
+        ) : (
+          <SummaryRow label="Offer" value="None — standard pricing" />
+        )}
       </div>
       <div className="mt-4 flex items-end justify-between">
-        <span className="text-sm font-bold">Sign-on fee</span>
+        <span className="text-sm font-bold">Due at Checkout</span>
         <span className="text-3xl font-black text-primary">
-          {promo.status === "valid" ? "A$0" : "—"}
+          {offerConfirmed
+            ? "A$0"
+            : standardSelected
+              ? moneyFromCents(plan.setupFeeCents + plan.platformFeeCents)
+              : "Not ready"}
         </span>
       </div>
       <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-        If activated today, normal subscription billing begins {normalBillingDate()}. Prices are AUD
-        and the prominent totals include GST. Usage is metered separately from day one. Cancel
-        anytime.
+        {offerConfirmed ? (
+          <>Normal subscription billing begins {normalBillingDate()}. </>
+        ) : standardSelected ? (
+          <>Standard platform billing begins {standardBillingDate()}. </>
+        ) : (
+          <>No promotional or standard Checkout has been selected. </>
+        )}
+        Prices are AUD and include GST. Usage is metered separately from activation. Cancel anytime.
       </p>
     </aside>
   );
@@ -1438,7 +1718,9 @@ function ChoiceGroup<T extends string>({
   );
 }
 
-function validateStep(
+// Exported for the pricing state-machine regression suite.
+// eslint-disable-next-line react-refresh/only-export-components
+export function validateStep(
   draft: AcquisitionSignupDraft,
   password: string,
   agreed: boolean,
@@ -1470,12 +1752,17 @@ function validateStep(
     if (acquisitionAreaRows(draft.serviceArea).length === 0)
       return "Enter the suburb or service area you cover.";
   }
-  if (draft.step === 3 && promo.status !== "valid")
-    return "Enter a valid offer code to waive the setup fee.";
+  if (draft.step === 3 && draft.pricingMode === "offer" && promo.status !== "valid") {
+    if (promo.status === "validating") return "Wait for offer validation to finish.";
+    if (promo.status === "unavailable")
+      return "Try the offer again or explicitly continue at the standard price.";
+    return "Confirm the offer or continue at the clearly displayed standard price.";
+  }
   if (draft.step === 4) {
     if (!signedIn && password.length < 10) return "Create a password with at least 10 characters.";
     if (!agreed) return "Confirm the displayed prices and secure payment setup to continue.";
-    if (promo.status !== "valid") return "The setup-fee waiver must be verified before signup.";
+    if (draft.pricingMode === "offer" && promo.status !== "valid")
+      return "The setup-fee waiver must be verified, or select standard pricing.";
   }
   return null;
 }

@@ -201,6 +201,14 @@
         "20260728120000_commercial_sms_invoicing.sql",
         "20260801190000_identity_safe_acquisition_profile.sql"
       ]
+    },
+    {
+      "file": "20260801210000_standard_acquisition_pricing.sql",
+      "sha256": "bba8b7ace12c47d7d706f9f12f141da994d6dc836515eff924d026ff2837d251",
+      "dependsOn": [
+        "20260801130000_seamless_acquisition_activation.sql",
+        "20260801200000_authoritative_gst_pricing.sql"
+      ]
     }
   ]
 }

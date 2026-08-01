@@ -14,6 +14,27 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: jsonHeaders });
 }
 
+function unavailablePromotionResponse(error: unknown, requestId: string) {
+  const provider =
+    typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
+  console.error("[acquisition.promo] validation unavailable", {
+    requestId,
+    providerCode: typeof provider.code === "string" ? provider.code : undefined,
+    providerMessage: typeof provider.message === "string" ? provider.message : undefined,
+    errorName: error instanceof Error ? error.name : undefined,
+  });
+  return json(
+    {
+      state: "unavailable",
+      valid: false,
+      code: "promotion_validation_unavailable",
+      error: "Promotion validation is temporarily unavailable.",
+      requestId,
+    },
+    503,
+  );
+}
+
 export const Route = createFileRoute("/api/public/acquisition")({
   server: {
     handlers: {
@@ -28,22 +49,31 @@ export const Route = createFileRoute("/api/public/acquisition")({
           return json({ error: "Invalid acquisition request" }, 400);
         }
 
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
         if ((body as { action?: unknown }).action === "validate_promo") {
           const parsed = PromoValidationRequestSchema.safeParse(body);
           if (!parsed.success)
-            return json({ valid: false, error: "Invalid promotion request" }, 400);
+            return json(
+              { state: "invalid", valid: false, error: "Invalid promotion request" },
+              400,
+            );
           const code = normalizePromoCode(parsed.data.code);
           const now = new Date().toISOString();
-          const { data, error } = await supabaseAdmin
-            .from("acquisition_promo_codes" as never)
-            .select(
-              "code,active,starts_at,expires_at,max_redemptions,redemption_count,applicable_plans,text_setup_fee_cents,combined_setup_fee_cents,subscription_months_free,offer_version",
-            )
-            .eq("code", code)
-            .maybeSingle();
-          if (error) return json({ valid: false, error: "Promotion validation unavailable" }, 503);
+          const requestId = crypto.randomUUID();
+          let data: unknown;
+          try {
+            const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+            const lookup = await supabaseAdmin
+              .from("acquisition_promo_codes" as never)
+              .select(
+                "code,active,starts_at,expires_at,max_redemptions,redemption_count,applicable_plans,text_setup_fee_cents,combined_setup_fee_cents,subscription_months_free,offer_version",
+              )
+              .eq("code", code)
+              .maybeSingle();
+            if (lookup.error) return unavailablePromotionResponse(lookup.error, requestId);
+            data = lookup.data;
+          } catch (error) {
+            return unavailablePromotionResponse(error, requestId);
+          }
           const promo = data as unknown as {
             code: string;
             active: boolean;
@@ -65,12 +95,20 @@ export const Route = createFileRoute("/api/public/acquisition")({
               promo?.max_redemptions == null || promo.redemption_count < promo.max_redemptions,
             ) &&
             Boolean(promo?.applicable_plans.includes(parsed.data.plan));
-          if (!valid || !promo) return json({ valid: false, code, error: "Code is not available" });
+          if (!valid || !promo)
+            return json({
+              state: "invalid",
+              valid: false,
+              code,
+              error:
+                "That offer code isn’t valid. You can continue at the standard price or try another code.",
+            });
           const waivedSetupFeeCents =
             parsed.data.plan === "missed_call_recovery"
               ? promo.text_setup_fee_cents
               : promo.combined_setup_fee_cents;
           return json({
+            state: "valid",
             valid: true,
             code: promo.code,
             plan: parsed.data.plan,
@@ -85,6 +123,7 @@ export const Route = createFileRoute("/api/public/acquisition")({
           const parsed = AcquisitionEventSchema.safeParse(body);
           if (!parsed.success) return json({ accepted: false }, 400);
           const event = parsed.data;
+          const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
           const { error } = await supabaseAdmin.from("acquisition_events" as never).upsert(
             {
               event_id: event.eventId,

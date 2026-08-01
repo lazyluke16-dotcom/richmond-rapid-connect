@@ -9,6 +9,8 @@ export const DEFAULT_PROMO_CODE = "FOUNDINGPLUMBER";
 
 export const AcquisitionPlanSchema = z.enum(["missed_call_recovery", "ai_receptionist", "both"]);
 export type AcquisitionPlan = z.infer<typeof AcquisitionPlanSchema>;
+export const AcquisitionPricingModeSchema = z.enum(["offer", "standard"]);
+export type AcquisitionPricingMode = z.infer<typeof AcquisitionPricingModeSchema>;
 
 export const ACQUISITION_PLANS: Record<
   AcquisitionPlan,
@@ -141,6 +143,7 @@ export const AcquisitionSignupDraftSchema = z.object({
   version: z.literal(1),
   step: z.number().int().min(0).max(5),
   plan: AcquisitionPlanSchema,
+  pricingMode: AcquisitionPricingModeSchema.default("offer"),
   promoCode: z.string().trim().max(64),
   businessName: z.string().max(120),
   firstName: z.string().max(80),
@@ -212,6 +215,14 @@ export function normalBillingDate(from = new Date()): string {
   }).format(target);
 }
 
+export function standardBillingDate(from = new Date()): string {
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(from);
+}
+
 export function acquisitionServiceRows(value: string) {
   const names = value
     .split(/[,\n]+/)
@@ -279,14 +290,16 @@ export function getAcquisitionAttribution(search: URLSearchParams): AcquisitionA
 
 export function createDefaultAcquisitionDraft(
   attribution: AcquisitionAttribution,
-  promoCode = DEFAULT_PROMO_CODE,
+  promoCode = "",
   demoVariant: unknown = "demo-real-world-v2",
 ): AcquisitionSignupDraft {
+  const normalizedPromoCode = normalizePromoCode(promoCode);
   return {
     version: 1,
     step: 0,
     plan: "missed_call_recovery",
-    promoCode: normalizePromoCode(promoCode),
+    pricingMode: normalizedPromoCode ? "offer" : "standard",
+    promoCode: normalizedPromoCode,
     businessName: "",
     firstName: "",
     lastName: "",
@@ -325,7 +338,7 @@ export function readAcquisitionDraft(
           Object.entries(fallback.attribution).filter(([, value]) => Boolean(value)),
         ),
       },
-      promoCode: fallback.promoCode || parsed.data.promoCode,
+      promoCode: normalizePromoCode(parsed.data.promoCode),
     };
   } catch {
     return fallback;
@@ -342,6 +355,7 @@ export function safeAcquisitionDraftForBrowser(draft: AcquisitionSignupDraft) {
   return {
     version: 2 as const,
     plan: draft.plan,
+    pricingMode: draft.pricingMode,
     promoCode: normalizePromoCode(draft.promoCode),
     attribution: draft.attribution,
     demoVariant: draft.demoVariant,
@@ -358,6 +372,7 @@ export function readSafeAcquisitionDraft(
       .object({
         version: z.literal(2),
         plan: AcquisitionPlanSchema,
+        pricingMode: AcquisitionPricingModeSchema.default("offer"),
         promoCode: z.string().max(64),
         attribution: AcquisitionAttributionSchema,
         demoVariant: z.enum(["demo-original", "demo-real-world-v2"]),
@@ -367,7 +382,8 @@ export function readSafeAcquisitionDraft(
     return {
       ...fallback,
       plan: parsed.data.plan,
-      promoCode: normalizePromoCode(parsed.data.promoCode) || fallback.promoCode,
+      pricingMode: parsed.data.pricingMode,
+      promoCode: normalizePromoCode(parsed.data.promoCode),
       attribution: { ...parsed.data.attribution, ...fallback.attribution },
       demoVariant: parsed.data.demoVariant,
     };
@@ -384,6 +400,7 @@ export function acquisitionUserMetadata(draft: AcquisitionSignupDraft) {
     business_phone_e164: draft.businessPhone,
     contact_mobile_e164: draft.mobile,
     acquisition_plan: draft.plan,
+    acquisition_pricing_mode: draft.pricingMode,
     acquisition_promo_code: normalizePromoCode(draft.promoCode),
     acquisition_source: draft.attribution.source,
     acquisition_medium: draft.attribution.medium,
@@ -411,10 +428,11 @@ export function recoverAcquisitionDraftFromUser(
 ): AcquisitionSignupDraft | null {
   const metadata = user?.user_metadata;
   const plan = AcquisitionPlanSchema.safeParse(metadata?.acquisition_plan);
+  const pricingMode = AcquisitionPricingModeSchema.safeParse(metadata?.acquisition_pricing_mode);
   const promoCode = normalizePromoCode(
     typeof metadata?.acquisition_promo_code === "string" ? metadata.acquisition_promo_code : "",
   );
-  if (!user || !metadata || !plan.success || !promoCode) return null;
+  if (!user || !metadata || !plan.success) return null;
 
   const value = (key: string, fallbackValue: string) =>
     typeof metadata[key] === "string" ? metadata[key] : fallbackValue;
@@ -431,6 +449,7 @@ export function recoverAcquisitionDraftFromUser(
     mobile: value("contact_mobile_e164", fallback.mobile),
     businessPhone: value("business_phone_e164", fallback.businessPhone),
     plan: plan.data,
+    pricingMode: pricingMode.success ? pricingMode.data : promoCode ? "offer" : "standard",
     promoCode,
     handlingTiming: value("call_handling_timing", fallback.handlingTiming),
     currentArrangement: value("current_answering_arrangement", fallback.currentArrangement),
@@ -465,6 +484,5 @@ export function firstIncompleteAcquisitionStep(draft: AcquisitionSignupDraft): n
     return 1;
   }
   if (!draft.businessPhone.trim() || !draft.serviceArea.trim()) return 2;
-  if (!draft.promoCode.trim()) return 3;
   return 4;
 }

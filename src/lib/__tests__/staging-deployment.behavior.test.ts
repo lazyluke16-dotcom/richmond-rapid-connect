@@ -194,6 +194,7 @@ describe("staging deployment boundary", () => {
     expect(workflow).toContain(
       "STRIPE_GST_INCLUSIVE_TAX_RATE_ID: ${{ steps.stripe_gst.outputs.tax_rate_id }}",
     );
+    expect(workflow).toContain("node scripts/staging-promotion-pricing-smoke.mjs");
   });
 });
 

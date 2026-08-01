@@ -218,7 +218,9 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
           // A database/schema failure must not leave an orphaned Stripe customer.
           const { data: acquisitionData, error: acquisitionError } = await supabaseAdmin
             .from("businesses")
-            .select("promotion_code, setup_fee_waived_cents, acquisition_demo_variant")
+            .select(
+              "promotion_code, setup_fee_waived_cents, acquisition_demo_variant, acquisition_pricing_mode",
+            )
             .eq("id", businessId)
             .maybeSingle();
           if (acquisitionError) {
@@ -234,26 +236,84 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
             promotion_code?: string | null;
             setup_fee_waived_cents?: number | null;
             acquisition_demo_variant?: string | null;
+            acquisition_pricing_mode?: "offer" | "standard" | null;
           } | null;
+          const { data: redemptionData, error: redemptionError } = await supabaseAdmin
+            .from("acquisition_promo_redemptions" as never)
+            .select("plan,waived_setup_fee_cents,offer_version,subscription_promo_eligible")
+            .eq("business_id", businessId)
+            .maybeSingle();
+          if (redemptionError) {
+            return new Response(
+              JSON.stringify({
+                error: "Could not verify offer eligibility. No checkout session was created.",
+                code: "offer_eligibility_verification_failed",
+              }),
+              { status: 500, headers: JSON_HEADERS },
+            );
+          }
+          const redemption = redemptionData as {
+            plan?: string;
+            waived_setup_fee_cents?: number;
+            offer_version?: string;
+            subscription_promo_eligible?: boolean;
+          } | null;
+          const foundingWaiverVerified =
+            acquisition?.acquisition_pricing_mode === "offer" &&
+            acquisition.promotion_code === "FOUNDINGPLUMBER" &&
+            Number(acquisition.setup_fee_waived_cents) === 49_900 &&
+            redemption?.plan === plan &&
+            Number(redemption.waived_setup_fee_cents) === 49_900 &&
+            redemption.offer_version === "founding-2026-three-months" &&
+            redemption.subscription_promo_eligible === true;
+          const unionWaiverVerified =
+            !foundingWaiverVerified &&
+            billing?.union_offer_eligible === true &&
+            Boolean(acquisition?.promotion_code) &&
+            Number(acquisition?.setup_fee_waived_cents) === 49_900;
+          const standardPricingVerified =
+            acquisition?.acquisition_pricing_mode === "standard" &&
+            !redemption &&
+            !acquisition.promotion_code &&
+            acquisition.setup_fee_waived_cents == null;
+          if (!foundingWaiverVerified && !unionWaiverVerified && !standardPricingVerified) {
+            return new Response(
+              JSON.stringify({
+                error: "Confirm offer or standard pricing before checkout.",
+                code: "pricing_selection_incomplete",
+              }),
+              { status: 409, headers: JSON_HEADERS },
+            );
+          }
+          const setupFeeWaived = foundingWaiverVerified || unionWaiverVerified;
           const acquisitionMetadata: Record<string, string> =
-            acquisition?.promotion_code && acquisition.setup_fee_waived_cents != null
+            setupFeeWaived && acquisition?.promotion_code
               ? {
                   promotion_code: acquisition.promotion_code,
-                  setup_fee_waived_cents: String(acquisition.setup_fee_waived_cents),
+                  setup_fee_waived_cents: "49900",
+                  pricing_mode: foundingWaiverVerified ? "offer" : "union_offer",
                   ...(acquisition.acquisition_demo_variant
                     ? { demo_variant: acquisition.acquisition_demo_variant }
                     : {}),
                 }
-              : {};
+              : {
+                  pricing_mode: "standard",
+                  setup_fee_cents: "49900",
+                  ...(acquisition?.acquisition_demo_variant
+                    ? { demo_variant: acquisition.acquisition_demo_variant }
+                    : {}),
+                };
 
           // Resolve the discount and all Stripe configuration before the first
           // provider write. A retry after a partial failure must keep the waiver.
           const shouldApplyFoundingOffer =
+            foundingWaiverVerified &&
             billing?.founding_offer_version === "founding-2026-three-months" &&
             billing?.founding_offer_eligible === true &&
             !billing?.founding_offer_redeemed_at;
           const shouldApplyUnionOffer =
             !shouldApplyFoundingOffer &&
+            unionWaiverVerified &&
             billing?.union_offer_eligible === true &&
             !billing?.union_offer_redeemed_at;
           const couponId = shouldApplyFoundingOffer
@@ -286,7 +346,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
             businessId,
             plan,
             couponId,
-            "gst-inclusive-v1",
+            `gst-inclusive-v1:setup-${setupFeeWaived ? "waived" : "49900"}`,
           );
           const stripe = getStripe();
           const origin = resolveBillingReturnOrigin(request);
@@ -358,7 +418,7 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
               customer: customerId,
               mode: "subscription",
               payment_method_collection: "always",
-              line_items: getCheckoutLineItems(plan),
+              line_items: getCheckoutLineItems(plan, { includeSetupFee: !setupFeeWaived }),
               ...(checkoutDiscounts ? { discounts: checkoutDiscounts } : {}),
               // The configured Price totals already include GST. This explicit manual tax policy
               // lets Stripe identify the embedded 10% without adding another 10% at Checkout.

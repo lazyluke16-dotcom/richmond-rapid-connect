@@ -65,6 +65,7 @@ describe("human finding: explicit identity and resume semantics", () => {
       "attribution",
       "demoVariant",
       "plan",
+      "pricingMode",
       "promoCode",
       "version",
     ]);

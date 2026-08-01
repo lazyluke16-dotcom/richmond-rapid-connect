@@ -63,6 +63,15 @@ The seeded campaign:
 - records the exact waived amount against the authenticated business;
 - carries the promotion and waived amount into Stripe session/subscription metadata.
 
+The code is prefilled only when an approved campaign URL explicitly supplies
+`code=FOUNDINGPLUMBER`; ordinary `/plumbers` traffic starts at standard pricing. The wizard validates
+the code automatically on entry and keeps validating, valid, invalid, unavailable and no-code
+states distinct. Invalid or cleared codes select the disclosed standard contract: A$499 setup plus
+the first A$9, A$15 or A$24 GST-inclusive platform period at Checkout. A validator outage retains
+the code for retry and requires an explicit choice before standard pricing can be selected. Both
+paths are committed by authenticated tenant-scoped database functions and independently checked by
+the Checkout endpoint before any Stripe customer or session is created.
+
 The offer uses two distinct safeguards: the database records the A$499 setup/sign-on-fee waiver,
 and the product-scoped Stripe test coupon discounts only the first three monthly platform billing
 periods. Usage begins at activation and is never included in either discount. Existing accounts

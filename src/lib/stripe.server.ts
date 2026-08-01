@@ -155,6 +155,7 @@ export const PLAN_BASE_PRICE_CENTS: Record<StripePlan, number> = {
   ai_receptionist: 1500, // A$15/month
   both: 2400, // A$9 + A$15/month
 };
+export const STANDARD_SETUP_FEE_CENTS = 49_900;
 
 export type StripePlan = "missed_call_recovery" | "ai_receptionist" | "both";
 
@@ -167,19 +168,38 @@ export function planServices(plan: StripePlan): ("missed_call_recovery" | "ai_re
 // Throws if required Stripe price env vars are not configured.
 export function getCheckoutLineItems(
   plan: StripePlan,
+  options: { includeSetupFee?: boolean } = {},
 ): Stripe.Checkout.SessionCreateParams.LineItem[] {
   const prices = getStripePrices();
+  const setupFee: Stripe.Checkout.SessionCreateParams.LineItem[] = options.includeSetupFee
+    ? [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "aud",
+            unit_amount: STANDARD_SETUP_FEE_CENTS,
+            tax_behavior: "inclusive",
+            product_data: {
+              name: "Rapid Connect setup and sign-on",
+              metadata: { charge_type: "standard_setup_fee" },
+            },
+          },
+        },
+      ]
+    : [];
   if (plan === "missed_call_recovery") {
-    return [{ price: prices.MCR_BASE, quantity: 1 }];
+    return [...setupFee, { price: prices.MCR_BASE, quantity: 1 }];
   }
   if (plan === "both") {
     return [
+      ...setupFee,
       { price: prices.MCR_BASE, quantity: 1 },
       { price: prices.AIR_BASE, quantity: 1 },
       { price: prices.AIR_USAGE },
     ];
   }
   return [
+    ...setupFee,
     { price: prices.AIR_BASE, quantity: 1 },
     { price: prices.AIR_USAGE }, // metered — no quantity
   ];

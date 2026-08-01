@@ -21,7 +21,6 @@ import {
   ACQUISITION_SESSION_KEY,
   ACQUISITION_STORAGE_KEY,
   ACQUISITION_SAFE_STORAGE_KEY,
-  DEFAULT_PROMO_CODE,
   createDefaultAcquisitionDraft,
   calculateAcquisitionRoi,
   getAcquisitionAttribution,
@@ -84,7 +83,7 @@ function PlumberAcquisitionPage() {
     () =>
       createDefaultAcquisitionDraft(
         attribution,
-        normalizePromoCode(search.code ?? DEFAULT_PROMO_CODE),
+        normalizePromoCode(search.code ?? ""),
         demoVariant,
       ),
     [attribution, demoVariant, search.code],

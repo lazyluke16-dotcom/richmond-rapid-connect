@@ -114,3 +114,58 @@ export const redeemMyAcquisitionOffer = createServerFn({ method: "POST" })
       subscriptionMonthsFree: number;
     };
   });
+
+export const selectMyStandardAcquisitionPricing = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (data: {
+      plan: AcquisitionPlan;
+      session_id?: string | null;
+      attribution?: {
+        source?: string | null;
+        medium?: string | null;
+        campaign?: string | null;
+        content?: string | null;
+      };
+      demoVariant?: DemoVariant | null;
+    }) => data,
+  )
+  .handler(async ({ data, context }) => {
+    const plan = AcquisitionPlanSchema.parse(data.plan);
+    const attribution = AcquisitionAttributionSchema.parse({
+      ...data.attribution,
+      referralCode: null,
+    });
+    const { data: result, error } = await context.supabase.rpc(
+      "select_standard_acquisition_pricing" as never,
+      {
+        _plan: plan,
+        _session_id: data.session_id ?? null,
+        _source: attribution.source,
+        _medium: attribution.medium,
+        _campaign: attribution.campaign,
+        _content: attribution.content,
+      } as never,
+    );
+    if (error) throw new Error(error.message);
+    const { data: membership, error: membershipError } = await context.supabase
+      .from("business_users")
+      .select("business_id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (membershipError) throw new Error(membershipError.message);
+    if (!membership?.business_id) throw new Error("No business membership found");
+    const { error: variantError } = await context.supabase
+      .from("businesses")
+      .update({ acquisition_demo_variant: resolveDemoVariant(data.demoVariant) } as never)
+      .eq("id", membership.business_id);
+    if (variantError) throw new Error(variantError.message);
+    return result as unknown as {
+      success: true;
+      pricingMode: "standard";
+      plan: AcquisitionPlan;
+      setupFeeCents: 49_900;
+      subscriptionMonthsFree: 0;
+    };
+  });

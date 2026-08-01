@@ -127,13 +127,16 @@ describe("acquisition funnel pricing and attribution", () => {
   });
 
   it("puts continuity fields—but never the password—into auth metadata", () => {
-    const draft = createDefaultAcquisitionDraft({
-      source: "social",
-      medium: "instagram",
-      campaign: "launch",
-      content: "reel",
-      referralCode: "ref-1",
-    });
+    const draft = createDefaultAcquisitionDraft(
+      {
+        source: "social",
+        medium: "instagram",
+        campaign: "launch",
+        content: "reel",
+        referralCode: "ref-1",
+      },
+      "FOUNDINGPLUMBER",
+    );
     Object.assign(draft, {
       firstName: "Alex",
       lastName: "Smith",

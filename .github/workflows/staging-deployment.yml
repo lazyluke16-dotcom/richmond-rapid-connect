@@ -343,6 +343,12 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         run: node scripts/configure-staging-stripe-webhook.mjs
 
+      - name: Smoke founding-offer and standard-price entry states
+        env:
+          DEPLOYMENT_TARGET: staging
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+        run: node scripts/staging-promotion-pricing-smoke.mjs
+
       - name: Smoke the recovered authenticated checkout journey
         env:
           DEPLOYMENT_TARGET: staging
