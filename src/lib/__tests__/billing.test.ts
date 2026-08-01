@@ -18,7 +18,9 @@ import {
 } from "../billing-types";
 import {
   getStripePrices,
+  getFoundingThreeMonthCouponId,
   getUnionCouponId,
+  stripeEnvValue,
   PLAN_BASE_PRICE_CENTS,
   getCheckoutLineItems,
   assertStripeContextAvailable,
@@ -82,6 +84,15 @@ describe("Price ID injection prevention", () => {
   it("plan base prices are correct AUD cents", () => {
     expect(PLAN_BASE_PRICE_CENTS.missed_call_recovery).toBe(900);
     expect(PLAN_BASE_PRICE_CENTS.ai_receptionist).toBe(1500);
+    expect(PLAN_BASE_PRICE_CENTS.both).toBe(2400);
+  });
+
+  it("both services include both bases and metered AI usage exactly once", () => {
+    expect(getCheckoutLineItems("both").map((item) => item.price)).toEqual([
+      TEST_PRICES.MCR_BASE,
+      TEST_PRICES.AIR_BASE,
+      TEST_PRICES.AIR_USAGE,
+    ]);
   });
 });
 
@@ -263,6 +274,19 @@ describe("Duplicate Stripe webhook handling", () => {
 });
 
 describe("Stripe client security guards", () => {
+  it("normalizes whitespace at the runtime binding boundary", () => {
+    expect(
+      stripeEnvValue("STRIPE_SECRET_KEY", {
+        STRIPE_SECRET_KEY: "  sk_test_XXXXXXXX\r\n",
+      } as NodeJS.ProcessEnv),
+    ).toBe("sk_test_XXXXXXXX");
+    expect(
+      stripeEnvValue("STRIPE_SECRET_KEY", {
+        STRIPE_SECRET_KEY: " \r\n",
+      } as NodeJS.ProcessEnv),
+    ).toBeUndefined();
+  });
+
   it.each([
     ["sk_test_XXXXXXXX", "test"],
     ["rk_test_XXXXXXXX", "test"],
@@ -382,7 +406,7 @@ describe("Union offer uses Stripe coupon (not negative invoice item)", () => {
   });
 
   it("getUnionCouponId returns the coupon ID from env var", () => {
-    process.env.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE = "coupon_test_union_xyz";
+    process.env.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE = "  coupon_test_union_xyz\r\n";
     expect(getUnionCouponId()).toBe("coupon_test_union_xyz");
   });
 
@@ -398,6 +422,22 @@ describe("Union offer uses Stripe coupon (not negative invoice item)", () => {
     const requiredCouponConfig = { duration: "once", percent_off: 100 };
     expect(requiredCouponConfig.duration).toBe("once");
     expect(requiredCouponConfig.percent_off).toBe(100);
+  });
+});
+
+describe("Founding three-month coupon configuration", () => {
+  afterEach(() => {
+    delete process.env.STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES;
+  });
+
+  it("normalizes the staging coupon ID without exposing it to the client", () => {
+    process.env.STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES =
+      "  coupon_test_founding_three_months\r\n";
+    expect(getFoundingThreeMonthCouponId()).toBe("coupon_test_founding_three_months");
+  });
+
+  it("fails closed when the founding coupon is absent", () => {
+    expect(getFoundingThreeMonthCouponId()).toBeNull();
   });
 });
 
@@ -436,9 +476,9 @@ describe("Missing Stripe price configuration fails closed", () => {
   });
 
   it("succeeds and returns env var values when all required vars are set", () => {
-    process.env.STRIPE_PRICE_MCR_BASE = "price_test_mcr";
-    process.env.STRIPE_PRICE_AIR_BASE = "price_test_air";
-    process.env.STRIPE_PRICE_AIR_USAGE = "price_test_usage";
+    process.env.STRIPE_PRICE_MCR_BASE = "  price_test_mcr";
+    process.env.STRIPE_PRICE_AIR_BASE = "price_test_air  ";
+    process.env.STRIPE_PRICE_AIR_USAGE = "\r\nprice_test_usage\r\n";
     const prices = getStripePrices();
     expect(prices.MCR_BASE).toBe("price_test_mcr");
     expect(prices.AIR_BASE).toBe("price_test_air");

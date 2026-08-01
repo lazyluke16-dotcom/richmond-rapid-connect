@@ -1,1 +1,7 @@
 project_id = "kexnvkpnbfunhpgqpxmo"
+
+# Local/self-hosted parity. Hosted isolated staging applies this same reviewed
+# template through scripts/configure-staging-auth-email.mjs.
+[auth.email.template.confirmation]
+subject = "Confirm your Rapid Connect account"
+content_path = "./supabase/templates/confirmation.html"

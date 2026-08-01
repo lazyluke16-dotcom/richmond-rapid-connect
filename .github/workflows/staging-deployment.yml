@@ -1,6 +1,24 @@
 name: Deploy isolated staging
 
 on:
+  workflow_call:
+    inputs:
+      release_sha:
+        description: Exact 40-character release-candidate SHA
+        required: true
+        type: string
+      environment_id:
+        description: Exact staging environment ID
+        required: true
+        type: string
+      apply_migrations:
+        description: Apply frozen migrations after a successful dry run
+        required: true
+        type: boolean
+      confirmation:
+        description: Must equal DEPLOY_STAGING_ONLY
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       release_sha:
@@ -61,11 +79,37 @@ jobs:
             exit 1
           fi
           test "$(git rev-parse HEAD)" = "$REQUESTED_SHA"
-          git fetch --no-tags origin feat/customer-call-handling-reconstructed
-          git merge-base --is-ancestor "$REQUESTED_SHA" origin/feat/customer-call-handling-reconstructed
+          git fetch --no-tags origin feat/acquisition-funnel
+          git merge-base --is-ancestor "$REQUESTED_SHA" origin/feat/acquisition-funnel
 
       - name: Install locked dependencies
         run: npm ci
+
+      - name: Configure approved Australian GST in Stripe test mode
+        id: stripe_gst
+        env:
+          DEPLOYMENT_TARGET: staging
+          STRIPE_MODE: test
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
+          STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
+          STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          STRIPE_GST_INCLUSIVE_TAX_RATE_ID: ${{ secrets.STRIPE_GST_INCLUSIVE_TAX_RATE_ID }}
+          STRIPE_CONTEXT: ${{ vars.STRIPE_CONTEXT }}
+          STAGING_CONFIGURATION_TOKEN: ${{ secrets.STAGING_CONFIGURATION_TOKEN }}
+        run: node scripts/configure-staging-commercial-gst.mjs
+
+      - name: Configure the approved founding coupon in Stripe test mode
+        env:
+          DEPLOYMENT_TARGET: staging
+          STRIPE_MODE: test
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
+          STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
+          STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          STRIPE_CONTEXT: ${{ vars.STRIPE_CONTEXT }}
+          STAGING_CONFIGURATION_TOKEN: ${{ secrets.STAGING_CONFIGURATION_TOKEN }}
+        run: node scripts/configure-staging-founding-coupon.mjs
 
       - name: Validate staging target and secret inventory
         env:
@@ -97,16 +141,21 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_SMS_GST_TAX_RATE_ID: ${{ secrets.STRIPE_SMS_GST_TAX_RATE_ID }}
+          STRIPE_GST_INCLUSIVE_TAX_RATE_ID: ${{ steps.stripe_gst.outputs.tax_rate_id }}
           STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
           STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
           STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE: ${{ secrets.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE }}
+          STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES: ${{ secrets.STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES }}
+          STRIPE_CONTEXT: ${{ vars.STRIPE_CONTEXT }}
           SMS_INVOICE_PROCESSOR_KEY: ${{ secrets.SMS_INVOICE_PROCESSOR_KEY }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           DASHBOARD_PIN: ${{ secrets.DASHBOARD_PIN }}
-        run: >-
-          node scripts/staging-deployment.mjs
-          --preflight
-          --environment-id "${{ inputs.environment_id }}"
+        run: |
+          node scripts/staging-deployment.mjs \
+            --preflight \
+            --environment-id "${{ inputs.environment_id }}"
+          node scripts/verify-stripe-checkout-config.mjs
 
       - name: Run complete release gates
         run: |
@@ -152,6 +201,75 @@ jobs:
           echo "Migration dry run passed. Worker deployment intentionally stopped." >&2
           exit 1
 
+      - name: Apply branded Rapid Connect confirmation email to isolated staging
+        env:
+          DEPLOYMENT_TARGET: staging
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: node scripts/configure-staging-auth-email.mjs
+
+      - name: Upload secrets only to the staging-named Cloudflare Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
+          VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
+          VAPI_SERVER_SECRET: ${{ secrets.VAPI_SERVER_SECRET }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_SMS_GST_TAX_RATE_ID: ${{ secrets.STRIPE_SMS_GST_TAX_RATE_ID }}
+          STRIPE_GST_INCLUSIVE_TAX_RATE_ID: ${{ steps.stripe_gst.outputs.tax_rate_id }}
+          STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
+          STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
+          STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE: ${{ secrets.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE }}
+          STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES: ${{ secrets.STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES }}
+          SMS_INVOICE_PROCESSOR_KEY: ${{ secrets.SMS_INVOICE_PROCESSOR_KEY }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          DASHBOARD_PIN: ${{ secrets.DASHBOARD_PIN }}
+        run: |
+          node - <<'NODE' |
+          const names = [
+            "SUPABASE_SERVICE_ROLE_KEY",
+            "TWILIO_ACCOUNT_SID",
+            "TWILIO_AUTH_TOKEN",
+            "TWILIO_FROM_NUMBER",
+            "VAPI_API_KEY",
+            "VAPI_SERVER_SECRET",
+            "STRIPE_SECRET_KEY",
+            "STRIPE_WEBHOOK_SECRET",
+            "STRIPE_SMS_GST_TAX_RATE_ID",
+            "STRIPE_GST_INCLUSIVE_TAX_RATE_ID",
+            "STRIPE_PRICE_MCR_BASE",
+            "STRIPE_PRICE_AIR_BASE",
+            "STRIPE_PRICE_AIR_USAGE",
+            "STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE",
+            "STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES",
+            "SMS_INVOICE_PROCESSOR_KEY",
+            "WEBHOOK_SECRET",
+            "DASHBOARD_PIN",
+          ];
+          const stripeNames = new Set(names.filter((name) => name.startsWith("STRIPE_")));
+          process.stdout.write(
+            JSON.stringify(
+              Object.fromEntries(
+                names.map((name) => [
+                  name,
+                  stripeNames.has(name) ? process.env[name]?.trim() : process.env[name],
+                ]),
+              ),
+            ),
+          );
+          NODE
+          npx wrangler secret bulk \
+            --config .output/server/wrangler.json \
+            --name "$CLOUDFLARE_STAGING_WORKER_NAME"
+
       - name: Deploy only the staging-named Cloudflare Worker
         id: cloudflare
         uses: cloudflare/wrangler-action@v3
@@ -159,24 +277,6 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4.114.0"
-          secrets: |
-            SUPABASE_URL
-            SUPABASE_SERVICE_ROLE_KEY
-            SUPABASE_PUBLISHABLE_KEY
-            TWILIO_ACCOUNT_SID
-            TWILIO_AUTH_TOKEN
-            TWILIO_FROM_NUMBER
-            VAPI_API_KEY
-            VAPI_SERVER_SECRET
-            STRIPE_SECRET_KEY
-            STRIPE_WEBHOOK_SECRET
-            STRIPE_SMS_GST_TAX_RATE_ID
-            STRIPE_PRICE_MCR_BASE
-            STRIPE_PRICE_AIR_BASE
-            STRIPE_PRICE_AIR_USAGE
-            SMS_INVOICE_PROCESSOR_KEY
-            WEBHOOK_SECRET
-            DASHBOARD_PIN
           command: >-
             deploy
             --config .output/server/wrangler.json
@@ -186,6 +286,8 @@ jobs:
             --var CERTIFICATION_ENVIRONMENT_ID:${{ inputs.environment_id }}
             --var DEPLOYED_RELEASE_SHA:${{ inputs.release_sha }}
             --var PUBLIC_JOB_REQUEST_URL:${{ vars.CERTIFICATION_BASE_URL }}
+            --var SUPABASE_URL:${{ vars.STAGING_SUPABASE_URL }}
+            --var SUPABASE_PUBLISHABLE_KEY:${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
             --var SMS_MODE:twilio
             --var STRIPE_MODE:test
             --var STAGING_CERTIFICATION_ENABLED:true
@@ -202,9 +304,12 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           STRIPE_SMS_GST_TAX_RATE_ID: ${{ secrets.STRIPE_SMS_GST_TAX_RATE_ID }}
+          STRIPE_GST_INCLUSIVE_TAX_RATE_ID: ${{ steps.stripe_gst.outputs.tax_rate_id }}
           STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
           STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
           STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE: ${{ secrets.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE }}
+          STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES: ${{ secrets.STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES }}
           SMS_INVOICE_PROCESSOR_KEY: ${{ secrets.SMS_INVOICE_PROCESSOR_KEY }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           DASHBOARD_PIN: ${{ secrets.DASHBOARD_PIN }}
@@ -226,11 +331,54 @@ jobs:
           STAGING_CERTIFICATION_EXECUTE: I_UNDERSTAND_STAGING_ONLY
           STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
           STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
-        run: >-
-          node scripts/staging-deployment.mjs
-          --verify-hosted
-          --environment-id "${{ inputs.environment_id }}"
-          --evidence-out staging-deployment-evidence.json
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if node scripts/staging-deployment.mjs \
+              --verify-hosted \
+              --environment-id "${{ inputs.environment_id }}" \
+              --evidence-out staging-deployment-evidence.json; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 5 ]; then sleep 3; fi
+          done
+          exit 1
+
+      - name: Point the existing Stripe test webhook at isolated staging
+        env:
+          DEPLOYMENT_TARGET: staging
+          STRIPE_MODE: test
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: node scripts/configure-staging-stripe-webhook.mjs
+
+      - name: Smoke founding-offer and standard-price entry states
+        env:
+          DEPLOYMENT_TARGET: staging
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+        run: node scripts/staging-promotion-pricing-smoke.mjs
+
+      - name: Smoke the recovered authenticated checkout journey
+        env:
+          DEPLOYMENT_TARGET: staging
+          STRIPE_MODE: test
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: node scripts/staging-authenticated-checkout-smoke.mjs
+
+      - name: Smoke a newly verified tenant through the authenticated Checkout endpoint
+        env:
+          DEPLOYMENT_TARGET: staging
+          STRIPE_MODE: test
+          STRIPE_CONTEXT: ${{ vars.STRIPE_CONTEXT }}
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        run: node scripts/staging-new-account-checkout-smoke.mjs
 
       - name: Upload non-secret deployment evidence
         uses: actions/upload-artifact@v4

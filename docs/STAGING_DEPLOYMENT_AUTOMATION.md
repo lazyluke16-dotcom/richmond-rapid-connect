@@ -2,6 +2,26 @@
 
 Status: source-controlled and locally testable. No hosted service is changed until an authorized operator manually dispatches the workflow with a complete `staging` GitHub Environment.
 
+## Rapid Connect Auth email
+
+The reviewed signup email is stored at `supabase/templates/confirmation.html`. The guarded
+isolated-staging deployment applies its subject and HTML body to the hosted staging Supabase
+project through `scripts/configure-staging-auth-email.mjs`; it never changes SMTP credentials or
+sender fields. Signup confirmation returns to `/auth/confirm`, which supports Supabase token-hash,
+PKCE code and implicit-session responses, removes one-time tokens from the URL, verifies the user,
+and then resumes the tenant-owned acquisition payment stage.
+
+The active subject is `Confirm your Rapid Connect account`. A fully Rapid Connect-branded From
+identity remains an external mail-delivery configuration: in Supabase Dashboard → Project Settings
+→ Authentication → SMTP Settings, enable Custom SMTP only after a mail provider has verified the
+chosen Rapid Connect domain. Use sender name `Rapid Connect` and a verified non-reply address such
+as `no-reply@<verified Rapid Connect domain>`. Required provider values are host, port, username and
+password; SPF/DKIM records supplied by that provider must be published, and DMARC should remain
+aligned. Do not use an unverified From address. Disable provider click tracking for Auth links.
+
+The deployment reports only whether custom SMTP is configured; it never prints sender addresses,
+SMTP credentials, confirmation tokens or customer data.
+
 ## What the workflow does
 
 `.github/workflows/staging-deployment.yml` accepts an exact 40-character release SHA and performs one serialized staging deployment:
@@ -37,7 +57,7 @@ The Environment must contain these encrypted secrets:
 - Supabase runtime: `STAGING_SUPABASE_SERVICE_ROLE_KEY`, `STAGING_SUPABASE_PUBLISHABLE_KEY`;
 - Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`;
 - Vapi: `VAPI_API_KEY`, `VAPI_SERVER_SECRET`;
-- Stripe test mode: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SMS_GST_TAX_RATE_ID`, `STRIPE_PRICE_MCR_BASE`, `STRIPE_PRICE_AIR_BASE`, `STRIPE_PRICE_AIR_USAGE`;
+- Stripe test mode: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SMS_GST_TAX_RATE_ID`, `STRIPE_GST_INCLUSIVE_TAX_RATE_ID`, `STRIPE_PRICE_MCR_BASE`, `STRIPE_PRICE_AIR_BASE`, `STRIPE_PRICE_AIR_USAGE`, `STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE`, `STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES`;
 - application controls: `SMS_INVOICE_PROCESSOR_KEY`, `WEBHOOK_SECRET`, `DASHBOARD_PIN`.
 
 The preflight checks presence without printing values. It also rejects a non-test Stripe key, a short invoice processor key, inconsistent URLs, mismatched Supabase references, production-like identifiers, an unqualified Worker name, or a release that is not an exact SHA.
@@ -59,7 +79,14 @@ Run `Deploy isolated staging` from the feature branch and supply:
 
 Selecting `false` for migrations performs the migration dry run and then deliberately fails before Worker deployment. This makes the dry-run path useful without allowing an application/schema mismatch.
 
-The deployment creates or updates only an unfinalized Stripe test-invoice capability. It does not run certification calls, send an SMS, finalize an invoice, charge a customer, create a production resource, or modify production configuration.
+The guarded workflow verifies the three application Prices and two Australian GST paths in the
+same Stripe TEST account. With an explicitly supplied one-time staging configuration token, it may
+set an `unspecified` application Price to `inclusive`, create or reuse the tagged 10% inclusive AU
+Tax Rate, attach that rate to matching TEST subscriptions without proration, and save only its ID
+as `STRIPE_GST_INCLUSIVE_TAX_RATE_ID`. It refuses live keys and Prices already locked as exclusive.
+The separate `STRIPE_SMS_GST_TAX_RATE_ID` remains the 10% exclusive rate used only by SMS draft
+invoices. The deployment does not send an SMS, finalize an invoice, charge a customer, create a
+live resource, or modify production configuration.
 
 The deployed Worker explicitly receives `CERTIFICATION_TARGET=staging`; the
 guarded invoice route remains unavailable if this or any other staging-only

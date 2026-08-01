@@ -79,7 +79,10 @@ Recovery SMS creates `outbound_sms` usage with:
 - the tenant, Twilio SID, SMS audit ID, and durable provider-event identity;
 - Stripe meter status `skipped`, because the existing meter is AI voice-seconds-only and this phase does not trigger customer billing.
 
-Billing and Call Handling views expose the settled A$0.25 excluding GST price. SMS invoice aggregation sums integer minor units, while existing AI usage behavior remains separate and unchanged behind the AI gate.
+The underlying SMS ledger remains A$0.25 excluding GST. Current customer-facing surfaces lead with
+27.5¢ including GST per provider-accepted recovery SMS; invoice aggregation sums integer minor
+units and applies 10% GST at the aggregate invoice boundary. AI usage remains a separate meter and
+is now represented as a customer total of A$0.59/minute including GST.
 
 ### Customer UI
 

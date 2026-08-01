@@ -17,18 +17,26 @@ import { Route as ChatRouteImport } from './routes/chat'
 import { Route as ConfirmationRouteImport } from './routes/confirmation'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MissedCallRouteImport } from './routes/missed-call'
+import { Route as PlumbersRouteImport } from './routes/plumbers'
 import { Route as RequestRouteImport } from './routes/request'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as UnsubscribeRouteImport } from './routes/unsubscribe'
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
 import { Route as AuthenticatedAiReceptionistRouteImport } from './routes/_authenticated/ai-receptionist'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedCallHandlingRouteImport } from './routes/_authenticated/call-handling'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedMissedCallSettingsRouteImport } from './routes/_authenticated/missed-call-settings'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
+import { Route as AuthenticatedOutreachOperationsRouteImport } from './routes/_authenticated/outreach-operations'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedSetupGuideRouteImport } from './routes/_authenticated/setup-guide'
+import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/usage'
+import { Route as AuthConfirmRouteImport } from './routes/auth_.confirm'
 import { Route as BSlugRouteImport } from './routes/b.$slug'
 import { Route as ServicesBlockedDrainsRouteImport } from './routes/services.blocked-drains'
 import { Route as ServicesEmergencyRouteImport } from './routes/services.emergency'
@@ -36,6 +44,8 @@ import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
 import { Route as ApiDashboardVerifyPinRouteImport } from './routes/api/dashboard.verify-pin'
 import { Route as ApiDemoTriggerSmsRouteImport } from './routes/api/demo.trigger-sms'
+import { Route as ApiPublicAcquisitionRouteImport } from './routes/api/public/acquisition'
+import { Route as ApiPublicBusinessLogoRouteImport } from './routes/api/public/business-logo'
 import { Route as ApiPublicProcessEnrichmentJobsRouteImport } from './routes/api/public/process-enrichment-jobs'
 import { Route as ApiPublicProcessSmsInvoiceRouteImport } from './routes/api/public/process-sms-invoice'
 import { Route as ApiPublicStagingReleaseRouteImport } from './routes/api/public/staging-release'
@@ -46,9 +56,14 @@ import { Route as BSlugConfirmationRouteImport } from './routes/b.$slug.confirma
 import { Route as BSlugMissedCallRouteImport } from './routes/b.$slug.missed-call'
 import { Route as BSlugRequestRouteImport } from './routes/b.$slug.request'
 import { Route as ApiPublicBillingCheckoutRouteImport } from './routes/api/public/billing.checkout'
+import { Route as ApiPublicBillingCheckoutStatusRouteImport } from './routes/api/public/billing.checkout-status'
+import { Route as ApiPublicBillingPlanRouteImport } from './routes/api/public/billing.plan'
 import { Route as ApiPublicBillingPortalRouteImport } from './routes/api/public/billing.portal'
 import { Route as ApiPublicBillingSummaryRouteImport } from './routes/api/public/billing.summary'
+import { Route as ApiPublicOutreachReportRouteImport } from './routes/api/public/outreach/report'
+import { Route as ApiPublicOutreachUnsubscribeRouteImport } from './routes/api/public/outreach/unsubscribe'
 import { Route as ApiPublicWebhooksStripeInboundRouteImport } from './routes/api/public/webhooks.stripe-inbound'
+import { Route as ApiPublicWebhooksTwilioOutreachRouteImport } from './routes/api/public/webhooks/twilio-outreach'
 import { Route as ApiPublicWebhooksVapiInboundRouteImport } from './routes/api/public/webhooks.vapi-inbound'
 import { Route as ApiPublicWebhooksTwilioMissedCallSlugRouteImport } from './routes/api/public.webhooks.twilio-missed-call.$slug'
 
@@ -91,6 +106,11 @@ const MissedCallRoute = MissedCallRouteImport.update({
   path: '/missed-call',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlumbersRoute = PlumbersRouteImport.update({
+  id: '/plumbers',
+  path: '/plumbers',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RequestRoute = RequestRouteImport.update({
   id: '/request',
   path: '/request',
@@ -106,6 +126,11 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UnsubscribeRoute = UnsubscribeRouteImport.update({
+  id: '/unsubscribe',
+  path: '/unsubscribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const Char91DotmcpChar93ListToolsRoute =
   Char91DotmcpChar93ListToolsRouteImport.update({
     id: '/.mcp/list-tools',
@@ -118,6 +143,11 @@ const Char91DotwellKnownChar93OauthProtectedResourceRoute =
     path: '/.well-known/oauth-protected-resource',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AuthenticatedAccountRoute = AuthenticatedAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAiReceptionistRoute =
   AuthenticatedAiReceptionistRouteImport.update({
     id: '/ai-receptionist',
@@ -140,6 +170,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedMissedCallSettingsRoute =
   AuthenticatedMissedCallSettingsRouteImport.update({
     id: '/missed-call-settings',
@@ -151,10 +186,31 @@ const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedOutreachOperationsRoute =
+  AuthenticatedOutreachOperationsRouteImport.update({
+    id: '/outreach-operations',
+    path: '/outreach-operations',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSetupGuideRoute = AuthenticatedSetupGuideRouteImport.update({
+  id: '/setup-guide',
+  path: '/setup-guide',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedUsageRoute = AuthenticatedUsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthConfirmRoute = AuthConfirmRouteImport.update({
+  id: '/auth_/confirm',
+  path: '/auth/confirm',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const BSlugRoute = BSlugRouteImport.update({
   id: '/b/$slug',
@@ -190,6 +246,16 @@ const ApiDashboardVerifyPinRoute = ApiDashboardVerifyPinRouteImport.update({
 const ApiDemoTriggerSmsRoute = ApiDemoTriggerSmsRouteImport.update({
   id: '/api/demo/trigger-sms',
   path: '/api/demo/trigger-sms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicAcquisitionRoute = ApiPublicAcquisitionRouteImport.update({
+  id: '/api/public/acquisition',
+  path: '/api/public/acquisition',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicBusinessLogoRoute = ApiPublicBusinessLogoRouteImport.update({
+  id: '/api/public/business-logo',
+  path: '/api/public/business-logo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicProcessEnrichmentJobsRoute =
@@ -245,6 +311,17 @@ const ApiPublicBillingCheckoutRoute =
     path: '/api/public/billing/checkout',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicBillingCheckoutStatusRoute =
+  ApiPublicBillingCheckoutStatusRouteImport.update({
+    id: '/api/public/billing/checkout-status',
+    path: '/api/public/billing/checkout-status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicBillingPlanRoute = ApiPublicBillingPlanRouteImport.update({
+  id: '/api/public/billing/plan',
+  path: '/api/public/billing/plan',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicBillingPortalRoute = ApiPublicBillingPortalRouteImport.update({
   id: '/api/public/billing/portal',
   path: '/api/public/billing/portal',
@@ -255,10 +332,27 @@ const ApiPublicBillingSummaryRoute = ApiPublicBillingSummaryRouteImport.update({
   path: '/api/public/billing/summary',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicOutreachReportRoute = ApiPublicOutreachReportRouteImport.update({
+  id: '/api/public/outreach/report',
+  path: '/api/public/outreach/report',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicOutreachUnsubscribeRoute =
+  ApiPublicOutreachUnsubscribeRouteImport.update({
+    id: '/api/public/outreach/unsubscribe',
+    path: '/api/public/outreach/unsubscribe',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicWebhooksStripeInboundRoute =
   ApiPublicWebhooksStripeInboundRouteImport.update({
     id: '/api/public/webhooks/stripe-inbound',
     path: '/api/public/webhooks/stripe-inbound',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicWebhooksTwilioOutreachRoute =
+  ApiPublicWebhooksTwilioOutreachRouteImport.update({
+    id: '/api/public/webhooks/twilio-outreach',
+    path: '/api/public/webhooks/twilio-outreach',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicWebhooksVapiInboundRoute =
@@ -282,18 +376,26 @@ export interface FileRoutesByFullPath {
   '/confirmation': typeof ConfirmationRoute
   '/mcp': typeof McpRoute
   '/missed-call': typeof MissedCallRoute
+  '/plumbers': typeof PlumbersRoute
   '/request': typeof RequestRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/unsubscribe': typeof UnsubscribeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/account': typeof AuthenticatedAccountRoute
   '/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/call-handling': typeof AuthenticatedCallHandlingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/leads': typeof AuthenticatedLeadsRoute
   '/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/outreach-operations': typeof AuthenticatedOutreachOperationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/setup-guide': typeof AuthenticatedSetupGuideRoute
+  '/usage': typeof AuthenticatedUsageRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/b/$slug': typeof BSlugRouteWithChildren
   '/services/blocked-drains': typeof ServicesBlockedDrainsRoute
   '/services/emergency': typeof ServicesEmergencyRoute
@@ -301,6 +403,8 @@ export interface FileRoutesByFullPath {
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
+  '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
+  '/api/public/business-logo': typeof ApiPublicBusinessLogoRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
   '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
@@ -311,9 +415,14 @@ export interface FileRoutesByFullPath {
   '/b/$slug/request': typeof BSlugRequestRoute
   '/b/$slug/': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
+  '/api/public/billing/checkout-status': typeof ApiPublicBillingCheckoutStatusRoute
+  '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
+  '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
+  '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
+  '/api/public/webhooks/twilio-outreach': typeof ApiPublicWebhooksTwilioOutreachRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
   '/api/public/webhooks/twilio-missed-call/$slug': typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
@@ -325,24 +434,34 @@ export interface FileRoutesByTo {
   '/confirmation': typeof ConfirmationRoute
   '/mcp': typeof McpRoute
   '/missed-call': typeof MissedCallRoute
+  '/plumbers': typeof PlumbersRoute
   '/request': typeof RequestRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/unsubscribe': typeof UnsubscribeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/account': typeof AuthenticatedAccountRoute
   '/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/call-handling': typeof AuthenticatedCallHandlingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/leads': typeof AuthenticatedLeadsRoute
   '/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
+  '/outreach-operations': typeof AuthenticatedOutreachOperationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/setup-guide': typeof AuthenticatedSetupGuideRoute
+  '/usage': typeof AuthenticatedUsageRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/services/blocked-drains': typeof ServicesBlockedDrainsRoute
   '/services/emergency': typeof ServicesEmergencyRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
+  '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
+  '/api/public/business-logo': typeof ApiPublicBusinessLogoRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
   '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
@@ -353,9 +472,14 @@ export interface FileRoutesByTo {
   '/b/$slug/request': typeof BSlugRequestRoute
   '/b/$slug': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
+  '/api/public/billing/checkout-status': typeof ApiPublicBillingCheckoutStatusRoute
+  '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
+  '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
+  '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
+  '/api/public/webhooks/twilio-outreach': typeof ApiPublicWebhooksTwilioOutreachRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
   '/api/public/webhooks/twilio-missed-call/$slug': typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
@@ -369,18 +493,26 @@ export interface FileRoutesById {
   '/confirmation': typeof ConfirmationRoute
   '/mcp': typeof McpRoute
   '/missed-call': typeof MissedCallRoute
+  '/plumbers': typeof PlumbersRoute
   '/request': typeof RequestRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/unsubscribe': typeof UnsubscribeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  '/_authenticated/account': typeof AuthenticatedAccountRoute
   '/_authenticated/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
   '/_authenticated/call-handling': typeof AuthenticatedCallHandlingRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/leads': typeof AuthenticatedLeadsRoute
   '/_authenticated/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
+  '/_authenticated/outreach-operations': typeof AuthenticatedOutreachOperationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/setup-guide': typeof AuthenticatedSetupGuideRoute
+  '/_authenticated/usage': typeof AuthenticatedUsageRoute
+  '/auth_/confirm': typeof AuthConfirmRoute
   '/b/$slug': typeof BSlugRouteWithChildren
   '/services/blocked-drains': typeof ServicesBlockedDrainsRoute
   '/services/emergency': typeof ServicesEmergencyRoute
@@ -388,6 +520,8 @@ export interface FileRoutesById {
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
+  '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
+  '/api/public/business-logo': typeof ApiPublicBusinessLogoRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
   '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
   '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
@@ -398,9 +532,14 @@ export interface FileRoutesById {
   '/b/$slug/request': typeof BSlugRequestRoute
   '/b/$slug/': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
+  '/api/public/billing/checkout-status': typeof ApiPublicBillingCheckoutStatusRoute
+  '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
+  '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
+  '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
+  '/api/public/webhooks/twilio-outreach': typeof ApiPublicWebhooksTwilioOutreachRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
   '/api/public/webhooks/twilio-missed-call/$slug': typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
@@ -414,18 +553,26 @@ export interface FileRouteTypes {
     | '/confirmation'
     | '/mcp'
     | '/missed-call'
+    | '/plumbers'
     | '/request'
     | '/reset-password'
     | '/signup'
+    | '/unsubscribe'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/account'
     | '/ai-receptionist'
     | '/billing'
     | '/call-handling'
     | '/dashboard'
+    | '/leads'
     | '/missed-call-settings'
     | '/onboarding'
+    | '/outreach-operations'
     | '/settings'
+    | '/setup-guide'
+    | '/usage'
+    | '/auth/confirm'
     | '/b/$slug'
     | '/services/blocked-drains'
     | '/services/emergency'
@@ -433,6 +580,8 @@ export interface FileRouteTypes {
     | '/.mcp/invoke-tool/$tool'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
+    | '/api/public/acquisition'
+    | '/api/public/business-logo'
     | '/api/public/process-enrichment-jobs'
     | '/api/public/process-sms-invoice'
     | '/api/public/staging-release'
@@ -443,9 +592,14 @@ export interface FileRouteTypes {
     | '/b/$slug/request'
     | '/b/$slug/'
     | '/api/public/billing/checkout'
+    | '/api/public/billing/checkout-status'
+    | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
+    | '/api/public/outreach/report'
+    | '/api/public/outreach/unsubscribe'
     | '/api/public/webhooks/stripe-inbound'
+    | '/api/public/webhooks/twilio-outreach'
     | '/api/public/webhooks/vapi-inbound'
     | '/api/public/webhooks/twilio-missed-call/$slug'
   fileRoutesByTo: FileRoutesByTo
@@ -457,24 +611,34 @@ export interface FileRouteTypes {
     | '/confirmation'
     | '/mcp'
     | '/missed-call'
+    | '/plumbers'
     | '/request'
     | '/reset-password'
     | '/signup'
+    | '/unsubscribe'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/account'
     | '/ai-receptionist'
     | '/billing'
     | '/call-handling'
     | '/dashboard'
+    | '/leads'
     | '/missed-call-settings'
     | '/onboarding'
+    | '/outreach-operations'
     | '/settings'
+    | '/setup-guide'
+    | '/usage'
+    | '/auth/confirm'
     | '/services/blocked-drains'
     | '/services/emergency'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
+    | '/api/public/acquisition'
+    | '/api/public/business-logo'
     | '/api/public/process-enrichment-jobs'
     | '/api/public/process-sms-invoice'
     | '/api/public/staging-release'
@@ -485,9 +649,14 @@ export interface FileRouteTypes {
     | '/b/$slug/request'
     | '/b/$slug'
     | '/api/public/billing/checkout'
+    | '/api/public/billing/checkout-status'
+    | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
+    | '/api/public/outreach/report'
+    | '/api/public/outreach/unsubscribe'
     | '/api/public/webhooks/stripe-inbound'
+    | '/api/public/webhooks/twilio-outreach'
     | '/api/public/webhooks/vapi-inbound'
     | '/api/public/webhooks/twilio-missed-call/$slug'
   id:
@@ -500,18 +669,26 @@ export interface FileRouteTypes {
     | '/confirmation'
     | '/mcp'
     | '/missed-call'
+    | '/plumbers'
     | '/request'
     | '/reset-password'
     | '/signup'
+    | '/unsubscribe'
     | '/.mcp/list-tools'
     | '/.well-known/oauth-protected-resource'
+    | '/_authenticated/account'
     | '/_authenticated/ai-receptionist'
     | '/_authenticated/billing'
     | '/_authenticated/call-handling'
     | '/_authenticated/dashboard'
+    | '/_authenticated/leads'
     | '/_authenticated/missed-call-settings'
     | '/_authenticated/onboarding'
+    | '/_authenticated/outreach-operations'
     | '/_authenticated/settings'
+    | '/_authenticated/setup-guide'
+    | '/_authenticated/usage'
+    | '/auth_/confirm'
     | '/b/$slug'
     | '/services/blocked-drains'
     | '/services/emergency'
@@ -519,6 +696,8 @@ export interface FileRouteTypes {
     | '/.mcp/invoke-tool/$tool'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
+    | '/api/public/acquisition'
+    | '/api/public/business-logo'
     | '/api/public/process-enrichment-jobs'
     | '/api/public/process-sms-invoice'
     | '/api/public/staging-release'
@@ -529,9 +708,14 @@ export interface FileRouteTypes {
     | '/b/$slug/request'
     | '/b/$slug/'
     | '/api/public/billing/checkout'
+    | '/api/public/billing/checkout-status'
+    | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
+    | '/api/public/outreach/report'
+    | '/api/public/outreach/unsubscribe'
     | '/api/public/webhooks/stripe-inbound'
+    | '/api/public/webhooks/twilio-outreach'
     | '/api/public/webhooks/vapi-inbound'
     | '/api/public/webhooks/twilio-missed-call/$slug'
   fileRoutesById: FileRoutesById
@@ -545,11 +729,14 @@ export interface RootRouteChildren {
   ConfirmationRoute: typeof ConfirmationRoute
   McpRoute: typeof McpRoute
   MissedCallRoute: typeof MissedCallRoute
+  PlumbersRoute: typeof PlumbersRoute
   RequestRoute: typeof RequestRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
+  UnsubscribeRoute: typeof UnsubscribeRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  AuthConfirmRoute: typeof AuthConfirmRoute
   BSlugRoute: typeof BSlugRouteWithChildren
   ServicesBlockedDrainsRoute: typeof ServicesBlockedDrainsRoute
   ServicesEmergencyRoute: typeof ServicesEmergencyRoute
@@ -557,14 +744,21 @@ export interface RootRouteChildren {
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
   ApiDashboardVerifyPinRoute: typeof ApiDashboardVerifyPinRoute
   ApiDemoTriggerSmsRoute: typeof ApiDemoTriggerSmsRoute
+  ApiPublicAcquisitionRoute: typeof ApiPublicAcquisitionRoute
+  ApiPublicBusinessLogoRoute: typeof ApiPublicBusinessLogoRoute
   ApiPublicProcessEnrichmentJobsRoute: typeof ApiPublicProcessEnrichmentJobsRoute
   ApiPublicProcessSmsInvoiceRoute: typeof ApiPublicProcessSmsInvoiceRoute
   ApiPublicStagingReleaseRoute: typeof ApiPublicStagingReleaseRoute
   ApiWebhooksAiPhoneLeadRoute: typeof ApiWebhooksAiPhoneLeadRoute
   ApiPublicBillingCheckoutRoute: typeof ApiPublicBillingCheckoutRoute
+  ApiPublicBillingCheckoutStatusRoute: typeof ApiPublicBillingCheckoutStatusRoute
+  ApiPublicBillingPlanRoute: typeof ApiPublicBillingPlanRoute
   ApiPublicBillingPortalRoute: typeof ApiPublicBillingPortalRoute
   ApiPublicBillingSummaryRoute: typeof ApiPublicBillingSummaryRoute
+  ApiPublicOutreachReportRoute: typeof ApiPublicOutreachReportRoute
+  ApiPublicOutreachUnsubscribeRoute: typeof ApiPublicOutreachUnsubscribeRoute
   ApiPublicWebhooksStripeInboundRoute: typeof ApiPublicWebhooksStripeInboundRoute
+  ApiPublicWebhooksTwilioOutreachRoute: typeof ApiPublicWebhooksTwilioOutreachRoute
   ApiPublicWebhooksVapiInboundRoute: typeof ApiPublicWebhooksVapiInboundRoute
   ApiPublicWebhooksTwilioMissedCallSlugRoute: typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
@@ -627,6 +821,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MissedCallRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/plumbers': {
+      id: '/plumbers'
+      path: '/plumbers'
+      fullPath: '/plumbers'
+      preLoaderRoute: typeof PlumbersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/request': {
       id: '/request'
       path: '/request'
@@ -648,6 +849,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/unsubscribe': {
+      id: '/unsubscribe'
+      path: '/unsubscribe'
+      fullPath: '/unsubscribe'
+      preLoaderRoute: typeof UnsubscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/.mcp/list-tools': {
       id: '/.mcp/list-tools'
       path: '/.mcp/list-tools'
@@ -661,6 +869,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/.well-known/oauth-protected-resource'
       preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/account': {
+      id: '/_authenticated/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AuthenticatedAccountRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/ai-receptionist': {
       id: '/_authenticated/ai-receptionist'
@@ -690,6 +905,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/leads': {
+      id: '/_authenticated/leads'
+      path: '/leads'
+      fullPath: '/leads'
+      preLoaderRoute: typeof AuthenticatedLeadsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/missed-call-settings': {
       id: '/_authenticated/missed-call-settings'
       path: '/missed-call-settings'
@@ -704,12 +926,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/outreach-operations': {
+      id: '/_authenticated/outreach-operations'
+      path: '/outreach-operations'
+      fullPath: '/outreach-operations'
+      preLoaderRoute: typeof AuthenticatedOutreachOperationsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/setup-guide': {
+      id: '/_authenticated/setup-guide'
+      path: '/setup-guide'
+      fullPath: '/setup-guide'
+      preLoaderRoute: typeof AuthenticatedSetupGuideRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/usage': {
+      id: '/_authenticated/usage'
+      path: '/usage'
+      fullPath: '/usage'
+      preLoaderRoute: typeof AuthenticatedUsageRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/auth_/confirm': {
+      id: '/auth_/confirm'
+      path: '/auth/confirm'
+      fullPath: '/auth/confirm'
+      preLoaderRoute: typeof AuthConfirmRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/b/$slug': {
       id: '/b/$slug'
@@ -758,6 +1008,20 @@ declare module '@tanstack/react-router' {
       path: '/api/demo/trigger-sms'
       fullPath: '/api/demo/trigger-sms'
       preLoaderRoute: typeof ApiDemoTriggerSmsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/acquisition': {
+      id: '/api/public/acquisition'
+      path: '/api/public/acquisition'
+      fullPath: '/api/public/acquisition'
+      preLoaderRoute: typeof ApiPublicAcquisitionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/business-logo': {
+      id: '/api/public/business-logo'
+      path: '/api/public/business-logo'
+      fullPath: '/api/public/business-logo'
+      preLoaderRoute: typeof ApiPublicBusinessLogoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/process-enrichment-jobs': {
@@ -830,6 +1094,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicBillingCheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/billing/checkout-status': {
+      id: '/api/public/billing/checkout-status'
+      path: '/api/public/billing/checkout-status'
+      fullPath: '/api/public/billing/checkout-status'
+      preLoaderRoute: typeof ApiPublicBillingCheckoutStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/billing/plan': {
+      id: '/api/public/billing/plan'
+      path: '/api/public/billing/plan'
+      fullPath: '/api/public/billing/plan'
+      preLoaderRoute: typeof ApiPublicBillingPlanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/billing/portal': {
       id: '/api/public/billing/portal'
       path: '/api/public/billing/portal'
@@ -844,11 +1122,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicBillingSummaryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/outreach/report': {
+      id: '/api/public/outreach/report'
+      path: '/api/public/outreach/report'
+      fullPath: '/api/public/outreach/report'
+      preLoaderRoute: typeof ApiPublicOutreachReportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/outreach/unsubscribe': {
+      id: '/api/public/outreach/unsubscribe'
+      path: '/api/public/outreach/unsubscribe'
+      fullPath: '/api/public/outreach/unsubscribe'
+      preLoaderRoute: typeof ApiPublicOutreachUnsubscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/webhooks/stripe-inbound': {
       id: '/api/public/webhooks/stripe-inbound'
       path: '/api/public/webhooks/stripe-inbound'
       fullPath: '/api/public/webhooks/stripe-inbound'
       preLoaderRoute: typeof ApiPublicWebhooksStripeInboundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/twilio-outreach': {
+      id: '/api/public/webhooks/twilio-outreach'
+      path: '/api/public/webhooks/twilio-outreach'
+      fullPath: '/api/public/webhooks/twilio-outreach'
+      preLoaderRoute: typeof ApiPublicWebhooksTwilioOutreachRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/webhooks/vapi-inbound': {
@@ -869,23 +1168,33 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAccountRoute: typeof AuthenticatedAccountRoute
   AuthenticatedAiReceptionistRoute: typeof AuthenticatedAiReceptionistRoute
   AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
   AuthenticatedCallHandlingRoute: typeof AuthenticatedCallHandlingRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
   AuthenticatedMissedCallSettingsRoute: typeof AuthenticatedMissedCallSettingsRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
+  AuthenticatedOutreachOperationsRoute: typeof AuthenticatedOutreachOperationsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedSetupGuideRoute: typeof AuthenticatedSetupGuideRoute
+  AuthenticatedUsageRoute: typeof AuthenticatedUsageRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAccountRoute: AuthenticatedAccountRoute,
   AuthenticatedAiReceptionistRoute: AuthenticatedAiReceptionistRoute,
   AuthenticatedBillingRoute: AuthenticatedBillingRoute,
   AuthenticatedCallHandlingRoute: AuthenticatedCallHandlingRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
   AuthenticatedMissedCallSettingsRoute: AuthenticatedMissedCallSettingsRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
+  AuthenticatedOutreachOperationsRoute: AuthenticatedOutreachOperationsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedSetupGuideRoute: AuthenticatedSetupGuideRoute,
+  AuthenticatedUsageRoute: AuthenticatedUsageRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -918,12 +1227,15 @@ const rootRouteChildren: RootRouteChildren = {
   ConfirmationRoute: ConfirmationRoute,
   McpRoute: McpRoute,
   MissedCallRoute: MissedCallRoute,
+  PlumbersRoute: PlumbersRoute,
   RequestRoute: RequestRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
+  UnsubscribeRoute: UnsubscribeRoute,
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
     Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  AuthConfirmRoute: AuthConfirmRoute,
   BSlugRoute: BSlugRouteWithChildren,
   ServicesBlockedDrainsRoute: ServicesBlockedDrainsRoute,
   ServicesEmergencyRoute: ServicesEmergencyRoute,
@@ -931,14 +1243,21 @@ const rootRouteChildren: RootRouteChildren = {
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
   ApiDashboardVerifyPinRoute: ApiDashboardVerifyPinRoute,
   ApiDemoTriggerSmsRoute: ApiDemoTriggerSmsRoute,
+  ApiPublicAcquisitionRoute: ApiPublicAcquisitionRoute,
+  ApiPublicBusinessLogoRoute: ApiPublicBusinessLogoRoute,
   ApiPublicProcessEnrichmentJobsRoute: ApiPublicProcessEnrichmentJobsRoute,
   ApiPublicProcessSmsInvoiceRoute: ApiPublicProcessSmsInvoiceRoute,
   ApiPublicStagingReleaseRoute: ApiPublicStagingReleaseRoute,
   ApiWebhooksAiPhoneLeadRoute: ApiWebhooksAiPhoneLeadRoute,
   ApiPublicBillingCheckoutRoute: ApiPublicBillingCheckoutRoute,
+  ApiPublicBillingCheckoutStatusRoute: ApiPublicBillingCheckoutStatusRoute,
+  ApiPublicBillingPlanRoute: ApiPublicBillingPlanRoute,
   ApiPublicBillingPortalRoute: ApiPublicBillingPortalRoute,
   ApiPublicBillingSummaryRoute: ApiPublicBillingSummaryRoute,
+  ApiPublicOutreachReportRoute: ApiPublicOutreachReportRoute,
+  ApiPublicOutreachUnsubscribeRoute: ApiPublicOutreachUnsubscribeRoute,
   ApiPublicWebhooksStripeInboundRoute: ApiPublicWebhooksStripeInboundRoute,
+  ApiPublicWebhooksTwilioOutreachRoute: ApiPublicWebhooksTwilioOutreachRoute,
   ApiPublicWebhooksVapiInboundRoute: ApiPublicWebhooksVapiInboundRoute,
   ApiPublicWebhooksTwilioMissedCallSlugRoute:
     ApiPublicWebhooksTwilioMissedCallSlugRoute,

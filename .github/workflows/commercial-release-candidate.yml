@@ -4,11 +4,14 @@ on:
   push:
     branches:
       - feat/customer-call-handling-reconstructed
+      - feat/acquisition-funnel
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+  deployments: write
+  pull-requests: read
 
 concurrency:
   group: commercial-release-candidate-${{ github.ref }}
@@ -35,6 +38,9 @@ jobs:
       - name: Verify frozen migrations
         run: npm run verify:migrations
 
+      - name: Verify critical visual assets
+        run: npm run verify:assets
+
       - name: Run complete behavioural suite
         run: npm test
 
@@ -44,8 +50,13 @@ jobs:
       - name: Check release-critical formatting and lint
         run: |
           npx prettier --check \
+            .github/workflows/commercial-release-candidate.yml \
+            .github/workflows/staging-access-preflight.yml \
             .github/workflows/staging-deployment.yml \
             .github/workflows/staging-rollback.yml \
+            scripts/configure-staging-auth-email.mjs \
+            scripts/configure-staging-commercial-gst.mjs \
+            scripts/staging-new-account-checkout-smoke.mjs \
             scripts/staging-certification.mjs \
             scripts/staging-deployment.d.mts \
             scripts/staging-deployment.mjs \
@@ -53,17 +64,24 @@ jobs:
             src/lib/sms-invoice-stripe.server.ts \
             src/lib/sms-invoicing.server.ts \
             src/lib/staging-release.server.ts \
+            src/lib/commercial-pricing.ts \
+            src/lib/__tests__/commercial-gst.behavior.test.ts \
             src/lib/__tests__/sms-invoice-certification-route.behavior.test.ts \
             src/lib/__tests__/staging-deployment.behavior.test.ts \
             src/routes/api/public/process-sms-invoice.ts \
             src/routes/api/public/staging-release.ts
           npx eslint \
+            scripts/configure-staging-auth-email.mjs \
+            scripts/configure-staging-commercial-gst.mjs \
+            scripts/staging-new-account-checkout-smoke.mjs \
             scripts/staging-certification.mjs \
             scripts/staging-deployment.mjs \
             src/lib/sms-invoice-certification.server.ts \
             src/lib/sms-invoice-stripe.server.ts \
             src/lib/sms-invoicing.server.ts \
             src/lib/staging-release.server.ts \
+            src/lib/commercial-pricing.ts \
+            src/lib/__tests__/commercial-gst.behavior.test.ts \
             src/lib/__tests__/sms-invoice-certification-route.behavior.test.ts \
             src/lib/__tests__/staging-deployment.behavior.test.ts \
             src/routes/api/public/process-sms-invoice.ts \
@@ -85,3 +103,38 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 14
+
+  authorize-pr-7-staging:
+    needs: verify-and-package
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feat/acquisition-funnel'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require this exact commit to remain the open PR 7 head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD_REF: feat/acquisition-funnel
+          EXPECTED_HEAD_SHA: ${{ github.sha }}
+        run: |
+          test "$(
+            gh api "repos/$GITHUB_REPOSITORY/pulls/7" \
+              --jq 'select(
+                .state == "open" and
+                .head.ref == env.EXPECTED_HEAD_REF and
+                .head.repo.full_name == env.GITHUB_REPOSITORY and
+                .head.sha == env.EXPECTED_HEAD_SHA
+              ) | .number'
+          )" = "7"
+
+  deploy-pr-7-to-isolated-staging:
+    needs:
+      - verify-and-package
+      - authorize-pr-7-staging
+    uses: ./.github/workflows/staging-deployment.yml
+    with:
+      release_sha: ${{ github.sha }}
+      environment_id: staging-commercial-rc
+      apply_migrations: true
+      confirmation: DEPLOY_STAGING_ONLY
+    secrets: inherit

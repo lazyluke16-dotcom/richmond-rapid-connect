@@ -146,7 +146,13 @@ Replay the same Twilio/Vapi provider event under controlled conditions. Confirm 
 
 ### Billing
 
-Confirm AI usage is billed only when the effective billing state and live mode permit it. Confirm billing-exempt AI tests skip Stripe. Confirm every Twilio-accepted Text Link SMS creates exactly one A$0.25 excluding GST invoice-aggregation event, while rejected or unresolved attempts create none. Confirm GST is added only by the invoicing/tax layer. Confirm the live Stripe webhook and customer portal remain healthy without submitting SMS events to the AI voice meter.
+Confirm AI usage is billed only when the effective billing state and live mode permit it at the
+customer total A$0.59/minute including GST, metered by the second. Confirm billing-exempt AI tests
+skip Stripe. Confirm every Twilio-accepted Text Link SMS creates exactly one A$0.25 excluding-GST
+invoice-aggregation event, displayed to the customer as 27.5¢ including GST, while rejected or
+unresolved attempts create none. Confirm SMS GST is added only by its exclusive-tax invoicing layer.
+Confirm the Stripe webhook and customer portal remain healthy without submitting SMS events to the
+AI voice meter.
 
 ## 9. Rollback
 

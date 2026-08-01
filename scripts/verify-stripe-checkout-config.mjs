@@ -1,0 +1,146 @@
+import { pathToFileURL } from "node:url";
+
+import Stripe from "stripe";
+import { validateInclusiveGstResources } from "./configure-staging-commercial-gst.mjs";
+import { validateFoundingCoupon } from "./configure-staging-founding-coupon.mjs";
+
+const STRIPE_API_VERSION = "2026-06-24.dahlia";
+
+function required(env, name) {
+  const value = env[name]?.trim();
+  if (!value) throw new Error(`Missing required staging Stripe variable: ${name}`);
+  return value;
+}
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+function sorted(values) {
+  return [...new Set(values)].sort();
+}
+
+export function validateStripeCheckoutResources({
+  account,
+  prices,
+  coupon,
+  foundingCoupon,
+  inclusiveTaxRate,
+}) {
+  const mcrBase = prices.MCR_BASE;
+  const airBase = prices.AIR_BASE;
+  const airUsage = prices.AIR_USAGE;
+
+  for (const [name, price] of Object.entries(prices)) {
+    assert(price && price.object === "price", `${name} is not a Stripe Price`);
+    assert(price.livemode === false, `${name} must be a test-mode Price`);
+    assert(price.active === true, `${name} must be active`);
+    assert(price.currency === "aud", `${name} must use AUD`);
+    assert(price.recurring?.interval === "month", `${name} must recur monthly`);
+  }
+  assert(mcrBase.unit_amount === 900, "STRIPE_PRICE_MCR_BASE must be A$9.00");
+  assert(mcrBase.recurring?.usage_type === "licensed", "MCR base must be licensed");
+  assert(airBase.unit_amount === 1500, "STRIPE_PRICE_AIR_BASE must be A$15.00");
+  assert(airBase.recurring?.usage_type === "licensed", "AI base must be licensed");
+  assert(airUsage.recurring?.usage_type === "metered", "AI usage must be metered");
+  const aiUsageCentsPerSecond = Number(airUsage.unit_amount_decimal);
+  assert(
+    Number.isFinite(aiUsageCentsPerSecond) &&
+      Math.abs(aiUsageCentsPerSecond - 0.983333) <= 0.000001,
+    "AI usage must resolve to A$0.59/minute at the configured per-second precision",
+  );
+  assert(
+    new Set([mcrBase.product, airBase.product, airUsage.product]).size === 3,
+    "Base and usage Prices must use three separate Stripe Products",
+  );
+
+  assert(coupon?.object === "coupon", "Union waiver is not a Stripe Coupon");
+  assert(coupon.livemode === false, "Union waiver Coupon must be test-mode");
+  assert(coupon.valid === true, "Union waiver Coupon must be valid");
+  assert(coupon.percent_off === 100, "Union waiver Coupon must be 100 percent off");
+  assert(coupon.duration === "once", "Union waiver Coupon must apply once");
+  const expectedProducts = sorted([mcrBase.product, airBase.product]);
+  const scopedProducts = sorted(coupon.applies_to?.products ?? []);
+  assert(
+    JSON.stringify(scopedProducts) === JSON.stringify(expectedProducts),
+    "Union waiver Coupon must apply only to both base Products",
+  );
+  assert(!scopedProducts.includes(airUsage.product), "Union waiver Coupon must exclude AI usage");
+
+  validateFoundingCoupon({ coupon: foundingCoupon, prices });
+  const gst = validateInclusiveGstResources({ prices, taxRate: inclusiveTaxRate });
+
+  return {
+    mode: "test",
+    accountId: account.id,
+    priceCount: Object.keys(prices).length,
+    couponScopedToBaseProducts: true,
+    foundingCouponThreeMonths: true,
+    usageProductsExcludedFromFoundingCoupon: true,
+    inclusiveGstTaxRateReady: gst.headlineTotalsUnchanged,
+    commercialPricing: {
+      mcrMonthlyAud: mcrBase.unit_amount / 100,
+      aiMonthlyAud: airBase.unit_amount / 100,
+      aiUsageAudPerSecond: aiUsageCentsPerSecond / 100,
+      aiUsageAudPerMinute: (aiUsageCentsPerSecond * 60) / 100,
+      taxBehavior: {
+        mcr: mcrBase.tax_behavior ?? "unspecified",
+        ai: airBase.tax_behavior ?? "unspecified",
+        aiUsage: airUsage.tax_behavior ?? "unspecified",
+      },
+    },
+  };
+}
+
+export async function verifyStripeCheckoutConfig(env = process.env) {
+  const key = required(env, "STRIPE_SECRET_KEY");
+  assert(
+    /^(?:(?:sk|rk)_test_|sk_org_test_)/.test(key),
+    "Staging Stripe verification requires a test-mode key",
+  );
+  const stripeContext = env.STRIPE_CONTEXT?.trim() || undefined;
+  if (key.startsWith("sk_org_test_") && !stripeContext) {
+    throw new Error("STRIPE_CONTEXT is required for an organization test key");
+  }
+
+  const stripe = new Stripe(key, {
+    apiVersion: STRIPE_API_VERSION,
+    ...(stripeContext ? { stripeContext } : {}),
+  });
+  const priceIds = {
+    MCR_BASE: required(env, "STRIPE_PRICE_MCR_BASE"),
+    AIR_BASE: required(env, "STRIPE_PRICE_AIR_BASE"),
+    AIR_USAGE: required(env, "STRIPE_PRICE_AIR_USAGE"),
+  };
+  const couponId = required(env, "STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE");
+  const foundingCouponId = required(env, "STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES");
+  const inclusiveTaxRateId = required(env, "STRIPE_GST_INCLUSIVE_TAX_RATE_ID");
+  const [account, mcrBase, airBase, airUsage, coupon, foundingCoupon, inclusiveTaxRate] =
+    await Promise.all([
+      stripe.accounts.retrieve(),
+      stripe.prices.retrieve(priceIds.MCR_BASE),
+      stripe.prices.retrieve(priceIds.AIR_BASE),
+      stripe.prices.retrieve(priceIds.AIR_USAGE),
+      stripe.coupons.retrieve(couponId, { expand: ["applies_to"] }),
+      stripe.coupons.retrieve(foundingCouponId, { expand: ["applies_to"] }),
+      stripe.taxRates.retrieve(inclusiveTaxRateId),
+    ]);
+
+  return validateStripeCheckoutResources({
+    account,
+    prices: { MCR_BASE: mcrBase, AIR_BASE: airBase, AIR_USAGE: airUsage },
+    coupon,
+    foundingCoupon,
+    inclusiveTaxRate,
+  });
+}
+
+const isDirect = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isDirect) {
+  verifyStripeCheckoutConfig()
+    .then((result) => process.stdout.write(`${JSON.stringify(result)}\n`))
+    .catch((error) => {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exitCode = 1;
+    });
+}

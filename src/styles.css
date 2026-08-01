@@ -2,6 +2,28 @@
 @source "../src";
 @import "tw-animate-css";
 
+@media (prefers-reduced-motion: reduce) {
+  .acquisition-experience,
+  .acquisition-experience *,
+  .acquisition-experience *::before,
+  .acquisition-experience *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .plumber-workspace,
+  .plumber-workspace *,
+  .plumber-workspace *::before,
+  .plumber-workspace *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /*
@@ -152,8 +174,24 @@
 }
 
 @keyframes ring-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7); }
-  50% { box-shadow: 0 0 0 10px rgba(250, 204, 21, 0); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(250, 204, 21, 0);
+  }
+}
+
+@keyframes demo-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @utility pulse-ring {

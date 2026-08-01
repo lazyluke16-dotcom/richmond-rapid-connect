@@ -420,11 +420,9 @@ export const setMyHours = createServerFn({ method: "POST" })
 
 export const setMyPlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { plan: "missed_call_recovery" | "ai_receptionist" }) => data)
+  .inputValidator((data: { plan: "missed_call_recovery" | "ai_receptionist" | "both" }) => data)
   .handler(async ({ data, context }) => {
     const parsed = PlanPayloadSchema.parse(data);
-    const now = new Date();
-    const ends = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
     const { data: biz } = await context.supabase
       .from("businesses")
       .select("id")
@@ -435,8 +433,6 @@ export const setMyPlan = createServerFn({ method: "POST" })
       .from("businesses")
       .update({
         selected_plan: parsed.plan,
-        trial_started_at: now.toISOString(),
-        trial_ends_at: ends.toISOString(),
       } as never)
       .eq("id", biz.id as string);
     if (error) throw new Error(error.message);

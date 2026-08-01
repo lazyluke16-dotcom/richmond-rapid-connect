@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -33,6 +35,80 @@ function stagingEnv(): NodeJS.ProcessEnv {
 }
 
 describe("staging deployment boundary", () => {
+  it("automatically deploys only a verified push that remains the open PR 7 head", () => {
+    const releaseWorkflow = readFileSync(
+      ".github/workflows/commercial-release-candidate.yml",
+      "utf8",
+    );
+    const authorization = releaseWorkflow.slice(
+      releaseWorkflow.indexOf("authorize-pr-7-staging:"),
+      releaseWorkflow.indexOf("deploy-pr-7-to-isolated-staging:"),
+    );
+    const automaticDeployment = releaseWorkflow.slice(
+      releaseWorkflow.indexOf("deploy-pr-7-to-isolated-staging:"),
+    );
+
+    expect(releaseWorkflow).toContain("- feat/acquisition-funnel");
+    expect(authorization).toContain("needs: verify-and-package");
+    expect(authorization).toContain("github.event_name == 'push'");
+    expect(authorization).toContain("github.ref == 'refs/heads/feat/acquisition-funnel'");
+    expect(authorization).toContain('gh api "repos/$GITHUB_REPOSITORY/pulls/7"');
+    expect(authorization).toContain('.state == "open"');
+    expect(authorization).toContain(".head.ref == env.EXPECTED_HEAD_REF");
+    expect(authorization).toContain(".head.repo.full_name == env.GITHUB_REPOSITORY");
+    expect(authorization).toContain(".head.sha == env.EXPECTED_HEAD_SHA");
+    expect(automaticDeployment).toContain("- verify-and-package");
+    expect(automaticDeployment).toContain("- authorize-pr-7-staging");
+    expect(automaticDeployment).toContain("release_sha: ${{ github.sha }}");
+    expect(automaticDeployment).toContain("environment_id: staging-commercial-rc");
+    expect(automaticDeployment).toContain("apply_migrations: true");
+    expect(automaticDeployment).toContain("confirmation: DEPLOY_STAGING_ONLY");
+    expect(automaticDeployment).toContain("secrets: inherit");
+  });
+
+  it("keeps manual staging dispatch and the shared staging/rollback exclusion lock", () => {
+    const workflow = readFileSync(".github/workflows/staging-deployment.yml", "utf8");
+    const accessWorkflow = readFileSync(".github/workflows/staging-access-preflight.yml", "utf8");
+
+    expect(workflow).toContain("workflow_call:");
+    expect(workflow).toContain("workflow_dispatch:");
+    expect(workflow).toContain("group: isolated-staging-deployment");
+    expect(workflow).toContain("cancel-in-progress: false");
+    expect(accessWorkflow).toContain("workflow_dispatch:");
+    expect(accessWorkflow).not.toContain("pull_request:");
+  });
+
+  it("targets the configured staging Worker during bulk secret upload", () => {
+    const workflow = readFileSync(".github/workflows/staging-deployment.yml", "utf8");
+
+    expect(workflow).toContain("npx wrangler secret bulk");
+    expect(workflow).toContain("--config .output/server/wrangler.json");
+    expect(workflow).toContain('--name "$CLOUDFLARE_STAGING_WORKER_NAME"');
+    expect(workflow).toContain('name.startsWith("STRIPE_")');
+    expect(workflow).toContain("process.env[name]?.trim()");
+    expect(workflow).not.toMatch(/wranglerVersion: "4\.114\.0"\n\s+secrets:/);
+  });
+
+  it("keeps public Supabase bindings out of encrypted secret upload", () => {
+    const workflow = readFileSync(".github/workflows/staging-deployment.yml", "utf8");
+    const uploadStep = workflow.slice(
+      workflow.indexOf("- name: Upload secrets only"),
+      workflow.indexOf("- name: Deploy only"),
+    );
+    const deployStep = workflow.slice(
+      workflow.indexOf("- name: Deploy only"),
+      workflow.indexOf("- name: Verify exact hosted"),
+    );
+
+    expect(uploadStep).not.toContain('"SUPABASE_URL"');
+    expect(uploadStep).not.toContain('"SUPABASE_PUBLISHABLE_KEY"');
+    expect(uploadStep).toContain('"SUPABASE_SERVICE_ROLE_KEY"');
+    expect(deployStep).toContain("--var SUPABASE_URL:${{ vars.STAGING_SUPABASE_URL }}");
+    expect(deployStep).toContain(
+      "--var SUPABASE_PUBLISHABLE_KEY:${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}",
+    );
+  });
+
   it("accepts a complete staging-only configuration without printing secret values", () => {
     const result = validateStagingDeploymentConfig(stagingEnv(), {
       suppliedEnvironmentId: "staging-commercial-rc",
@@ -88,10 +164,37 @@ describe("staging deployment boundary", () => {
   });
 
   it("requires the complete encrypted GitHub staging secret contract", () => {
-    expect(requiredSecretNames).toHaveLength(20);
+    expect(requiredSecretNames).toHaveLength(23);
     expect(new Set(requiredSecretNames).size).toBe(requiredSecretNames.length);
     expect(requiredSecretNames).toContain("STAGING_SUPABASE_DB_PASSWORD");
     expect(requiredSecretNames).toContain("SMS_INVOICE_PROCESSOR_KEY");
+    expect(requiredSecretNames).toContain("STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE");
+    expect(requiredSecretNames).toContain("STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES");
+    expect(requiredSecretNames).toContain("STRIPE_GST_INCLUSIVE_TAX_RATE_ID");
+  });
+
+  it("validates and uploads the scoped union waiver coupon", () => {
+    const workflow = readFileSync(".github/workflows/staging-deployment.yml", "utf8");
+    const uploadStep = workflow.slice(
+      workflow.indexOf("- name: Upload secrets only"),
+      workflow.indexOf("- name: Deploy only"),
+    );
+
+    expect(workflow).toContain("node scripts/verify-stripe-checkout-config.mjs");
+    expect(uploadStep).toContain('"STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE"');
+    expect(uploadStep).toContain('"STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES"');
+    expect(workflow).toContain(
+      "STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE: ${{ secrets.STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE }}",
+    );
+    expect(workflow).toContain(
+      "STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES: ${{ secrets.STRIPE_COUPON_FOUNDING_THREE_MONTH_PLATFORM_FEES }}",
+    );
+    expect(workflow).toContain("node scripts/configure-staging-commercial-gst.mjs");
+    expect(uploadStep).toContain('"STRIPE_GST_INCLUSIVE_TAX_RATE_ID"');
+    expect(workflow).toContain(
+      "STRIPE_GST_INCLUSIVE_TAX_RATE_ID: ${{ steps.stripe_gst.outputs.tax_rate_id }}",
+    );
+    expect(workflow).toContain("node scripts/staging-promotion-pricing-smoke.mjs");
   });
 });
 

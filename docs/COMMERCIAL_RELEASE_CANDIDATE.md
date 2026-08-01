@@ -13,7 +13,7 @@ Status: local source certification only. Hosted staging and production are not c
 
 Staging deployment order is exactly the manifest's `migrations` array, from
 `20260711045456_3cca7ee8-e722-4172-aaaf-15790bc18c91.sql` through
-`20260728120000_commercial_sms_invoicing.sql`. Do not select a subset for a fresh database.
+`20260801200000_authoritative_gst_pricing.sql`. Do not select a subset for a fresh database.
 
 The former pending artifacts were resolved as follows:
 
@@ -43,6 +43,17 @@ The charge originates only in `complete_text_link_dispatch`, after a Twilio mess
 The unique provider/workflow identity prevents a second usage row. Rejected, invalid, missing-caller, cross-tenant, pre-provider, and unresolved attempts never reach this trigger. A reconciliation-confirmed SID reaches the same trigger once. A later `undelivered` status does not reverse provider acceptance or its incurred charge.
 
 ## Invoice and GST architecture
+
+The current approved Australian customer totals are A$9/month including GST for Missed-Call
+Recovery, A$15/month including GST for AI Receptionist, A$24/month including GST for both, and
+A$0.59 per AI voice minute including GST, metered by the second. The corresponding Stripe TEST
+Prices use inclusive tax behaviour with a 10% inclusive AU Tax Rate, so Stripe identifies embedded
+GST but does not add another 10% to those amounts. The first three monthly platform billing periods
+remain free and usage begins at activation.
+
+Recovery SMS is deliberately different: its authoritative ledger price remains 25¢ excluding GST.
+Customer surfaces lead with 27.5¢ including GST per provider-accepted recovery SMS, and the
+exclusive SMS invoice path applies GST to the aggregate subtotal with whole-cent invoice rounding.
 
 `claim_sms_invoice_batch` selects only eligible, unbilled Text Link SMS events for one business and a deterministic half-open period `[period_start, period_end)`. It:
 
@@ -106,7 +117,8 @@ Before hosted execution, Lucas or the staging operator must provide:
 - fixture tenants for Off, Text Link, AI, and cross-tenant tests;
 - staging-only Vapi/Twilio routing and controlled rejection/timeout/reconciliation fixtures;
 - a Stripe test customer for each billing fixture;
-- a Stripe test-mode 10% exclusive Australian GST tax-rate ID;
+- Stripe test-mode 10% inclusive and exclusive Australian GST tax-rate IDs for the subscription/AI
+  and SMS invoice paths respectively;
 - a staging hostname and project reference recorded out of band; and
 - secrets injected through the staging secret store, never source or command arguments.
 

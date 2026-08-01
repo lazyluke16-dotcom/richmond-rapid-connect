@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { COMMERCIAL_PRICING } from "./commercial-pricing";
 
 export const CALL_HANDLING_MODES = ["off", "text_link", "ai_receptionist"] as const;
 export const CallHandlingModeSchema = z.enum(CALL_HANDLING_MODES);
@@ -9,7 +10,8 @@ export interface ServiceEntitlements {
   aiReceptionist: boolean;
 }
 
-export const TEXT_LINK_SMS_UNIT_PRICE_MINOR = 25;
+export const TEXT_LINK_SMS_UNIT_PRICE_MINOR =
+  COMMERCIAL_PRICING.services.missed_call_recovery.usage.unitPriceCents;
 export const TEXT_LINK_SMS_CURRENCY = "AUD";
 export const DEFAULT_TEXT_LINK_SMS_TEMPLATE =
   "{{business_name}} missed your call. Tell us what you need: {{recovery_link}}";
@@ -104,14 +106,14 @@ export function normalizeAustralianPhone(input: string): string {
 }
 
 export function entitlementsForPlan(
-  selectedPlan: "missed_call_recovery" | "ai_receptionist" | null,
+  selectedPlan: "missed_call_recovery" | "ai_receptionist" | "both" | null,
   access: { missedCall: boolean; aiReceptionist: boolean },
 ): ServiceEntitlements {
   return {
     textLink:
-      access.missedCall &&
-      (selectedPlan === "missed_call_recovery" || selectedPlan === "ai_receptionist"),
-    aiReceptionist: access.aiReceptionist && selectedPlan === "ai_receptionist",
+      access.missedCall && (selectedPlan === "missed_call_recovery" || selectedPlan === "both"),
+    aiReceptionist:
+      access.aiReceptionist && (selectedPlan === "ai_receptionist" || selectedPlan === "both"),
   };
 }
 

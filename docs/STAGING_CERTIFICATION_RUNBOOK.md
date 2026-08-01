@@ -42,7 +42,12 @@ Webhook cases additionally use:
 - `CERTIFICATION_OTHER_TENANT_PHONE_ID`
 - `CERTIFICATION_CALLER_E164`
 
-Stripe draft certification additionally requires `STRIPE_MODE=test`, a test secret key, and `STRIPE_SMS_GST_TAX_RATE_ID` for a preconfigured 10% exclusive Australian GST rate.
+Stripe draft certification additionally requires `STRIPE_MODE=test`, a test secret key,
+`STRIPE_SMS_GST_TAX_RATE_ID` for the 10% exclusive Australian SMS GST rate, and
+`STRIPE_GST_INCLUSIVE_TAX_RATE_ID` for the 10% inclusive Australian platform/AI rate. Verify the
+three application Prices are TEST-mode, active, AUD, and `tax_behavior=inclusive`: A$9 monthly,
+A$15 monthly and A$0.00983333 per AI voice second (A$0.59/minute). A Checkout preview or test
+subscription invoice must retain those GST-inclusive item totals rather than adding 10% on top.
 The guarded invoice endpoint additionally requires a unique
 `SMS_INVOICE_PROCESSOR_KEY` of at least 32 characters, stored only in the
 staging secret store. The operator must supply the same key ephemerally along

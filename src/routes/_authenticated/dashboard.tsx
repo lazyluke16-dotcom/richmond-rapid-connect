@@ -1,9 +1,10 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute, useLocation } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useMyTenantBrand } from "@/hooks/use-my-tenant-brand";
 import { useEffect, useState } from "react";
 import { fetchLeads, updateLeadStatus } from "@/lib/db-leads";
 import { jobLabel, urgencyLabel, type Lead } from "@/lib/leads";
+import { SubscriptionSuccess } from "@/components/SubscriptionSuccess";
 import { supabase } from "@/integrations/supabase/client";
 import {
   AlertTriangle,
@@ -14,20 +15,40 @@ import {
   Clock,
   Bot,
   PhoneCall,
-  LogOut,
-  Settings,
-  CreditCard,
   Search,
+  ArrowRight,
+  Wrench,
+  Power,
+  ClipboardList,
+  MessageSquareText,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Plumber dashboard — Richmond Rapid Plumbing" }] }),
-  component: Dashboard,
+  component: DashboardHome,
 });
 
-function Dashboard() {
-  const router = useRouter();
+function DashboardHome() {
+  const search = useLocation({
+    select: (location) => {
+      const values = location.search as Record<string, unknown>;
+      return {
+        billing: typeof values.billing === "string" ? values.billing : undefined,
+        session_id: typeof values.session_id === "string" ? values.session_id : undefined,
+      };
+    },
+  });
+  return <DashboardWorkspace home search={search} />;
+}
+
+export function DashboardWorkspace({
+  home = false,
+  search: returnSearch = {},
+}: {
+  home?: boolean;
+  search?: { billing?: string; session_id?: string };
+}) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,12 +58,25 @@ function Dashboard() {
   const [sourceFilter, setSourceFilter] = useState<NonNullable<Lead["source"]> | "all">("all");
   const [urgentOnly, setUrgentOnly] = useState(false);
   const tenant = useMyTenantBrand();
+  const [homeSummary, setHomeSummary] = useState<{
+    billing?: { selectedPlan?: string | null; billingStatus?: string };
+    connections?: {
+      missedCallRecoveryEnabled?: boolean;
+      aiReceptionistEnabled?: boolean;
+    };
+  } | null>(null);
 
   const loadAll = async () => {
     try {
       const dbLeads = await fetchLeads();
       setLeads(dbLeads);
-      setActiveId((prev) => prev ?? dbLeads[0]?.id ?? null);
+      const requestedId =
+        typeof window === "undefined" ? null : decodeURIComponent(window.location.hash.slice(1));
+      setActiveId((prev) =>
+        requestedId && dbLeads.some((lead) => lead.id === requestedId)
+          ? requestedId
+          : (prev ?? dbLeads[0]?.id ?? null),
+      );
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load leads");
@@ -58,6 +92,18 @@ function Dashboard() {
     }, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!home) return;
+    void supabase.auth.getSession().then(async ({ data }) => {
+      const token = data.session?.access_token;
+      if (!token) return;
+      const response = await fetch("/api/public/billing/summary", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) setHomeSummary((await response.json()) as never);
+    });
+  }, [home]);
 
   const active = leads.find((l) => l.id === activeId) ?? null;
   const normalisedSearch = search.trim().toLowerCase();
@@ -81,23 +127,25 @@ function Dashboard() {
     }
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    await router.navigate({ to: "/auth", search: { next: undefined }, replace: true });
-  };
-
   return (
     <AppShell showCallBar={false} tenant={tenant} hidePublicNav>
       <div className="mx-auto max-w-6xl px-4 py-6">
+        {home && <SubscriptionSuccess search={returnSearch} />}
         <div className="flex flex-col items-start justify-between gap-4 xl:flex-row">
           <div>
-            <div className="text-xs uppercase tracking-widest text-primary">Plumber view</div>
-            <h1 className="mt-1 text-2xl font-black sm:text-3xl">Missed-job inbox</h1>
+            <div className="text-xs uppercase tracking-widest text-primary">
+              {home ? "Your workbench" : "Plumber view"}
+            </div>
+            <h1 className="mt-1 text-2xl font-black sm:text-3xl">
+              {home ? "Dashboard" : "Missed jobs"}
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Prioritised by urgency and AI lead score.
+              {home
+                ? "See what needs attention and keep your service ready."
+                : "Customer opportunities, prioritised by urgency."}
             </p>
           </div>
-          <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto">
+          <div className="w-full xl:w-auto">
             <div className="hidden sm:block rounded-md border border-border bg-card px-4 py-2 text-sm">
               <div className="text-muted-foreground text-xs uppercase tracking-widest">
                 New today
@@ -106,40 +154,73 @@ function Dashboard() {
                 {leads.filter((l) => l.status === "new").length}
               </div>
             </div>
-            <button
-              onClick={() => {
-                void handleSignOut();
-              }}
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
-            >
-              <LogOut className="h-3.5 w-3.5" /> Sign out
-            </button>
-            <Link
-              to="/call-handling"
-              className="inline-flex items-center gap-1.5 rounded-md border border-primary/50 bg-primary/10 px-3 py-2 text-xs font-bold uppercase tracking-widest text-primary hover:bg-primary hover:text-primary-foreground"
-            >
-              <PhoneCall className="h-3.5 w-3.5" /> Call Handling
-            </Link>
-            <Link
-              to="/missed-call-settings"
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
-            >
-              <Settings className="h-3.5 w-3.5" /> Text Link
-            </Link>
-            <Link
-              to="/ai-receptionist"
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
-            >
-              <Bot className="h-3.5 w-3.5" /> AI reception
-            </Link>
-            <Link
-              to="/billing"
-              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground"
-            >
-              <CreditCard className="h-3.5 w-3.5" /> Billing
-            </Link>
           </div>
         </div>
+
+        {home && (
+          <section className="mt-6 grid gap-3 md:grid-cols-3" aria-label="Workspace status">
+            <DashboardStatus
+              icon={MessageSquareText}
+              title="Missed-Call Recovery"
+              state={
+                homeSummary?.connections?.missedCallRecoveryEnabled
+                  ? "On and operating"
+                  : homeSummary?.billing?.selectedPlan === "missed_call_recovery" ||
+                      homeSummary?.billing?.selectedPlan === "both"
+                    ? "Purchased — finish setup or switch on"
+                    : "Not purchased"
+              }
+              active={Boolean(homeSummary?.connections?.missedCallRecoveryEnabled)}
+              to="/call-handling"
+            />
+            <DashboardStatus
+              icon={Bot}
+              title="AI Receptionist"
+              state={
+                homeSummary?.connections?.aiReceptionistEnabled
+                  ? "On and operating"
+                  : homeSummary?.billing?.selectedPlan === "ai_receptionist" ||
+                      homeSummary?.billing?.selectedPlan === "both"
+                    ? "Purchased — finish setup or switch on"
+                    : "Not purchased"
+              }
+              active={Boolean(homeSummary?.connections?.aiReceptionistEnabled)}
+              to="/call-handling"
+            />
+            <DashboardStatus
+              icon={ClipboardList}
+              title="New Missed Jobs"
+              state={`${leads.filter((lead) => lead.status === "new").length} waiting for you`}
+              active={leads.some((lead) => lead.status === "new")}
+              to="/leads"
+            />
+          </section>
+        )}
+
+        {home && !loading && leads.length === 0 && !error && (
+          <section className="mt-6 rounded-xl border border-primary/30 bg-card p-5 sm:p-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex gap-4">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-primary/15 text-primary">
+                  <Wrench className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-black">Your first job: connect call handling</h2>
+                  <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+                    Add your call-forwarding details so Rapid Connect can start recovering the jobs
+                    you would otherwise miss.
+                  </p>
+                </div>
+              </div>
+              <Link
+                to="/call-handling"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-black text-primary-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Set up call handling <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
+          </section>
+        )}
 
         {loading && (
           <div className="mt-8 text-center text-sm text-muted-foreground">Loading leads…</div>
@@ -213,6 +294,11 @@ function Dashboard() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="truncate font-bold">{l.name}</div>
+                        {l.isTest && (
+                          <span className="mt-1 inline-flex rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-sky-600 dark:text-sky-300">
+                            Test job
+                          </span>
+                        )}
                         <div className="truncate text-xs text-muted-foreground">
                           {jobLabel(l.jobType)} · {l.suburb}
                         </div>
@@ -266,7 +352,11 @@ function LeadDetail({ lead, onStatus }: { lead: Lead; onStatus: (s: Lead["status
         <div>
           <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
             {isUrgent && <AlertTriangle className="h-3.5 w-3.5 text-destructive" />}
-            {isUrgent ? "Emergency lead" : "New job request"}
+            {lead.isTest
+              ? "Test job — no customer contact"
+              : isUrgent
+                ? "Emergency lead"
+                : "New job request"}
             <SourceChip source={lead.source} />
           </div>
           <h2 className="mt-1 text-xl font-black">{jobLabel(lead.jobType)}</h2>
@@ -282,12 +372,18 @@ function LeadDetail({ lead, onStatus }: { lead: Lead; onStatus: (s: Lead["status
           <SectionTitle>Customer</SectionTitle>
           <div className="mt-2 space-y-1 text-sm">
             <div className="font-bold text-base">{lead.name}</div>
-            <a
-              href={`tel:${lead.phone.replace(/\s/g, "")}`}
-              className="inline-flex items-center gap-2 text-primary font-semibold"
-            >
-              <Phone className="h-4 w-4" /> {lead.phone}
-            </a>
+            {lead.isTest ? (
+              <div className="inline-flex items-center gap-2 font-semibold text-sky-600 dark:text-sky-300">
+                <Phone className="h-4 w-4" /> {lead.phone}
+              </div>
+            ) : (
+              <a
+                href={`tel:${lead.phone.replace(/\s/g, "")}`}
+                className="inline-flex items-center gap-2 text-primary font-semibold"
+              >
+                <Phone className="h-4 w-4" /> {lead.phone}
+              </a>
+            )}
             <div className="text-muted-foreground">Best time: {lead.bestTime || "—"}</div>
             <div className="text-muted-foreground">Urgency: {urgencyLabel(lead.urgency)}</div>
             <div className="text-muted-foreground">Received {timeAgo(lead.createdAt)}</div>
@@ -363,6 +459,38 @@ function LeadDetail({ lead, onStatus }: { lead: Lead; onStatus: (s: Lead["status
         </div>
       </div>
     </div>
+  );
+}
+
+function DashboardStatus({
+  icon: Icon,
+  title,
+  state,
+  active,
+  to,
+}: {
+  icon: typeof Power;
+  title: string;
+  state: string;
+  active: boolean;
+  to: string;
+}) {
+  return (
+    <Link
+      to={to as never}
+      className="rounded-xl border border-border bg-card p-4 outline-none transition hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <span
+          className={`h-2.5 w-2.5 rounded-full ${active ? "bg-emerald-500" : "bg-amber-400"}`}
+        />
+      </div>
+      <div className="mt-3 font-black">{title}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{state}</div>
+    </Link>
   );
 }
 

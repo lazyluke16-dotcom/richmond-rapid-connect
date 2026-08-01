@@ -2,11 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   extractBearerToken,
   requireAuthAndBusiness,
+  recoverAcquisitionBusiness,
   computeAlertThresholds,
   sumUsageChargesMinor,
 } from "@/lib/billing.server";
 import { PLAN_BASE_PRICE_CENTS } from "@/lib/stripe.server";
 import { GRACE_USAGE_CAP_AUD } from "@/lib/billing-types";
+import { calculateGstMinor } from "@/lib/sms-invoicing.server";
 import type { EffectiveBillingState, SelectedPlan } from "@/lib/billing-types";
 
 export const Route = createFileRoute("/api/public/billing/summary")({
@@ -28,21 +30,49 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           ({ businessId } = await requireAuthAndBusiness(token, supabaseAdmin));
         } catch (e) {
           const err = e as { status?: number; message?: string };
-          return new Response(JSON.stringify({ error: err.message ?? "Auth failed" }), {
-            status: err.status ?? 401,
-            headers: { "Content-Type": "application/json" },
-          });
+          if (err.status === 404) {
+            try {
+              await recoverAcquisitionBusiness(token);
+              ({ businessId } = await requireAuthAndBusiness(token, supabaseAdmin));
+            } catch (recoveryCause) {
+              const recoveryError = recoveryCause as { status?: number; message?: string };
+              return new Response(
+                JSON.stringify({ error: recoveryError.message ?? "No active business found" }),
+                {
+                  status: recoveryError.status ?? 404,
+                  headers: { "Content-Type": "application/json" },
+                },
+              );
+            }
+          } else {
+            return new Response(JSON.stringify({ error: err.message ?? "Auth failed" }), {
+              status: err.status ?? 401,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
         }
 
         // Direct service-role queries scoped to verified businessId.
         // Do NOT use get_my_billing_detail() here — that RPC uses current_business_id()
         // which requires an auth.uid() context only available on user-scoped clients.
-        const [{ data: bizRow }, { data: billingRow }, effectiveStateResult] = await Promise.all([
-          supabaseAdmin.from("businesses").select("billing_exempt").eq("id", businessId).single(),
+        const [
+          { data: bizRow },
+          { data: billingRow },
+          effectiveStateResult,
+          { data: telephonyRow },
+          { data: aiRow },
+        ] = await Promise.all([
+          supabaseAdmin
+            .from("businesses")
+            .select(
+              "name,public_email,public_phone,billing_exempt,promotion_code,setup_fee_waived_cents",
+            )
+            .eq("id", businessId)
+            .single(),
           supabaseAdmin
             .from("business_billing")
             .select(
-              "selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at, platform_fee_waiver_ends_at, current_period_start, current_period_end, grace_started_at, grace_expires_at, usage_limit_cents",
+              "selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at, platform_fee_waiver_ends_at, founding_offer_version, founding_offer_eligible, founding_offer_redeemed_at, founding_offer_ends_at, normal_billing_starts_at, current_period_start, current_period_end, grace_started_at, grace_expires_at, usage_limit_cents",
             )
             .eq("business_id", businessId)
             .maybeSingle(),
@@ -51,6 +81,18 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           supabaseAdmin.rpc("effective_billing_state", {
             _business_id: businessId,
           } as never),
+          supabaseAdmin
+            .from("business_telephony_settings")
+            .select(
+              "inbound_number,forwarding_setup_status,missed_call_recovery_enabled,ai_receptionist_enabled",
+            )
+            .eq("business_id", businessId)
+            .maybeSingle(),
+          supabaseAdmin
+            .from("business_ai_receptionist_settings")
+            .select("provider_assistant_id,status")
+            .eq("business_id", businessId)
+            .maybeSingle(),
         ]);
 
         if (!billingRow) {
@@ -73,6 +115,11 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           grace_started_at?: string | null;
           grace_expires_at?: string | null;
           usage_limit_cents?: number;
+          founding_offer_version?: string | null;
+          founding_offer_eligible?: boolean;
+          founding_offer_redeemed_at?: string | null;
+          founding_offer_ends_at?: string | null;
+          normal_billing_starts_at?: string | null;
         };
 
         const effectiveState = (effectiveStateResult.data as unknown as string) ?? "unknown";
@@ -112,8 +159,14 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           (sum, row) => sum + (Number(row.billable_seconds) || 0),
           0,
         );
-        const billableRows = rows.filter((row) => row.billable);
-        const estimatedChargeAud = sumUsageChargesMinor(billableRows) / 100;
+        const billableSmsRows = rows.filter(
+          (row) => row.usage_type === "outbound_sms" && row.billable,
+        );
+        const estimatedVoiceIncGstMinor = sumUsageChargesMinor(billableVoiceRows);
+        const estimatedSmsExGstMinor = sumUsageChargesMinor(billableSmsRows);
+        const estimatedSmsGstMinor = calculateGstMinor(estimatedSmsExGstMinor);
+        const estimatedChargeAud =
+          (estimatedVoiceIncGstMinor + estimatedSmsExGstMinor + estimatedSmsGstMinor) / 100;
         const smsMessages = rows
           .filter((row) => row.usage_type === "outbound_sms")
           .reduce((sum, row) => sum + (Number(row.quantity) || 0), 0);
@@ -130,23 +183,60 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           const graceRows = ((
             await supabaseAdmin
               .from("billing_usage_events")
-              .select("estimated_customer_charge, estimated_customer_charge_minor")
+              .select("usage_type, estimated_customer_charge, estimated_customer_charge_minor")
               .eq("business_id", businessId)
               .eq("billable", true)
               .gte("created_at", bb.grace_started_at)
           ).data ?? []) as {
+            usage_type?: string;
             estimated_customer_charge?: number | null;
             estimated_customer_charge_minor?: number | null;
           }[];
 
-          const graceTotal = sumUsageChargesMinor(graceRows) / 100;
+          const graceSmsRows = graceRows.filter((row) => row.usage_type === "outbound_sms");
+          const graceNonSmsRows = graceRows.filter((row) => row.usage_type !== "outbound_sms");
+          const graceSmsExGstMinor = sumUsageChargesMinor(graceSmsRows);
+          const graceTotal =
+            (sumUsageChargesMinor(graceNonSmsRows) +
+              graceSmsExGstMinor +
+              calculateGstMinor(graceSmsExGstMinor)) /
+            100;
           withinGraceCap = graceTotal < GRACE_USAGE_CAP_AUD;
         }
 
         const platformFeeAud = selectedPlan ? (PLAN_BASE_PRICE_CENTS[selectedPlan] ?? 0) / 100 : 0;
+        const normalBillingStartsAt = bb.normal_billing_starts_at
+          ? new Date(bb.normal_billing_starts_at)
+          : null;
+        const currentPlatformFeeAud =
+          normalBillingStartsAt && normalBillingStartsAt.getTime() > Date.now()
+            ? 0
+            : platformFeeAud;
+        const business = (bizRow ?? {}) as {
+          name?: string;
+          public_email?: string | null;
+          public_phone?: string | null;
+          promotion_code?: string | null;
+          setup_fee_waived_cents?: number | null;
+        };
+        const telephony = (telephonyRow ?? {}) as {
+          inbound_number?: string | null;
+          forwarding_setup_status?: string | null;
+          missed_call_recovery_enabled?: boolean;
+          ai_receptionist_enabled?: boolean;
+        };
+        const ai = (aiRow ?? {}) as {
+          provider_assistant_id?: string | null;
+          status?: string | null;
+        };
 
         return new Response(
           JSON.stringify({
+            account: {
+              businessName: business.name ?? "",
+              publicEmail: business.public_email ?? null,
+              publicPhone: business.public_phone ?? null,
+            },
             billing: {
               businessId,
               selectedPlan,
@@ -156,16 +246,31 @@ export const Route = createFileRoute("/api/public/billing/summary")({
               unionOfferEligible: Boolean(bb.union_offer_eligible),
               unionOfferRedeemedAt: bb.union_offer_redeemed_at ?? null,
               platformFeeWaiverEndsAt: bb.platform_fee_waiver_ends_at ?? null,
+              foundingOfferVersion: bb.founding_offer_version ?? null,
+              foundingOfferEligible: Boolean(bb.founding_offer_eligible),
+              foundingOfferRedeemedAt: bb.founding_offer_redeemed_at ?? null,
+              foundingOfferEndsAt: bb.founding_offer_ends_at ?? null,
+              normalBillingStartsAt: bb.normal_billing_starts_at ?? null,
               currentPeriodStart: bb.current_period_start ?? null,
               currentPeriodEnd: bb.current_period_end ?? null,
               graceExpiresAt: bb.grace_expires_at ?? null,
               hasStripeCustomer: Boolean(bb.stripe_customer_id),
               hasStripeSubscription: Boolean(bb.stripe_subscription_id),
+              foundingPlumberBenefit:
+                business.promotion_code === "FOUNDINGPLUMBER" &&
+                Number(business.setup_fee_waived_cents) > 0
+                  ? bb.founding_offer_version === "founding-2026-three-months"
+                    ? `A$${(Number(business.setup_fee_waived_cents) / 100).toFixed(0)} sign-on fee waived and first three subscription months free`
+                    : `A$${(Number(business.setup_fee_waived_cents) / 100).toFixed(0)} setup fee waived`
+                  : null,
             },
             usage: {
               periodStart: periodStart?.toISOString() ?? null,
               totalBillableSeconds,
               estimatedChargeAud,
+              estimatedVoiceIncGstAud: estimatedVoiceIncGstMinor / 100,
+              estimatedSmsExGstAud: estimatedSmsExGstMinor / 100,
+              estimatedSmsGstAud: estimatedSmsGstMinor / 100,
               smsMessages,
               smsBillable: true,
               pendingMeterEvents,
@@ -173,6 +278,17 @@ export const Route = createFileRoute("/api/public/billing/summary")({
               withinGraceCap,
             },
             platformFeeAud,
+            currentPlatformFeeAud,
+            estimatedCurrentTotalAud: currentPlatformFeeAud + estimatedChargeAud,
+            connections: {
+              stripe: Boolean(bb.stripe_customer_id),
+              phoneNumber: telephony.inbound_number ?? null,
+              phoneStatus: telephony.forwarding_setup_status ?? "unallocated",
+              aiReceptionist: Boolean(ai.provider_assistant_id && ai.status === "active"),
+              missedCallRecoveryEnabled: Boolean(telephony.missed_call_recovery_enabled),
+              aiReceptionistEnabled: Boolean(telephony.ai_receptionist_enabled),
+              sms: process.env.SMS_MODE === "twilio",
+            },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );

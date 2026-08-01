@@ -1,0 +1,222 @@
+# Rapid Connect Acquisition Funnel
+
+Status: implementation candidate on `feat/acquisition-funnel`
+
+## Visual asset provenance
+
+The responsive plumber hero photography was generated specifically for Richmond Rapid Connect on
+29 July 2026 using OpenAI image generation. It was not sourced from a third-party stock library and
+contains no external logo or watermark. The repository stores separately composed desktop and
+mobile masters as optimized AVIF and WebP files with JPEG fallbacks.
+
+`npm run verify:assets` parses every critical file, verifies its real encoded dimensions and format,
+enforces a non-empty size range, and rejects any empty raster file under `src/assets`. The
+commercial release workflow runs this check before the behavioural suite.
+
+## Customer journey
+
+1. A permissioned outreach message links to `/plumbers` with campaign attribution.
+2. Either service card starts its selected setup journey immediately on desktop or mobile. The
+   58-second demo remains a separate optional proof path.
+3. The selected demo variant expands to the viewport, stays caption-first and returns to the
+   acquisition page when it finishes.
+4. Signup uses a five-step full-page wizard:
+   - package;
+   - business and contact;
+   - current phone handling;
+   - founding offer and exact price review;
+   - account and secure payment handoff.
+5. Stripe collects the payment method. Rapid Connect never collects card details.
+6. The customer continues into the existing activation/onboarding flow.
+
+## Campaign links
+
+Use one canonical campaign name and explicit channel values:
+
+```text
+https://<host>/plumbers?code=FOUNDINGPLUMBER&source=sms&medium=direct&campaign=founding-plumbers
+https://<host>/plumbers?code=FOUNDINGPLUMBER&source=email&medium=direct&campaign=founding-plumbers
+https://<host>/plumbers?code=FOUNDINGPLUMBER&source=instagram&medium=social&campaign=founding-plumbers
+```
+
+Optional `content` values distinguish message variants, for example `content=missed-jobs-a`.
+Optional `ref` values can identify a partner or referral programme. Do not put a plumber's name,
+phone number, email address or other personal information in the URL.
+
+## Offer contract
+
+Public code: `FOUNDINGPLUMBER`
+
+| Selection            | Setup list price | With valid code |   Ongoing platform price | Usage                                                             |
+| -------------------- | ---------------: | --------------: | -----------------------: | ----------------------------------------------------------------- |
+| Missed-Call Recovery |            A$499 |             A$0 |  A$9/month including GST | 27.5¢ including GST per provider-accepted SMS (25¢ excluding GST) |
+| AI Receptionist      |            A$499 |             A$0 | A$15/month including GST | A$0.59/minute including GST, metered by the second                |
+| Both services        |            A$499 |             A$0 | A$24/month including GST | Both GST-inclusive usage rates above                              |
+
+The seeded campaign:
+
+- applies to both packages;
+- is capped at 100 redemptions;
+- expires at the end of 31 December 2026 Melbourne time;
+- is revalidated transactionally at redemption;
+- can be disabled, limited or extended in the database without a code release;
+- records the exact waived amount against the authenticated business;
+- carries the promotion and waived amount into Stripe session/subscription metadata.
+
+The code is prefilled only when an approved campaign URL explicitly supplies
+`code=FOUNDINGPLUMBER`; ordinary `/plumbers` traffic starts at standard pricing. The wizard validates
+the code automatically on entry and keeps validating, valid, invalid, unavailable and no-code
+states distinct. Invalid or cleared codes select the disclosed standard contract: A$499 setup plus
+the first A$9, A$15 or A$24 GST-inclusive platform period at Checkout. A validator outage retains
+the code for retry and requires an explicit choice before standard pricing can be selected. Both
+paths are committed by authenticated tenant-scoped database functions and independently checked by
+the Checkout endpoint before any Stripe customer or session is created.
+
+Each validation attempt uses a non-sensitive unique request URL and the endpoint emits browser and
+CDN `no-store` directives. This prevents an edge-cached transient outage or a response for another
+plan from being reused as promotion authority; Checkout still relies only on server-owned tenant
+records.
+
+The offer uses two distinct safeguards: the database records the A$499 setup/sign-on-fee waiver,
+and the product-scoped Stripe test coupon discounts only the first three monthly platform billing
+periods. Usage begins at activation and is never included in either discount. Existing accounts
+created before the three-month offer retain their recorded eligibility rather than being silently
+re-enrolled.
+
+The customer totals above are the amounts payable including Australian GST; Checkout must not add
+another 10% to A$9, A$15, A$24 or A$0.59. Recovery SMS retains a 25¢ excluding-GST ledger rate and
+the SMS invoice layer adds 2.5¢ GST per unit before aggregate whole-cent invoice rounding. Usage
+starts at activation and is not discounted by the founding offer.
+
+## Commercial script (58 seconds)
+
+Demo version storage and selection are documented in `DEMO_VARIANTS.md`. The original animated
+commercial is preserved as `demo-original`; `demo-real-world-v2` is the configurable staging
+candidate. No performance winner is claimed until sufficient variant data exists.
+
+| Time   | Picture                                                | On-screen message                                    |
+| ------ | ------------------------------------------------------ | ---------------------------------------------------- |
+| 0–7s   | Plumber working under a sink; phone rings out of reach | You’re under a sink. Your next customer is calling.  |
+| 7–15s  | Missed caller receives a branded message and job link  | The missed call becomes a conversation—in seconds.   |
+| 15–24s | Customer selects job, suburb and urgency               | Your customer tells you what matters.                |
+| 24–32s | Completed lead summary arrives                         | Get the useful details before you call back.         |
+| 32–42s | AI answers a second caller naturally                   | Or let a natural voice answer, 24/7.                 |
+| 42–50s | Text and AI leads sit together in the job centre       | Every lead, clear and ready to action.               |
+| 50–58s | Rapid Connect end card and signup action               | Keep working. Keep answering. Stop losing good jobs. |
+
+The commercial is implemented as a responsive, caption-first animated product film so it works
+without audio and can be revised without re-encoding a video. A final narrated MP4 can replace it
+later without changing the landing page, analytics or signup flow.
+
+## Outreach templates
+
+These are templates, not authority to send. Every recipient needs a recorded consent basis. The
+sender record must include the business/legal identity and working contact details.
+
+### SMS — direct problem/solution
+
+```text
+Hi {{first_name}} — Rapid Connect helps plumbers turn missed calls into complete job leads by text,
+or answer them with an AI receptionist. Watch the 58-sec demo: {{campaign_link}}
+Founding plumber setup is $0 with code FOUNDINGPLUMBER. Reply STOP to opt out.
+```
+
+### SMS — short version
+
+```text
+On the tools and missing calls? See Rapid Connect turn one into a complete plumbing lead:
+{{campaign_link}}. Setup is $0 with FOUNDINGPLUMBER. Reply STOP. {{sender_contact}}
+```
+
+### Email
+
+Subject variants:
+
+- `The plumbing job you miss while you’re on the tools`
+- `A 58-second demo for {{business_name}}`
+- `Turn missed calls into complete job leads`
+
+```text
+Hi {{first_name}},
+
+When a customer calls while you’re under a sink, Rapid Connect can immediately text them a
+branded job questionnaire—or answer with a natural AI receptionist.
+
+The demo takes 58 seconds:
+{{campaign_link}}
+
+Founding plumbers can use FOUNDINGPLUMBER for no sign-on fee and their first three monthly platform
+subscription fees free. Usage charges apply from activation; normal platform prices and exact usage
+rates are shown before payment setup. Cancel anytime.
+
+{{sender_legal_name}}
+{{sender_contact_details}}
+
+To stop receiving these emails, click {{unsubscribe_link}} or reply “unsubscribe”.
+```
+
+### Social direct message
+
+```text
+Hi {{first_name}} — quick one for {{business_name}}. We built a receptionist specifically for
+plumbers who can’t answer while they’re on the tools. This 58-sec demo shows the text and AI
+versions: {{campaign_link}}. Happy to leave it there if it’s not relevant.
+```
+
+## Outreach compliance gate
+
+Do not upload or send a bulk list until the outbound system can prove:
+
+- the consent basis for each address/number;
+- the exact source and date of that basis;
+- accurate sender identification and contact details;
+- a working unsubscribe mechanism for every commercial message;
+- immediate suppression on `STOP`/unsubscribe, and no later than five working days;
+- no address-harvested list or software;
+- a durable suppression list shared across SMS and email providers.
+
+ACMA states that commercial electronic messages require consent, accurate sender identification
+and a functional unsubscribe facility. Its current guidance also says unsubscribe requests must
+be honoured within five working days:
+
+- https://www.acma.gov.au/avoid-sending-spam
+- https://www.acma.gov.au/telemarketing-and-e-marketing-common-issues-and-mistakes
+
+## Analytics events
+
+The server records privacy-minimal, idempotent events. It does not store IP addresses, message
+contents, names, phone numbers or email addresses in the event table.
+
+```text
+landing_viewed
+demo_started
+demo_25 / demo_50 / demo_75 / demo_completed / demo_closed
+signup_opened
+package_selected
+service_selected / service_card_clicked
+promo_validated
+wizard_started / wizard_step_viewed / wizard_stage_completed
+signup_submitted
+account_created
+email_confirmation_required
+checkout_started / checkout_opened / checkout_failed
+checkout_completed / activation_completed
+test_job_initiated / test_job_received / first_genuine_job_received
+```
+
+Use a funnel from `landing_viewed` through `test_job_received`, split by privacy-safe source,
+campaign, content, plan and demo variant. Treat `checkout_opened` as intent, not revenue;
+`checkout_completed` and `activation_completed` come from verified Stripe/webhook state.
+
+## Launch boundaries
+
+Before public outreach:
+
+1. Deploy the acquisition migration and application to isolated hosted staging.
+2. Validate both promo amounts and the 100-redemption cap against a clean database.
+3. Complete same-tab and email/new-tab signup with Stripe sandbox.
+4. Confirm no setup item is charged and the waiver metadata is present.
+5. Run desktop and mobile visual/accessibility checks in a hosted browser.
+6. Replace draft sender identity/contact placeholders in the outreach system.
+7. Approve the final recipient-consent and suppression process.
+8. Publish deliberately; do not auto-merge this branch or send outreach from CI.

@@ -2,14 +2,169 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   getStripe,
   getCheckoutLineItems,
+  getFoundingThreeMonthCouponId,
+  getInclusiveGstTaxRateId,
   getUnionCouponId,
   type StripePlan,
 } from "@/lib/stripe.server";
 import type Stripe from "stripe";
-import { extractBearerToken, requireAuthAndBusiness } from "@/lib/billing.server";
+import {
+  extractBearerToken,
+  recoverAcquisitionBusiness,
+  requireAuthAndBusiness,
+} from "@/lib/billing.server";
 
-const ALLOWED_PLANS = new Set<StripePlan>(["missed_call_recovery", "ai_receptionist"]);
+const ALLOWED_PLANS = new Set<StripePlan>(["missed_call_recovery", "ai_receptionist", "both"]);
 const STRIPE_INTEGRATION_IDENTIFIER = "plumbing_ai_receptionist_vqkhtnra";
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+type BillingCheckoutFailure = {
+  status: number;
+  code:
+    | "stripe_secret_not_configured"
+    | "stripe_secret_invalid"
+    | "stripe_context_not_configured"
+    | "stripe_mode_invalid"
+    | "stripe_mode_mismatch"
+    | "stripe_prices_not_configured"
+    | "stripe_tax_not_configured"
+    | "billing_return_url_invalid"
+    | "stripe_configuration_unavailable"
+    | "stripe_customer_unavailable"
+    | "stripe_request_rejected"
+    | "stripe_temporarily_unavailable"
+    | "billing_checkout_failed";
+  error: string;
+};
+
+function errorRecord(error: unknown): Record<string, unknown> {
+  return typeof error === "object" && error !== null ? (error as Record<string, unknown>) : {};
+}
+
+export function classifyBillingCheckoutFailure(error: unknown): BillingCheckoutFailure {
+  const record = errorRecord(error);
+  const message = error instanceof Error ? error.message : "";
+  const name = error instanceof Error ? error.name : "";
+  const providerType = typeof record.type === "string" ? record.type : "";
+  const providerCode = typeof record.code === "string" ? record.code : "";
+
+  const configurationCode = (() => {
+    if (message.includes("STRIPE_SECRET_KEY is not configured")) {
+      return "stripe_secret_not_configured" as const;
+    }
+    if (message.includes("STRIPE_SECRET_KEY must be a Stripe")) {
+      return "stripe_secret_invalid" as const;
+    }
+    if (message.includes("STRIPE_CONTEXT is required")) {
+      return "stripe_context_not_configured" as const;
+    }
+    if (message.includes('STRIPE_MODE must be either "test" or "live"')) {
+      return "stripe_mode_invalid" as const;
+    }
+    if (message.includes("does not match the configured")) {
+      return "stripe_mode_mismatch" as const;
+    }
+    if (message.includes("Missing required Stripe price configuration")) {
+      return "stripe_prices_not_configured" as const;
+    }
+    if (
+      message.includes("Missing required Stripe tax configuration") ||
+      message.includes("STRIPE_GST_INCLUSIVE_TAX_RATE_ID is invalid")
+    ) {
+      return "stripe_tax_not_configured" as const;
+    }
+    if (message === "Billing return URL must use HTTPS") {
+      return "billing_return_url_invalid" as const;
+    }
+    return null;
+  })();
+  if (configurationCode) {
+    return {
+      status: 503,
+      code: configurationCode,
+      error: "Billing is temporarily unavailable. Please try again shortly.",
+    };
+  }
+
+  const isStripeFailure =
+    name.startsWith("Stripe") || providerType.startsWith("Stripe") || "requestId" in record;
+  if (isStripeFailure) {
+    if (
+      providerType === "StripeAuthenticationError" ||
+      providerType === "StripePermissionError" ||
+      providerCode === "api_key_expired"
+    ) {
+      return {
+        status: 503,
+        code: "stripe_configuration_unavailable",
+        error: "Secure payment setup is temporarily unavailable.",
+      };
+    }
+    if (providerCode === "resource_missing" && record.param === "customer") {
+      return {
+        status: 409,
+        code: "stripe_customer_unavailable",
+        error: "Your secure Stripe customer record could not be prepared.",
+      };
+    }
+    if (
+      providerType === "StripeRateLimitError" ||
+      providerType === "StripeAPIError" ||
+      providerType === "StripeConnectionError"
+    ) {
+      return {
+        status: 503,
+        code: "stripe_temporarily_unavailable",
+        error: "Stripe is temporarily unavailable. Please try again shortly.",
+      };
+    }
+    return {
+      status: 422,
+      code: "stripe_request_rejected",
+      error: "Stripe rejected the checkout setup. No subscription was created.",
+    };
+  }
+
+  return {
+    status: 500,
+    code: "billing_checkout_failed",
+    error: "Billing checkout could not be started. Please try again.",
+  };
+}
+
+export function billingCheckoutErrorResponse(
+  error: unknown,
+  requestId: string = crypto.randomUUID(),
+): Response {
+  const failure = classifyBillingCheckoutFailure(error);
+  const record = errorRecord(error);
+  console.error("[billing.checkout] request failed", {
+    code: failure.code,
+    errorName: error instanceof Error ? error.name : "UnknownError",
+    providerCode: typeof record.code === "string" ? record.code : undefined,
+    providerParam: typeof record.param === "string" ? record.param : undefined,
+    providerType: typeof record.type === "string" ? record.type : undefined,
+    requestId: typeof record.requestId === "string" ? record.requestId : undefined,
+    correlationId: requestId,
+  });
+  return new Response(JSON.stringify({ error: failure.error, code: failure.code, requestId }), {
+    status: failure.status,
+    headers: JSON_HEADERS,
+  });
+}
+
+export function checkoutIdempotencyKeys(
+  businessId: string,
+  plan: StripePlan,
+  couponId: string | null,
+  taxPolicy = "gst-inclusive-v1",
+): { customer: string; session: string } {
+  const tenantPlan = `${businessId}:${plan}`;
+  return {
+    customer: `billing-checkout:customer:${tenantPlan}`,
+    session: `billing-checkout:session:${tenantPlan}:${couponId ?? "standard"}:${taxPolicy}`,
+  };
+}
 
 export function resolveBillingReturnOrigin(
   request: Request,
@@ -29,182 +184,376 @@ export const Route = createFileRoute("/api/public/billing/checkout")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const token = extractBearerToken(request);
-        if (!token) {
-          return new Response(JSON.stringify({ error: "Unauthorized" }), {
-            status: 401,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-        let userId: string, businessId: string;
+        const requestId = crypto.randomUUID();
         try {
-          ({ userId, businessId } = await requireAuthAndBusiness(token, supabaseAdmin));
-        } catch (e) {
-          const err = e as { status?: number; message?: string };
-          return new Response(JSON.stringify({ error: err.message ?? "Auth failed" }), {
-            status: err.status ?? 401,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-
-        // Load billing row — source of truth for plan and subscription state.
-        const { data: billingData, error: billingErr } = await supabaseAdmin
-          .from("business_billing")
-          .select(
-            "selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at",
-          )
-          .eq("business_id", businessId)
-          .maybeSingle();
-
-        if (billingErr) {
-          return new Response(JSON.stringify({ error: "Billing lookup failed" }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          });
-        }
-
-        const billing = billingData as {
-          selected_plan?: string | null;
-          billing_status?: string;
-          stripe_customer_id?: string | null;
-          stripe_subscription_id?: string | null;
-          union_offer_eligible?: boolean;
-          union_offer_redeemed_at?: string | null;
-        } | null;
-
-        // Server selects the plan from DB — client cannot inject a plan.
-        const plan = (billing?.selected_plan ?? null) as StripePlan | null;
-        if (!plan || !ALLOWED_PLANS.has(plan)) {
-          return new Response(
-            JSON.stringify({ error: "No valid plan selected. Complete onboarding first." }),
-            {
-              status: 400,
-              headers: { "Content-Type": "application/json" },
-            },
-          );
-        }
-
-        // Guard: already subscribed — do not create duplicate checkout.
-        if (billing?.stripe_subscription_id) {
-          return new Response(
-            JSON.stringify({ error: "Already subscribed", code: "already_subscribed" }),
-            {
-              status: 409,
-              headers: { "Content-Type": "application/json" },
-            },
-          );
-        }
-
-        const stripe = getStripe();
-        const origin = resolveBillingReturnOrigin(request);
-
-        // Reuse existing Stripe customer or create one.
-        let customerId = billing?.stripe_customer_id ?? undefined;
-        const isFirstCheckout = !customerId && (billing?.billing_status ?? "setup") === "setup";
-
-        if (!customerId) {
-          const { data: bizData } = await supabaseAdmin
-            .from("businesses")
-            .select("name")
-            .eq("id", businessId)
-            .maybeSingle();
-          const bizName = (bizData as { name?: string } | null)?.name;
-
-          const { data: userRow } = await supabaseAdmin.auth.admin.getUserById(userId);
-          const email = userRow?.user?.email;
-
-          const customer = await stripe.customers.create({
-            email: email ?? undefined,
-            name: bizName ?? undefined,
-            metadata: { business_id: businessId, plan },
-          });
-          customerId = customer.id;
-
-          // Persist customer ID immediately so retries reuse the same customer.
-          const { error: customerPersistError } = await supabaseAdmin
-            .from("business_billing")
-            .update({
-              stripe_customer_id: customerId,
-              billing_status: "checkout_pending",
-            })
-            .eq("business_id", businessId);
-          if (customerPersistError) {
+          const token = extractBearerToken(request);
+          if (!token) {
             return new Response(
               JSON.stringify({
-                error: "Could not save billing setup. No checkout session was created.",
-                code: "billing_persistence_failed",
+                error: "Sign in is required before secure payment setup can continue.",
+                code: "sign_in_required",
+                requestId,
+              }),
+              {
+                status: 401,
+                headers: JSON_HEADERS,
+              },
+            );
+          }
+
+          const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+          let userId: string, businessId: string;
+          try {
+            ({ userId, businessId } = await requireAuthAndBusiness(token, supabaseAdmin));
+          } catch (e) {
+            const err = e as { status?: number; message?: string };
+            if (err.status === 404) {
+              try {
+                await recoverAcquisitionBusiness(token);
+                ({ userId, businessId } = await requireAuthAndBusiness(token, supabaseAdmin));
+              } catch {
+                return new Response(
+                  JSON.stringify({
+                    error: "Business setup is not ready for secure payment yet.",
+                    code: "business_setup_incomplete",
+                    requestId,
+                  }),
+                  { status: 409, headers: JSON_HEADERS },
+                );
+              }
+            } else {
+              return new Response(
+                JSON.stringify({
+                  error: "Sign in is required before secure payment setup can continue.",
+                  code: "sign_in_required",
+                  requestId,
+                }),
+                { status: err.status ?? 401, headers: JSON_HEADERS },
+              );
+            }
+          }
+
+          // Load billing row — source of truth for plan and subscription state.
+          const { data: billingData, error: billingErr } = await supabaseAdmin
+            .from("business_billing")
+            .select(
+              "selected_plan, billing_status, stripe_customer_id, stripe_subscription_id, union_offer_eligible, union_offer_redeemed_at, founding_offer_version, founding_offer_eligible, founding_offer_redeemed_at",
+            )
+            .eq("business_id", businessId)
+            .maybeSingle();
+
+          if (billingErr) {
+            console.error("[billing.checkout] billing lookup failed", {
+              code: "billing_lookup_failed",
+              providerCode: billingErr.code,
+              correlationId: requestId,
+            });
+            return new Response(
+              JSON.stringify({
+                error: "Business billing setup is not ready yet.",
+                code: "billing_lookup_failed",
+                requestId,
               }),
               {
                 status: 500,
+                headers: JSON_HEADERS,
+              },
+            );
+          }
+
+          const billing = billingData as {
+            selected_plan?: string | null;
+            billing_status?: string;
+            stripe_customer_id?: string | null;
+            stripe_subscription_id?: string | null;
+            union_offer_eligible?: boolean;
+            union_offer_redeemed_at?: string | null;
+            founding_offer_version?: string | null;
+            founding_offer_eligible?: boolean;
+            founding_offer_redeemed_at?: string | null;
+          } | null;
+
+          // Server selects the plan from DB — client cannot inject a plan.
+          const plan = (billing?.selected_plan ?? null) as StripePlan | null;
+          if (!plan || !ALLOWED_PLANS.has(plan)) {
+            return new Response(
+              JSON.stringify({
+                error: "No valid plan is ready. Complete service selection first.",
+                code: "plan_selection_incomplete",
+                requestId,
+              }),
+              {
+                status: 400,
+                headers: JSON_HEADERS,
+              },
+            );
+          }
+
+          // Guard: already subscribed — do not create duplicate checkout.
+          if (billing?.stripe_subscription_id) {
+            return new Response(
+              JSON.stringify({ error: "Already subscribed", code: "already_subscribed" }),
+              {
+                status: 409,
                 headers: { "Content-Type": "application/json" },
               },
             );
           }
-        }
 
-        // Union offer: apply a Stripe coupon that discounts the first month's base
-        // platform fee to $0. The coupon must be pre-configured in Stripe with:
-        //   - percent_off: 100, duration: 'once'
-        //   - applies_to: { products: [MCR_BASE_PRODUCT_ID, AIR_BASE_PRODUCT_ID] }
-        //
-        // REQUIRED STRIPE PRODUCT STRUCTURE:
-        //   prod_MCR_BASE  — Missed Call Recovery Base     → in applies_to
-        //   prod_AIR_BASE  — AI Receptionist Base          → in applies_to
-        //   prod_AIR_USAGE — AI Receptionist Voice Usage   → SEPARATE product, NOT in applies_to
-        //
-        // Stripe product-scoped coupons apply at Product level. AI Receptionist Voice
-        // Usage must be on a separate product that is omitted from applies_to — that
-        // is the structural guarantee usage is never discounted. duration:'once' adds a
-        // secondary constraint (first invoice only) but does not substitute for the
-        // product-level separation.
-        //
-        // payment_method_collection:'always' ensures a card is saved even when
-        // the first invoice total is $0 (required for future usage billing).
-        //
-        // Guard: only on the very first checkout (setup → checkout_pending transition)
-        // to prevent applying the discount on retry sessions.
-        const unionEligible = billing?.union_offer_eligible === true;
-        const unionNotRedeemed = !billing?.union_offer_redeemed_at;
-        let checkoutDiscounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined;
-        if (unionEligible && unionNotRedeemed && isFirstCheckout) {
-          const couponId = getUnionCouponId();
-          if (!couponId) {
+          // Verify any setup-fee waiver before making the first Stripe write.
+          // A database/schema failure must not leave an orphaned Stripe customer.
+          const { data: acquisitionData, error: acquisitionError } = await supabaseAdmin
+            .from("businesses")
+            .select(
+              "promotion_code, setup_fee_waived_cents, acquisition_demo_variant, acquisition_pricing_mode",
+            )
+            .eq("id", businessId)
+            .maybeSingle();
+          if (acquisitionError) {
             return new Response(
               JSON.stringify({
-                error:
-                  "Union offer is not configured — set STRIPE_COUPON_UNION_FIRST_PLATFORM_FEE in environment variables",
-                code: "union_coupon_not_configured",
+                error: "Could not verify setup-fee status. No checkout session was created.",
+                code: "setup_fee_verification_failed",
+                requestId,
               }),
               { status: 500, headers: { "Content-Type": "application/json" } },
             );
           }
-          checkoutDiscounts = [{ coupon: couponId }];
+          const acquisition = acquisitionData as {
+            promotion_code?: string | null;
+            setup_fee_waived_cents?: number | null;
+            acquisition_demo_variant?: string | null;
+            acquisition_pricing_mode?: "offer" | "standard" | null;
+          } | null;
+          const { data: redemptionData, error: redemptionError } = await supabaseAdmin
+            .from("acquisition_promo_redemptions" as never)
+            .select("plan,waived_setup_fee_cents,offer_version,subscription_promo_eligible")
+            .eq("business_id", businessId)
+            .maybeSingle();
+          if (redemptionError) {
+            return new Response(
+              JSON.stringify({
+                error: "Could not verify offer eligibility. No checkout session was created.",
+                code: "offer_eligibility_verification_failed",
+                requestId,
+              }),
+              { status: 500, headers: JSON_HEADERS },
+            );
+          }
+          const redemption = redemptionData as {
+            plan?: string;
+            waived_setup_fee_cents?: number;
+            offer_version?: string;
+            subscription_promo_eligible?: boolean;
+          } | null;
+          const foundingWaiverVerified =
+            acquisition?.acquisition_pricing_mode === "offer" &&
+            acquisition.promotion_code === "FOUNDINGPLUMBER" &&
+            Number(acquisition.setup_fee_waived_cents) === 49_900 &&
+            redemption?.plan === plan &&
+            Number(redemption.waived_setup_fee_cents) === 49_900 &&
+            redemption.offer_version === "founding-2026-three-months" &&
+            redemption.subscription_promo_eligible === true;
+          const unionWaiverVerified =
+            !foundingWaiverVerified &&
+            billing?.union_offer_eligible === true &&
+            Boolean(acquisition?.promotion_code) &&
+            Number(acquisition?.setup_fee_waived_cents) === 49_900;
+          const standardPricingVerified =
+            acquisition?.acquisition_pricing_mode === "standard" &&
+            !redemption &&
+            !acquisition.promotion_code &&
+            acquisition.setup_fee_waived_cents == null;
+          if (!foundingWaiverVerified && !unionWaiverVerified && !standardPricingVerified) {
+            return new Response(
+              JSON.stringify({
+                error: "Confirm offer or standard pricing before checkout.",
+                code: "pricing_selection_incomplete",
+                requestId,
+              }),
+              { status: 409, headers: JSON_HEADERS },
+            );
+          }
+          const setupFeeWaived = foundingWaiverVerified || unionWaiverVerified;
+          const acquisitionMetadata: Record<string, string> =
+            setupFeeWaived && acquisition?.promotion_code
+              ? {
+                  promotion_code: acquisition.promotion_code,
+                  setup_fee_waived_cents: "49900",
+                  pricing_mode: foundingWaiverVerified ? "offer" : "union_offer",
+                  ...(acquisition.acquisition_demo_variant
+                    ? { demo_variant: acquisition.acquisition_demo_variant }
+                    : {}),
+                }
+              : {
+                  pricing_mode: "standard",
+                  setup_fee_cents: "49900",
+                  ...(acquisition?.acquisition_demo_variant
+                    ? { demo_variant: acquisition.acquisition_demo_variant }
+                    : {}),
+                };
+
+          // Resolve the discount and all Stripe configuration before the first
+          // provider write. A retry after a partial failure must keep the waiver.
+          const shouldApplyFoundingOffer =
+            foundingWaiverVerified &&
+            billing?.founding_offer_version === "founding-2026-three-months" &&
+            billing?.founding_offer_eligible === true &&
+            !billing?.founding_offer_redeemed_at;
+          const shouldApplyUnionOffer =
+            !shouldApplyFoundingOffer &&
+            unionWaiverVerified &&
+            billing?.union_offer_eligible === true &&
+            !billing?.union_offer_redeemed_at;
+          const couponId = shouldApplyFoundingOffer
+            ? getFoundingThreeMonthCouponId()
+            : shouldApplyUnionOffer
+              ? getUnionCouponId()
+              : null;
+          if (shouldApplyFoundingOffer && !couponId) {
+            return new Response(
+              JSON.stringify({
+                error: "Billing is temporarily unavailable. Please try again shortly.",
+                code: "founding_coupon_not_configured",
+                requestId,
+              }),
+              { status: 503, headers: JSON_HEADERS },
+            );
+          }
+          if (shouldApplyUnionOffer && !couponId) {
+            return new Response(
+              JSON.stringify({
+                error: "Billing is temporarily unavailable. Please try again shortly.",
+                code: "union_coupon_not_configured",
+                requestId,
+              }),
+              { status: 503, headers: JSON_HEADERS },
+            );
+          }
+          const checkoutDiscounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined =
+            couponId ? [{ coupon: couponId }] : undefined;
+          const inclusiveGstTaxRateId = getInclusiveGstTaxRateId();
+          const idempotencyKeys = checkoutIdempotencyKeys(
+            businessId,
+            plan,
+            couponId,
+            `gst-inclusive-v1:setup-${setupFeeWaived ? "waived" : "49900"}`,
+          );
+          const stripe = getStripe();
+          const origin = resolveBillingReturnOrigin(request);
+
+          // Reuse existing Stripe customer or create one.
+          let customerId = billing?.stripe_customer_id ?? undefined;
+          if (!customerId) {
+            const { data: bizData } = await supabaseAdmin
+              .from("businesses")
+              .select("name")
+              .eq("id", businessId)
+              .maybeSingle();
+            const bizName = (bizData as { name?: string } | null)?.name;
+
+            const { data: userRow } = await supabaseAdmin.auth.admin.getUserById(userId);
+            const email = userRow?.user?.email;
+
+            const customer = await stripe.customers.create(
+              {
+                email: email ?? undefined,
+                name: bizName ?? undefined,
+                metadata: { business_id: businessId, plan },
+              },
+              { idempotencyKey: idempotencyKeys.customer },
+            );
+            customerId = customer.id;
+
+            // Persist customer ID immediately so retries reuse the same customer.
+            const { error: customerPersistError } = await supabaseAdmin
+              .from("business_billing")
+              .update({
+                stripe_customer_id: customerId,
+                billing_status: "checkout_pending",
+              })
+              .eq("business_id", businessId);
+            if (customerPersistError) {
+              return new Response(
+                JSON.stringify({
+                  error: "Could not save billing setup. No checkout session was created.",
+                  code: "billing_persistence_failed",
+                  requestId,
+                }),
+                {
+                  status: 500,
+                  headers: { "Content-Type": "application/json" },
+                },
+              );
+            }
+          }
+
+          // Founding offer: a test-mode, product-scoped repeating coupon discounts
+          // exactly three monthly platform invoices. Union accounts retain their
+          // separate one-invoice coupon. Neither coupon includes usage products.
+          //
+          // REQUIRED STRIPE PRODUCT STRUCTURE:
+          //   prod_MCR_BASE  — Missed Call Recovery Base     → in applies_to
+          //   prod_AIR_BASE  — AI Receptionist Base          → in applies_to
+          //   prod_AIR_USAGE — AI Receptionist Voice Usage   → SEPARATE product, NOT in applies_to
+          //
+          // Stripe product-scoped coupons apply at Product level. AI Receptionist Voice
+          // Usage must be on a separate product that is omitted from applies_to — that
+          // is the structural guarantee usage is charged from activation.
+          //
+          // payment_method_collection:'always' ensures a card is saved even when
+          // the first invoice total is $0 (required for future usage billing).
+          //
+          const session = await stripe.checkout.sessions.create(
+            {
+              integration_identifier: STRIPE_INTEGRATION_IDENTIFIER,
+              customer: customerId,
+              mode: "subscription",
+              payment_method_collection: "always",
+              line_items: getCheckoutLineItems(plan, { includeSetupFee: !setupFeeWaived }),
+              ...(checkoutDiscounts ? { discounts: checkoutDiscounts } : {}),
+              // The configured Price totals already include GST. This explicit manual tax policy
+              // lets Stripe identify the embedded 10% without adding another 10% at Checkout.
+              automatic_tax: { enabled: false },
+              subscription_data: {
+                default_tax_rates: [inclusiveGstTaxRateId],
+                metadata: {
+                  business_id: businessId,
+                  plan,
+                  offer_version: shouldApplyFoundingOffer
+                    ? "founding-2026-three-months"
+                    : shouldApplyUnionOffer
+                      ? "union-first-platform-fee"
+                      : "standard",
+                  ...acquisitionMetadata,
+                },
+              },
+              customer_update: { address: "auto" },
+              tax_id_collection: { enabled: false },
+              success_url: `${origin}/dashboard?billing=success&session_id={CHECKOUT_SESSION_ID}`,
+              cancel_url: `${origin}/plumbers?resume=payment&billing=cancelled`,
+              metadata: {
+                business_id: businessId,
+                plan,
+                offer_version: shouldApplyFoundingOffer
+                  ? "founding-2026-three-months"
+                  : shouldApplyUnionOffer
+                    ? "union-first-platform-fee"
+                    : "standard",
+                ...acquisitionMetadata,
+              },
+            },
+            { idempotencyKey: idempotencyKeys.session },
+          );
+
+          return new Response(JSON.stringify({ url: session.url }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return billingCheckoutErrorResponse(error, requestId);
         }
-
-        const session = await stripe.checkout.sessions.create({
-          integration_identifier: STRIPE_INTEGRATION_IDENTIFIER,
-          customer: customerId,
-          mode: "subscription",
-          payment_method_collection: "always",
-          line_items: getCheckoutLineItems(plan),
-          ...(checkoutDiscounts ? { discounts: checkoutDiscounts } : {}),
-          subscription_data: {
-            metadata: { business_id: businessId, plan },
-          },
-          customer_update: { address: "auto" },
-          tax_id_collection: { enabled: false },
-          success_url: `${origin}/dashboard?billing=success&session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${origin}/dashboard?billing=cancelled`,
-          metadata: { business_id: businessId, plan },
-        });
-
-        return new Response(JSON.stringify({ url: session.url }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
       },
     },
   },
