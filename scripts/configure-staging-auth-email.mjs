@@ -23,8 +23,17 @@ async function managementRequest(url, token, init = {}) {
       ...init.headers,
     },
   });
-  if (!response.ok) throw new Error(`Supabase Auth configuration returned HTTP ${response.status}`);
-  return response.json();
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const safeDetail = [body?.code, body?.message, body?.error]
+      .find((value) => typeof value === "string")
+      ?.replace(/[\r\n]+/g, " ")
+      .slice(0, 240);
+    throw new Error(
+      `Supabase Auth configuration returned HTTP ${response.status}${safeDetail ? `: ${safeDetail}` : ""}`,
+    );
+  }
+  return body;
 }
 
 export async function configureStagingAuthEmail(env = process.env) {
