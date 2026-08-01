@@ -12,6 +12,16 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+
+  .plumber-workspace,
+  .plumber-workspace *,
+  .plumber-workspace *::before,
+  .plumber-workspace *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @custom-variant dark (&:is(.dark *));

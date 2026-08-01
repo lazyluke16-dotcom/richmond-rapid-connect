@@ -63,7 +63,9 @@ export const Route = createFileRoute("/api/public/billing/summary")({
         ] = await Promise.all([
           supabaseAdmin
             .from("businesses")
-            .select("name,public_email,public_phone,billing_exempt")
+            .select(
+              "name,public_email,public_phone,billing_exempt,promotion_code,setup_fee_waived_cents",
+            )
             .eq("id", businessId)
             .single(),
           supabaseAdmin
@@ -185,6 +187,8 @@ export const Route = createFileRoute("/api/public/billing/summary")({
           name?: string;
           public_email?: string | null;
           public_phone?: string | null;
+          promotion_code?: string | null;
+          setup_fee_waived_cents?: number | null;
         };
         const telephony = (telephonyRow ?? {}) as {
           inbound_number?: string | null;
@@ -216,6 +220,11 @@ export const Route = createFileRoute("/api/public/billing/summary")({
               graceExpiresAt: bb.grace_expires_at ?? null,
               hasStripeCustomer: Boolean(bb.stripe_customer_id),
               hasStripeSubscription: Boolean(bb.stripe_subscription_id),
+              foundingPlumberBenefit:
+                business.promotion_code === "FOUNDINGPLUMBER" &&
+                Number(business.setup_fee_waived_cents) > 0
+                  ? `A$${(Number(business.setup_fee_waived_cents) / 100).toFixed(0)} setup fee waived`
+                  : null,
             },
             usage: {
               periodStart: periodStart?.toISOString() ?? null,

@@ -29,10 +29,13 @@ import { Route as AuthenticatedAiReceptionistRouteImport } from './routes/_authe
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedCallHandlingRouteImport } from './routes/_authenticated/call-handling'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedLeadsRouteImport } from './routes/_authenticated/leads'
 import { Route as AuthenticatedMissedCallSettingsRouteImport } from './routes/_authenticated/missed-call-settings'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedOutreachOperationsRouteImport } from './routes/_authenticated/outreach-operations'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedSetupGuideRouteImport } from './routes/_authenticated/setup-guide'
+import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/usage'
 import { Route as BSlugRouteImport } from './routes/b.$slug'
 import { Route as ServicesBlockedDrainsRouteImport } from './routes/services.blocked-drains'
 import { Route as ServicesEmergencyRouteImport } from './routes/services.emergency'
@@ -51,6 +54,7 @@ import { Route as BSlugConfirmationRouteImport } from './routes/b.$slug.confirma
 import { Route as BSlugMissedCallRouteImport } from './routes/b.$slug.missed-call'
 import { Route as BSlugRequestRouteImport } from './routes/b.$slug.request'
 import { Route as ApiPublicBillingCheckoutRouteImport } from './routes/api/public/billing.checkout'
+import { Route as ApiPublicBillingCheckoutStatusRouteImport } from './routes/api/public/billing.checkout-status'
 import { Route as ApiPublicBillingPlanRouteImport } from './routes/api/public/billing.plan'
 import { Route as ApiPublicBillingPortalRouteImport } from './routes/api/public/billing.portal'
 import { Route as ApiPublicBillingSummaryRouteImport } from './routes/api/public/billing.summary'
@@ -164,6 +168,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedLeadsRoute = AuthenticatedLeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedMissedCallSettingsRoute =
   AuthenticatedMissedCallSettingsRouteImport.update({
     id: '/missed-call-settings',
@@ -184,6 +193,16 @@ const AuthenticatedOutreachOperationsRoute =
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSetupGuideRoute = AuthenticatedSetupGuideRouteImport.update({
+  id: '/setup-guide',
+  path: '/setup-guide',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedUsageRoute = AuthenticatedUsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const BSlugRoute = BSlugRouteImport.update({
@@ -280,6 +299,12 @@ const ApiPublicBillingCheckoutRoute =
     path: '/api/public/billing/checkout',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicBillingCheckoutStatusRoute =
+  ApiPublicBillingCheckoutStatusRouteImport.update({
+    id: '/api/public/billing/checkout-status',
+    path: '/api/public/billing/checkout-status',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicBillingPlanRoute = ApiPublicBillingPlanRouteImport.update({
   id: '/api/public/billing/plan',
   path: '/api/public/billing/plan',
@@ -351,10 +376,13 @@ export interface FileRoutesByFullPath {
   '/billing': typeof AuthenticatedBillingRoute
   '/call-handling': typeof AuthenticatedCallHandlingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/leads': typeof AuthenticatedLeadsRoute
   '/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/outreach-operations': typeof AuthenticatedOutreachOperationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/setup-guide': typeof AuthenticatedSetupGuideRoute
+  '/usage': typeof AuthenticatedUsageRoute
   '/b/$slug': typeof BSlugRouteWithChildren
   '/services/blocked-drains': typeof ServicesBlockedDrainsRoute
   '/services/emergency': typeof ServicesEmergencyRoute
@@ -373,6 +401,7 @@ export interface FileRoutesByFullPath {
   '/b/$slug/request': typeof BSlugRequestRoute
   '/b/$slug/': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
+  '/api/public/billing/checkout-status': typeof ApiPublicBillingCheckoutStatusRoute
   '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
@@ -403,10 +432,13 @@ export interface FileRoutesByTo {
   '/billing': typeof AuthenticatedBillingRoute
   '/call-handling': typeof AuthenticatedCallHandlingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/leads': typeof AuthenticatedLeadsRoute
   '/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
   '/outreach-operations': typeof AuthenticatedOutreachOperationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/setup-guide': typeof AuthenticatedSetupGuideRoute
+  '/usage': typeof AuthenticatedUsageRoute
   '/services/blocked-drains': typeof ServicesBlockedDrainsRoute
   '/services/emergency': typeof ServicesEmergencyRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
@@ -424,6 +456,7 @@ export interface FileRoutesByTo {
   '/b/$slug/request': typeof BSlugRequestRoute
   '/b/$slug': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
+  '/api/public/billing/checkout-status': typeof ApiPublicBillingCheckoutStatusRoute
   '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
@@ -456,10 +489,13 @@ export interface FileRoutesById {
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
   '/_authenticated/call-handling': typeof AuthenticatedCallHandlingRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/leads': typeof AuthenticatedLeadsRoute
   '/_authenticated/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/outreach-operations': typeof AuthenticatedOutreachOperationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/setup-guide': typeof AuthenticatedSetupGuideRoute
+  '/_authenticated/usage': typeof AuthenticatedUsageRoute
   '/b/$slug': typeof BSlugRouteWithChildren
   '/services/blocked-drains': typeof ServicesBlockedDrainsRoute
   '/services/emergency': typeof ServicesEmergencyRoute
@@ -478,6 +514,7 @@ export interface FileRoutesById {
   '/b/$slug/request': typeof BSlugRequestRoute
   '/b/$slug/': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
+  '/api/public/billing/checkout-status': typeof ApiPublicBillingCheckoutStatusRoute
   '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
@@ -510,10 +547,13 @@ export interface FileRouteTypes {
     | '/billing'
     | '/call-handling'
     | '/dashboard'
+    | '/leads'
     | '/missed-call-settings'
     | '/onboarding'
     | '/outreach-operations'
     | '/settings'
+    | '/setup-guide'
+    | '/usage'
     | '/b/$slug'
     | '/services/blocked-drains'
     | '/services/emergency'
@@ -532,6 +572,7 @@ export interface FileRouteTypes {
     | '/b/$slug/request'
     | '/b/$slug/'
     | '/api/public/billing/checkout'
+    | '/api/public/billing/checkout-status'
     | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
@@ -562,10 +603,13 @@ export interface FileRouteTypes {
     | '/billing'
     | '/call-handling'
     | '/dashboard'
+    | '/leads'
     | '/missed-call-settings'
     | '/onboarding'
     | '/outreach-operations'
     | '/settings'
+    | '/setup-guide'
+    | '/usage'
     | '/services/blocked-drains'
     | '/services/emergency'
     | '/.lovable/oauth/consent'
@@ -583,6 +627,7 @@ export interface FileRouteTypes {
     | '/b/$slug/request'
     | '/b/$slug'
     | '/api/public/billing/checkout'
+    | '/api/public/billing/checkout-status'
     | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
@@ -614,10 +659,13 @@ export interface FileRouteTypes {
     | '/_authenticated/billing'
     | '/_authenticated/call-handling'
     | '/_authenticated/dashboard'
+    | '/_authenticated/leads'
     | '/_authenticated/missed-call-settings'
     | '/_authenticated/onboarding'
     | '/_authenticated/outreach-operations'
     | '/_authenticated/settings'
+    | '/_authenticated/setup-guide'
+    | '/_authenticated/usage'
     | '/b/$slug'
     | '/services/blocked-drains'
     | '/services/emergency'
@@ -636,6 +684,7 @@ export interface FileRouteTypes {
     | '/b/$slug/request'
     | '/b/$slug/'
     | '/api/public/billing/checkout'
+    | '/api/public/billing/checkout-status'
     | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
@@ -676,6 +725,7 @@ export interface RootRouteChildren {
   ApiPublicStagingReleaseRoute: typeof ApiPublicStagingReleaseRoute
   ApiWebhooksAiPhoneLeadRoute: typeof ApiWebhooksAiPhoneLeadRoute
   ApiPublicBillingCheckoutRoute: typeof ApiPublicBillingCheckoutRoute
+  ApiPublicBillingCheckoutStatusRoute: typeof ApiPublicBillingCheckoutStatusRoute
   ApiPublicBillingPlanRoute: typeof ApiPublicBillingPlanRoute
   ApiPublicBillingPortalRoute: typeof ApiPublicBillingPortalRoute
   ApiPublicBillingSummaryRoute: typeof ApiPublicBillingSummaryRoute
@@ -829,6 +879,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/leads': {
+      id: '/_authenticated/leads'
+      path: '/leads'
+      fullPath: '/leads'
+      preLoaderRoute: typeof AuthenticatedLeadsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/missed-call-settings': {
       id: '/_authenticated/missed-call-settings'
       path: '/missed-call-settings'
@@ -855,6 +912,20 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/setup-guide': {
+      id: '/_authenticated/setup-guide'
+      path: '/setup-guide'
+      fullPath: '/setup-guide'
+      preLoaderRoute: typeof AuthenticatedSetupGuideRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/usage': {
+      id: '/_authenticated/usage'
+      path: '/usage'
+      fullPath: '/usage'
+      preLoaderRoute: typeof AuthenticatedUsageRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/b/$slug': {
@@ -983,6 +1054,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicBillingCheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/billing/checkout-status': {
+      id: '/api/public/billing/checkout-status'
+      path: '/api/public/billing/checkout-status'
+      fullPath: '/api/public/billing/checkout-status'
+      preLoaderRoute: typeof ApiPublicBillingCheckoutStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/billing/plan': {
       id: '/api/public/billing/plan'
       path: '/api/public/billing/plan'
@@ -1055,10 +1133,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
   AuthenticatedCallHandlingRoute: typeof AuthenticatedCallHandlingRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedLeadsRoute: typeof AuthenticatedLeadsRoute
   AuthenticatedMissedCallSettingsRoute: typeof AuthenticatedMissedCallSettingsRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedOutreachOperationsRoute: typeof AuthenticatedOutreachOperationsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedSetupGuideRoute: typeof AuthenticatedSetupGuideRoute
+  AuthenticatedUsageRoute: typeof AuthenticatedUsageRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -1067,10 +1148,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedBillingRoute: AuthenticatedBillingRoute,
   AuthenticatedCallHandlingRoute: AuthenticatedCallHandlingRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedLeadsRoute: AuthenticatedLeadsRoute,
   AuthenticatedMissedCallSettingsRoute: AuthenticatedMissedCallSettingsRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedOutreachOperationsRoute: AuthenticatedOutreachOperationsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedSetupGuideRoute: AuthenticatedSetupGuideRoute,
+  AuthenticatedUsageRoute: AuthenticatedUsageRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -1124,6 +1208,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicStagingReleaseRoute: ApiPublicStagingReleaseRoute,
   ApiWebhooksAiPhoneLeadRoute: ApiWebhooksAiPhoneLeadRoute,
   ApiPublicBillingCheckoutRoute: ApiPublicBillingCheckoutRoute,
+  ApiPublicBillingCheckoutStatusRoute: ApiPublicBillingCheckoutStatusRoute,
   ApiPublicBillingPlanRoute: ApiPublicBillingPlanRoute,
   ApiPublicBillingPortalRoute: ApiPublicBillingPortalRoute,
   ApiPublicBillingSummaryRoute: ApiPublicBillingSummaryRoute,

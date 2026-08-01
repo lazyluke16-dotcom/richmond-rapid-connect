@@ -35,6 +35,7 @@ type BillingSummary = {
     graceExpiresAt: string | null;
     hasStripeCustomer: boolean;
     hasStripeSubscription: boolean;
+    foundingPlumberBenefit: string | null;
   };
   usage: {
     periodStart: string | null;
@@ -74,7 +75,7 @@ async function authenticatedRequest(path: string, init?: RequestInit) {
   return payload;
 }
 
-export function BillingAccountPage() {
+export function BillingAccountPage({ initialSection }: { initialSection?: "usage" } = {}) {
   const tenant = useMyTenantBrand();
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +103,12 @@ export function BillingAccountPage() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (summary && initialSection === "usage") {
+      document.getElementById("usage")?.scrollIntoView({ block: "start" });
+    }
+  }, [initialSection, summary]);
 
   const openBilling = async (kind: "checkout" | "portal") => {
     setBusy(kind);
@@ -219,6 +226,11 @@ export function BillingAccountPage() {
                       {summary.billing.effectiveState.replaceAll("_", " ")}
                     </b>
                   </div>
+                  {summary.billing.foundingPlumberBenefit && (
+                    <div className="mt-3 inline-flex rounded-full border border-primary/35 bg-primary/10 px-3 py-1 text-xs font-black text-primary">
+                      FOUNDINGPLUMBER: {summary.billing.foundingPlumberBenefit}
+                    </div>
+                  )}
                   {summary.billing.currentPeriodEnd && (
                     <div className="text-xs text-muted-foreground">
                       Current period ends{" "}
@@ -267,14 +279,14 @@ export function BillingAccountPage() {
                       <PlanChoice
                         active={selectedPlan === "missed_call_recovery"}
                         title="Text Receptionist"
-                        price="A$99/month"
+                        price="A$9/month"
                         detail="Missed-call text recovery and lead capture."
                         onClick={() => setSelectedPlan("missed_call_recovery")}
                       />
                       <PlanChoice
                         active={selectedPlan === "ai_receptionist"}
                         title="Text + AI Receptionist"
-                        price="A$149/month"
+                        price="A$15/month"
                         detail="AI phone answering plus text recovery and usage."
                         onClick={() => setSelectedPlan("ai_receptionist")}
                       />

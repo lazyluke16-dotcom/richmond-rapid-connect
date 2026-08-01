@@ -36,6 +36,10 @@ const DEFAULT_TENANT: TenantBrand = {
 };
 
 export function AppShell({ children, showCallBar = true, tenant, hidePublicNav = false }: Props) {
+  // Authenticated routes are wrapped once by AuthenticatedAppShell. Keep this
+  // compatibility branch while older route components shed their public shell.
+  if (hidePublicNav) return <>{children}</>;
+
   const brand: TenantBrand = tenant
     ? {
         ...tenant,
