@@ -130,4 +130,19 @@ describe("isolated staging Stripe webhook repair", () => {
     expect(script).toContain("stripe.webhookEndpoints.update");
     expect(script).not.toContain("stripe.webhookEndpoints.create");
   });
+
+  it("smokes the recovered paid checkout through the authenticated staging endpoint", () => {
+    const workflow = source(".github/workflows/staging-deployment.yml");
+    const script = source("scripts/staging-authenticated-checkout-smoke.mjs");
+    expect(workflow).toContain("Smoke the recovered authenticated checkout journey");
+    expect(workflow).toContain("node scripts/staging-authenticated-checkout-smoke.mjs");
+    expect(script).toContain('env.DEPLOYMENT_TARGET !== "staging"');
+    expect(script).toContain('env.STRIPE_MODE !== "test"');
+    expect(script).toContain('new URL("/api/public/billing/checkout-status", baseUrl)');
+    expect(script).toContain('summary.billing?.billingStatus !== "active"');
+    expect(script).toContain("routeResults");
+    expect(script).not.toContain("checkout.sessions.create");
+    expect(script).not.toContain("subscriptions.create");
+    expect(script).not.toContain("paymentIntents.create");
+  });
 });
