@@ -16,15 +16,15 @@ commercial release workflow runs this check before the behavioural suite.
 ## Customer journey
 
 1. A permissioned outreach message links to `/plumbers` with campaign attribution.
-2. Desktop shows a 50/50 demo and signup choice; mobile stacks the experience and keeps a
-   signup action visible.
-3. The 58-second product commercial expands to the viewport (and requests browser fullscreen
-   after the customer clicks). It returns to the split page when it finishes.
-4. The signup panel expands to a five-step full-page wizard:
+2. Either service card starts its selected setup journey immediately on desktop or mobile. The
+   58-second demo remains a separate optional proof path.
+3. The selected demo variant expands to the viewport, stays caption-first and returns to the
+   acquisition page when it finishes.
+4. Signup uses a five-step full-page wizard:
    - package;
    - business and contact;
    - current phone handling;
-   - setup-fee waiver;
+   - founding offer and exact price review;
    - account and secure payment handoff.
 5. Stripe collects the payment method. Rapid Connect never collects card details.
 6. The customer continues into the existing activation/onboarding flow.
@@ -47,10 +47,11 @@ phone number, email address or other personal information in the URL.
 
 Public code: `FOUNDINGPLUMBER`
 
-| Package                | Setup list price | With valid code | Ongoing platform price | Usage                                     |
-| ---------------------- | ---------------: | --------------: | ---------------------: | ----------------------------------------- |
-| Text Receptionist      |            A$499 |             A$0 |              A$9/month | A$0.25 ex GST per accepted recovery SMS   |
-| Text + AI Receptionist |          A$1,199 |             A$0 |             A$15/month | A$0.59 per AI voice minute plus SMS usage |
+| Selection            | Setup list price | With valid code | Ongoing platform price | Usage                                   |
+| -------------------- | ---------------: | --------------: | ---------------------: | --------------------------------------- |
+| Missed-Call Recovery |            A$499 |             A$0 |              A$9/month | A$0.25 ex GST per accepted recovery SMS |
+| AI Receptionist      |            A$499 |             A$0 |             A$15/month | A$0.59 per AI voice minute              |
+| Both services        |            A$499 |             A$0 |             A$24/month | Both disclosed usage rates              |
 
 The seeded campaign:
 
@@ -62,7 +63,11 @@ The seeded campaign:
 - records the exact waived amount against the authenticated business;
 - carries the promotion and waived amount into Stripe session/subscription metadata.
 
-The setup waiver never discounts platform or usage charges.
+The offer uses two distinct safeguards: the database records the A$499 setup/sign-on-fee waiver,
+and the product-scoped Stripe test coupon discounts only the first three monthly platform billing
+periods. Usage begins at activation and is never included in either discount. Existing accounts
+created before the three-month offer retain their recorded eligibility rather than being silently
+re-enrolled.
 
 ## Commercial script (58 seconds)
 
@@ -121,8 +126,9 @@ branded job questionnaire—or answer with a natural AI receptionist.
 The demo takes 58 seconds:
 {{campaign_link}}
 
-Founding plumbers can use FOUNDINGPLUMBER to waive the A$499 Text setup fee or the A$1,199
-Text + AI setup fee. Recurring and usage prices are shown before payment setup.
+Founding plumbers can use FOUNDINGPLUMBER for no sign-on fee and their first three monthly platform
+subscription fees free. Usage charges apply from activation; normal platform prices and exact usage
+rates are shown before payment setup. Cancel anytime.
 
 {{sender_legal_name}}
 {{sender_contact_details}}
@@ -168,17 +174,20 @@ demo_started
 demo_25 / demo_50 / demo_75 / demo_completed / demo_closed
 signup_opened
 package_selected
+service_selected / service_card_clicked
 promo_validated
-wizard_step_viewed
+wizard_started / wizard_step_viewed / wizard_stage_completed
 signup_submitted
 account_created
 email_confirmation_required
-checkout_opened / checkout_failed
+checkout_started / checkout_opened / checkout_failed
+checkout_completed / activation_completed
+test_job_initiated / test_job_received / first_genuine_job_received
 ```
 
-Use a funnel from `landing_viewed` to `account_created`, split by `source`, `campaign`, `content`
-and `plan`. Treat `checkout_opened` as intent, not revenue; Stripe/webhook state remains the
-billing source of truth.
+Use a funnel from `landing_viewed` through `test_job_received`, split by privacy-safe source,
+campaign, content, plan and demo variant. Treat `checkout_opened` as intent, not revenue;
+`checkout_completed` and `activation_completed` come from verified Stripe/webhook state.
 
 ## Launch boundaries
 

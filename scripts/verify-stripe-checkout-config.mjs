@@ -36,9 +36,11 @@ export function validateStripeCheckoutResources({ account, prices, coupon, found
   assert(airBase.unit_amount === 1500, "STRIPE_PRICE_AIR_BASE must be A$15.00");
   assert(airBase.recurring?.usage_type === "licensed", "AI base must be licensed");
   assert(airUsage.recurring?.usage_type === "metered", "AI usage must be metered");
+  const aiUsageCentsPerSecond = Number(airUsage.unit_amount_decimal);
   assert(
-    airUsage.unit_amount_decimal === "0.983333",
-    "AI usage must be 0.983333 AUD cents per metered second (A$0.59/minute)",
+    Number.isFinite(aiUsageCentsPerSecond) &&
+      Math.abs(aiUsageCentsPerSecond - 0.983333) <= 0.000001,
+    "AI usage must resolve to A$0.59/minute at the configured per-second precision",
   );
   assert(
     new Set([mcrBase.product, airBase.product, airUsage.product]).size === 3,
@@ -70,7 +72,8 @@ export function validateStripeCheckoutResources({ account, prices, coupon, found
     commercialPricing: {
       mcrMonthlyAud: mcrBase.unit_amount / 100,
       aiMonthlyAud: airBase.unit_amount / 100,
-      aiUsageAudPerMinute: (Number(airUsage.unit_amount_decimal) * 60) / 100,
+      aiUsageAudPerSecond: aiUsageCentsPerSecond / 100,
+      aiUsageAudPerMinute: (aiUsageCentsPerSecond * 60) / 100,
       taxBehavior: {
         mcr: mcrBase.tax_behavior ?? "unspecified",
         ai: airBase.tax_behavior ?? "unspecified",

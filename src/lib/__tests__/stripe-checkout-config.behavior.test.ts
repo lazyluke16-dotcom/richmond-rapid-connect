@@ -34,7 +34,7 @@ function resources() {
         active: true,
         currency: "aud",
         unit_amount: null,
-        unit_amount_decimal: "0.983333",
+        unit_amount_decimal: "0.983333000000",
         product: "prod_air_usage",
         recurring: { interval: "month", usage_type: "metered" },
       },
@@ -77,6 +77,7 @@ describe("Stripe checkout staging resource validation", () => {
       commercialPricing: {
         mcrMonthlyAud: 9,
         aiMonthlyAud: 15,
+        aiUsageAudPerSecond: 0.00983333,
         aiUsageAudPerMinute: 0.5899998,
         taxBehavior: { mcr: "unspecified", ai: "unspecified", aiUsage: "unspecified" },
       },
@@ -101,6 +102,14 @@ describe("Stripe checkout staging resource validation", () => {
     const input = resources();
     input.prices.MCR_BASE.livemode = true;
     expect(() => validateStripeCheckoutResources(input)).toThrow("must be a test-mode Price");
+  });
+
+  it("accepts Stripe decimal normalization but rejects a materially different AI rate", () => {
+    const input = resources();
+    input.prices.AIR_USAGE.unit_amount_decimal = "1.000000000000";
+    expect(() => validateStripeCheckoutResources(input)).toThrow(
+      "AI usage must resolve to A$0.59/minute",
+    );
   });
 });
 

@@ -400,7 +400,7 @@ function PlumberAcquisitionPage() {
               {moneyFromCents(plan.platformFeeCents)} per month. Recovering one job that would
               otherwise have been lost could cover about {roi.monthsCovered} months of subscription
               fees. Usage charges are separate: recovery SMS is A$0.25 ex GST per accepted SMS; AI
-              voice is A$0.59 per minute plus applicable SMS usage.
+              voice is A$0.59 per minute, metered by the second.
             </p>
           </div>
         </div>
