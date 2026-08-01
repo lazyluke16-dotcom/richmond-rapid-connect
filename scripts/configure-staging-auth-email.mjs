@@ -29,9 +29,12 @@ async function managementRequest(url, token, init = {}) {
       .find((value) => typeof value === "string")
       ?.replace(/[\r\n]+/g, " ")
       .slice(0, 240);
-    throw new Error(
+    const error = new Error(
       `Supabase Auth configuration returned HTTP ${response.status}${safeDetail ? `: ${safeDetail}` : ""}`,
     );
+    error.status = response.status;
+    error.safeDetail = safeDetail ?? "";
+    throw error;
   }
   return body;
 }
@@ -62,13 +65,38 @@ export async function configureStagingAuthEmail(env = process.env) {
     "The isolated-staging confirmation origin is not in Supabase Auth redirect configuration",
   );
 
-  await managementRequest(endpoint, token, {
-    method: "PATCH",
-    body: JSON.stringify({
-      mailer_subjects_confirmation: SUBJECT,
-      mailer_templates_confirmation_content: template,
-    }),
-  });
+  try {
+    await managementRequest(endpoint, token, {
+      method: "PATCH",
+      body: JSON.stringify({
+        mailer_subjects_confirmation: SUBJECT,
+        mailer_templates_confirmation_content: template,
+      }),
+    });
+  } catch (error) {
+    const defaultProviderBoundary =
+      error?.status === 400 &&
+      String(error?.safeDetail).includes(
+        "Email template modification is not available for free tier projects using the default email provider",
+      );
+    if (!defaultProviderBoundary) throw error;
+
+    // This is an explicit external configuration boundary, not a code-deployment
+    // failure. Supabase requires a paid Auth plan or verified custom SMTP before it
+    // will accept the repository-owned branded template. Continue deploying the
+    // branded confirmation landing flow, but report that the hosted email remains
+    // provider-branded until that boundary is completed.
+    return {
+      configured: false,
+      projectVerified: true,
+      subject: SUBJECT,
+      providerBrandingAbsent: false,
+      confirmationOriginAllowed: true,
+      customSmtpConfigured: false,
+      externalSenderConfigurationRequired: true,
+      boundary: "supabase_default_email_provider",
+    };
+  }
   const after = await managementRequest(endpoint, token);
   assert(after.mailer_subjects_confirmation === SUBJECT, "Confirmation subject was not applied");
   assert(
@@ -93,7 +121,14 @@ export async function configureStagingAuthEmail(env = process.env) {
 const isDirect = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isDirect) {
   configureStagingAuthEmail()
-    .then((result) => process.stdout.write(`${JSON.stringify(result)}\n`))
+    .then((result) => {
+      if (result.boundary) {
+        process.stdout.write(
+          `::warning title=Rapid Connect Auth email boundary::Supabase requires verified custom SMTP (or an eligible Auth plan) before the hosted confirmation template and sender can be branded.\n`,
+        );
+      }
+      process.stdout.write(`${JSON.stringify(result)}\n`);
+    })
     .catch((error) => {
       console.error(error instanceof Error ? error.message : String(error));
       process.exitCode = 1;
