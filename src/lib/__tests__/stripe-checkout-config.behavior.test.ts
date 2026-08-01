@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+// @ts-expect-error Executable deployment scripts intentionally do not ship declarations.
+import { validateFoundingCoupon } from "../../../scripts/configure-staging-founding-coupon.mjs";
 import { validateStripeCheckoutResources } from "../../../scripts/verify-stripe-checkout-config.mjs";
 
 function resources() {
@@ -80,5 +82,47 @@ describe("Stripe checkout staging resource validation", () => {
     const input = resources();
     input.prices.MCR_BASE.livemode = true;
     expect(() => validateStripeCheckoutResources(input)).toThrow("must be a test-mode Price");
+  });
+});
+
+describe("staging FOUNDINGPLUMBER coupon safety", () => {
+  function foundingResources() {
+    const input = resources();
+    return {
+      prices: input.prices,
+      coupon: {
+        ...input.coupon,
+        amount_off: null,
+        duration: "repeating",
+        duration_in_months: 3,
+      },
+    };
+  }
+
+  it("accepts exactly three free months scoped to both platform products", () => {
+    expect(validateFoundingCoupon(foundingResources())).toEqual({
+      couponScopedToTwoPlatformProducts: true,
+      usageProductsExcluded: true,
+    });
+  });
+
+  it("refuses a coupon that also discounts metered usage", () => {
+    const input = foundingResources();
+    input.coupon.applies_to.products.push("prod_air_usage");
+    expect(() => validateFoundingCoupon(input)).toThrow("only to both platform-fee Products");
+  });
+
+  it("refuses live, one-off, or incorrectly priced resources", () => {
+    const live = foundingResources();
+    live.coupon.livemode = true;
+    expect(() => validateFoundingCoupon(live)).toThrow("test-mode");
+
+    const once = foundingResources();
+    once.coupon.duration = "once";
+    expect(() => validateFoundingCoupon(once)).toThrow("must repeat");
+
+    const stalePrice = foundingResources();
+    stalePrice.prices.MCR_BASE.unit_amount = 9900;
+    expect(() => validateFoundingCoupon(stalePrice)).toThrow("A$9.00");
   });
 });

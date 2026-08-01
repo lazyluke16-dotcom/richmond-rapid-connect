@@ -85,6 +85,18 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Configure the approved founding coupon in Stripe test mode
+        env:
+          DEPLOYMENT_TARGET: staging
+          STRIPE_MODE: test
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_PRICE_MCR_BASE: ${{ secrets.STRIPE_PRICE_MCR_BASE }}
+          STRIPE_PRICE_AIR_BASE: ${{ secrets.STRIPE_PRICE_AIR_BASE }}
+          STRIPE_PRICE_AIR_USAGE: ${{ secrets.STRIPE_PRICE_AIR_USAGE }}
+          STRIPE_CONTEXT: ${{ vars.STRIPE_CONTEXT }}
+          STAGING_CONFIGURATION_TOKEN: ${{ secrets.STAGING_CONFIGURATION_TOKEN }}
+        run: node scripts/configure-staging-founding-coupon.mjs
+
       - name: Validate staging target and secret inventory
         env:
           DEPLOYMENT_TARGET: staging
