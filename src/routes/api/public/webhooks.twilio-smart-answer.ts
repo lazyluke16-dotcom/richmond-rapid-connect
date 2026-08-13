@@ -122,6 +122,7 @@ export async function handleTwilioSmartAnswer(request: Request): Promise<Respons
   );
 }
 
-export const Route = createFileRoute("/api/public/webhooks/twilio-smart-answer")({
+// Vite/TanStack regenerates FileRoutesByPath from this filename during build.
+export const Route = createFileRoute("/api/public/webhooks/twilio-smart-answer" as never)({
   server: { handlers: { POST: ({ request }) => handleTwilioSmartAnswer(request) } },
 });
