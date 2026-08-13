@@ -122,7 +122,7 @@ export async function handleTwilioSmartAnswer(request: Request): Promise<Respons
   );
 }
 
-// Vite/TanStack regenerates FileRoutesByPath from this filename during build.
-export const Route = createFileRoute("/api/public/webhooks/twilio-smart-answer" as never)({
+// @ts-expect-error routeTree.gen.ts is regenerated from this literal route during Vite build.
+export const Route = createFileRoute("/api/public/webhooks/twilio-smart-answer")({
   server: { handlers: { POST: ({ request }) => handleTwilioSmartAnswer(request) } },
 });
