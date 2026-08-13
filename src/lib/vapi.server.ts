@@ -56,6 +56,12 @@ export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string,
   const schema = cfg.structuredDataSchema ?? {
     type: "object",
     properties: {
+      call_disposition: {
+        type: "string",
+        enum: ["plumbing_enquiry", "message"],
+        description:
+          "Use plumbing_enquiry for a customer/prospect seeking plumbing service; otherwise use message.",
+      },
       customer_name: { type: "string" },
       callback_number: { type: "string" },
       suburb: { type: "string" },
@@ -63,16 +69,13 @@ export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string,
       job_description: { type: "string" },
       urgency: { type: "string", enum: ["now", "today", "few-days", "flexible"] },
       callback_preference: { type: "string" },
+      caller_company: { type: "string" },
+      message_text: { type: "string" },
+      callback_requested: { type: "boolean" },
+      message_urgency: { type: "string", enum: ["normal", "urgent"] },
       ai_summary: { type: "string" },
     },
-    required: [
-      "customer_name",
-      "callback_number",
-      "suburb",
-      "job_type",
-      "job_description",
-      "urgency",
-    ],
+    required: ["call_disposition", "customer_name", "callback_number", "ai_summary"],
   };
 
   return {
@@ -110,7 +113,8 @@ export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string,
         messages: [
           {
             role: "system",
-            content: "Summarise the plumbing enquiry in 1-2 sentences.",
+            content:
+              "Summarise the call in 1-2 sentences. For plumbing enquiries capture the job and urgency; for other callers capture who called and the message.",
           },
         ],
       },
@@ -134,6 +138,43 @@ export async function updateVapiAssistant(
 
 export async function getVapiAssistant(id: string): Promise<Record<string, unknown>> {
   return vapi(`/assistant/${id}`, { method: "GET" });
+}
+
+export function vapiSipHost(): string {
+  return VAPI_BASE.includes("api.eu.vapi.ai") ? "sip.eu.vapi.ai" : "sip.vapi.ai";
+}
+
+export async function createVapiSipPhoneNumber(input: {
+  assistantId: string;
+  sipUser: string;
+  name: string;
+  username?: string | null;
+  password?: string | null;
+}): Promise<{ id: string; sipUri?: string }> {
+  const host = vapiSipHost();
+  const sipUri = `sip:${input.sipUser}@${host}`;
+  const authentication =
+    input.username && input.password
+      ? {
+          realm: host,
+          username: input.username,
+          password: input.password,
+        }
+      : undefined;
+  return vapi("/phone-number", {
+    method: "POST",
+    body: JSON.stringify({
+      provider: "vapi",
+      sipUri,
+      assistantId: input.assistantId,
+      name: input.name,
+      authentication,
+    }),
+  });
+}
+
+export async function deleteVapiPhoneNumber(id: string): Promise<void> {
+  await vapi(`/phone-number/${id}`, { method: "DELETE" });
 }
 
 export async function resolveVapiServerCredentialId(
