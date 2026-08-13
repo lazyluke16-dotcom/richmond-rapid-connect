@@ -43,6 +43,7 @@ export async function handleTwilioSmartAnswerRecord(request: Request): Promise<R
   return twimlResponse(twimlHangup());
 }
 
-export const Route = createFileRoute("/api/public/webhooks/twilio-smart-answer-record")({
+// Vite/TanStack regenerates FileRoutesByPath from this filename during build.
+export const Route = createFileRoute("/api/public/webhooks/twilio-smart-answer-record" as never)({
   server: { handlers: { POST: ({ request }) => handleTwilioSmartAnswerRecord(request) } },
 });
