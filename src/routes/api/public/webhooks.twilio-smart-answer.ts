@@ -97,11 +97,12 @@ export async function handleTwilioSmartAnswer(request: Request): Promise<Respons
 
   if (route !== "ai" || !aiReady || !tenant.smartAnswerSipUri) {
     try {
+      const callerPhone = caller.e164 ?? (callerRaw || null);
       return await traditionalVoicemail({
         businessId: tenant.businessId,
         businessName: tenant.businessName,
         callSid,
-        callerPhone: caller.e164 ?? callerRaw || null,
+        callerPhone,
       });
     } catch (error) {
       console.error("[smart-answer] voicemail setup failed", error);
