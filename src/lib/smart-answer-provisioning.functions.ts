@@ -1,6 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { buildSmartAnswerCaptureTool, buildSmartAnswerPrompt } from "@/lib/smart-answer-prompt";
+import {
+  buildSmartAnswerCaptureTool,
+  buildSmartAnswerPrompt,
+  smartAnswerStructuredDataSchema,
+} from "@/lib/smart-answer-prompt";
 
 function smartAnswerWebhookUrl(): string {
   const base = (process.env.PUBLIC_JOB_REQUEST_URL ?? "").replace(/\/+$/, "");
@@ -140,6 +144,9 @@ export const provisionMySmartAnswerStack = createServerFn({ method: "POST" })
         serverCredentialId,
         recordingEnabled: s.recording_enabled,
         maxDurationSeconds: s.max_call_duration_seconds,
+        structuredDataSchema: smartAnswerStructuredDataSchema,
+        summaryPrompt:
+          "Summarise the call in 1-2 sentences. For plumbing enquiries capture the job and urgency; for other callers capture who called and the message.",
         tools: [tool],
         serverMessages: ["tool-calls"],
       });
