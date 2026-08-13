@@ -12,6 +12,32 @@ export interface SmartAnswerPromptInput {
   emergencyResponse: string;
 }
 
+export const smartAnswerStructuredDataSchema: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    call_disposition: {
+      type: "string",
+      enum: ["plumbing_enquiry", "message"],
+    },
+    customer_name: { type: "string" },
+    callback_number: { type: "string" },
+    suburb: { type: "string" },
+    job_type: { type: "string" },
+    job_description: { type: "string" },
+    urgency: {
+      type: "string",
+      enum: ["now", "today", "few-days", "flexible"],
+    },
+    callback_preference: { type: "string" },
+    caller_company: { type: "string" },
+    message_text: { type: "string" },
+    callback_requested: { type: "boolean" },
+    message_urgency: { type: "string", enum: ["normal", "urgent"] },
+    ai_summary: { type: "string" },
+  },
+  required: ["call_disposition", "customer_name", "callback_number", "ai_summary"],
+};
+
 export function buildSmartAnswerPrompt(input: SmartAnswerPromptInput): string {
   const services = input.services.join(", ") || "general plumbing";
   const areas = input.serviceAreas.join(", ") || "the business's normal service area";
@@ -67,31 +93,7 @@ export function buildSmartAnswerCaptureTool(input: {
       name: "capture_smart_answer_result",
       description:
         "Persist the final Smart Answer outcome. Call exactly once after collecting the relevant plumbing enquiry or receptionist message details.",
-      parameters: {
-        type: "object",
-        properties: {
-          call_disposition: {
-            type: "string",
-            enum: ["plumbing_enquiry", "message"],
-          },
-          customer_name: { type: "string" },
-          callback_number: { type: "string" },
-          suburb: { type: "string" },
-          job_type: { type: "string" },
-          job_description: { type: "string" },
-          urgency: {
-            type: "string",
-            enum: ["now", "today", "few-days", "flexible"],
-          },
-          callback_preference: { type: "string" },
-          caller_company: { type: "string" },
-          message_text: { type: "string" },
-          callback_requested: { type: "boolean" },
-          message_urgency: { type: "string", enum: ["normal", "urgent"] },
-          ai_summary: { type: "string" },
-        },
-        required: ["call_disposition", "customer_name", "callback_number", "ai_summary"],
-      },
+      parameters: smartAnswerStructuredDataSchema,
     },
     server: {
       url: input.serverUrl,
