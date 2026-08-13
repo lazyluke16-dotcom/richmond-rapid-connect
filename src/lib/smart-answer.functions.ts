@@ -105,6 +105,14 @@ export const getMyReceptionMessages = createServerFn({ method: "GET" })
     }));
   });
 
+export const markMyReceptionMessagesRead = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase.rpc("mark_my_reception_messages_read" as never);
+    if (error) throw new Error(error.message);
+    return { success: true, changed: Number(data ?? 0) };
+  });
+
 export const setMySmartAnswerSettings = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { enabled: boolean; ringFirstSeconds: number }) => d)
