@@ -50,20 +50,17 @@ export interface VapiAssistantConfig {
   recordingEnabled?: boolean;
   maxDurationSeconds?: number;
   structuredDataSchema?: Record<string, unknown>;
+  summaryPrompt?: string;
   tools?: Record<string, unknown>[];
   serverMessages?: string[];
 }
 
 export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string, unknown> {
+  // Preserve the established production receptionist contract unless a caller
+  // explicitly supplies a specialised schema (Smart Answer does this).
   const schema = cfg.structuredDataSchema ?? {
     type: "object",
     properties: {
-      call_disposition: {
-        type: "string",
-        enum: ["plumbing_enquiry", "message"],
-        description:
-          "Use plumbing_enquiry for a customer/prospect seeking plumbing service; otherwise use message.",
-      },
       customer_name: { type: "string" },
       callback_number: { type: "string" },
       suburb: { type: "string" },
@@ -71,13 +68,16 @@ export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string,
       job_description: { type: "string" },
       urgency: { type: "string", enum: ["now", "today", "few-days", "flexible"] },
       callback_preference: { type: "string" },
-      caller_company: { type: "string" },
-      message_text: { type: "string" },
-      callback_requested: { type: "boolean" },
-      message_urgency: { type: "string", enum: ["normal", "urgent"] },
       ai_summary: { type: "string" },
     },
-    required: ["call_disposition", "customer_name", "callback_number", "ai_summary"],
+    required: [
+      "customer_name",
+      "callback_number",
+      "suburb",
+      "job_type",
+      "job_description",
+      "urgency",
+    ],
   };
 
   return {
@@ -116,8 +116,7 @@ export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string,
         messages: [
           {
             role: "system",
-            content:
-              "Summarise the call in 1-2 sentences. For plumbing enquiries capture the job and urgency; for other callers capture who called and the message.",
+            content: cfg.summaryPrompt ?? "Summarise the plumbing enquiry in 1-2 sentences.",
           },
         ],
       },
