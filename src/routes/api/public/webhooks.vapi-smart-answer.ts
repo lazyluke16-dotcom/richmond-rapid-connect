@@ -21,6 +21,8 @@ interface SmartAnswerCapture {
   ai_summary?: string;
 }
 
+type ToolCall = { id: string; name: string; parameters: unknown };
+
 function text(value: unknown, max = 1200): string {
   return String(value ?? "").trim().slice(0, max);
 }
@@ -40,6 +42,27 @@ function parseCapture(value: unknown): SmartAnswerCapture {
     }
   }
   return {};
+}
+
+export function extractSmartAnswerToolCalls(message: {
+  toolCallList?: Array<{ id?: string; name?: string; parameters?: unknown }>;
+  toolWithToolCallList?: Array<{
+    name?: string;
+    toolCall?: { id?: string; parameters?: unknown };
+  }>;
+}): ToolCall[] {
+  if (message.toolCallList?.length) {
+    return message.toolCallList.map((item) => ({
+      id: item.id ?? "",
+      name: item.name ?? "",
+      parameters: item.parameters,
+    }));
+  }
+  return (message.toolWithToolCallList ?? []).map((item) => ({
+    id: item.toolCall?.id ?? "",
+    name: item.name ?? "",
+    parameters: item.toolCall?.parameters,
+  }));
 }
 
 async function resolveTenant(assistantId: string) {
@@ -193,19 +216,7 @@ export async function handleVapiSmartAnswer(request: Request): Promise<Response>
     return Response.json({ error: "Smart Answer is not active for this business" }, { status: 409 });
   }
 
-  const calls =
-    message.toolCallList?.map((item) => ({
-      id: item.id ?? "",
-      name: item.name ?? "",
-      parameters: item.parameters,
-    })) ??
-    message.toolWithToolCallList?.map((item) => ({
-      id: item.toolCall?.id ?? "",
-      name: item.name ?? "",
-      parameters: item.toolCall?.parameters,
-    })) ??
-    [];
-
+  const calls = extractSmartAnswerToolCalls(message);
   const results = [] as Array<{ name: string; toolCallId: string; result: string }>;
   for (const toolCall of calls) {
     if (toolCall.name !== "capture_smart_answer_result") {
