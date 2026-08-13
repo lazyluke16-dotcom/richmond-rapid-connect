@@ -123,14 +123,33 @@ jobs:
             "STAGING_SUPABASE_PUBLISHABLE_KEY",
             "VAPI_API_KEY",
             "VAPI_SERVER_SECRET",
-            "VAPI_SERVER_CREDENTIAL_ID",
             "VAPI_SIP_AUTH_USERNAME",
             "VAPI_SIP_AUTH_PASSWORD",
             "TWILIO_ACCOUNT_SID",
             "TWILIO_AUTH_TOKEN",
           ];
+          // Optional/recoverable — aligned with the runtime contract in
+          // src/lib/vapi.server.ts resolveVapiServerCredentialId(): when unset,
+          // the server credential id is recovered from the existing Vapi
+          // assistant (or by matching the Smart Answer server URL) at
+          // provisioning time. Smart Answer provisioning still fails hard at
+          // runtime if no usable credential can ultimately be obtained, so this
+          // must not be forced as a duplicate deploy-time secret.
+          const optionalRecoverable = ["VAPI_SERVER_CREDENTIAL_ID"];
           const missing = required.filter((name) => !process.env[name]?.trim());
-          console.log(JSON.stringify({ ready: missing.length === 0, missing, valuesPrinted: false }));
+          const optionalNotConfigured = optionalRecoverable.filter(
+            (name) => !process.env[name]?.trim(),
+          );
+          console.log(
+            JSON.stringify({
+              ready: missing.length === 0,
+              missing,
+              optionalNotConfigured,
+              optionalNote:
+                "VAPI_SERVER_CREDENTIAL_ID recovered from the existing Vapi assistant when unset.",
+              valuesPrinted: false,
+            }),
+          );
           if (missing.length) process.exit(1);
           NODE
 
