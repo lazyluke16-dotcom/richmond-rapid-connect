@@ -44,9 +44,7 @@ export async function handleTwilioSmartAnswerTranscribe(request: Request): Promi
   return Response.json({ ok: true });
 }
 
-// Vite/TanStack regenerates FileRoutesByPath from this filename during build.
-export const Route = createFileRoute(
-  "/api/public/webhooks/twilio-smart-answer-transcribe" as never,
-)({
+// @ts-expect-error routeTree.gen.ts is regenerated from this literal route during Vite build.
+export const Route = createFileRoute("/api/public/webhooks/twilio-smart-answer-transcribe")({
   server: { handlers: { POST: ({ request }) => handleTwilioSmartAnswerTranscribe(request) } },
 });
