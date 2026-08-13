@@ -21,6 +21,21 @@ export interface SmartAnswerContext {
   unreadMessages: number;
 }
 
+export interface ReceptionMessage {
+  id: string;
+  source: "ai_receptionist" | "voicemail";
+  callerPhone: string | null;
+  callerName: string | null;
+  callerCompany: string | null;
+  messageText: string | null;
+  callbackRequested: boolean;
+  messageUrgency: "normal" | "urgent";
+  recordingUrl: string | null;
+  transcription: string | null;
+  status: "unread" | "read" | "done";
+  createdAt: string;
+}
+
 function cleanLabel(value: unknown): string | null {
   const label = String(value ?? "")
     // eslint-disable-next-line no-control-regex -- strips untrusted control bytes
@@ -48,6 +63,46 @@ export const getMySmartAnswerContext = createServerFn({ method: "GET" })
       bypassNumbers: Array.isArray(row.bypassNumbers) ? row.bypassNumbers : [],
       unreadMessages: Number(row.unreadMessages ?? 0),
     };
+  });
+
+export const getMyReceptionMessages = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<ReceptionMessage[]> => {
+    const { data, error } = await context.supabase
+      .from("reception_messages")
+      .select(
+        "id,source,caller_phone,caller_name,caller_company,message_text,callback_requested,message_urgency,recording_url,transcription,status,created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(25);
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as unknown as Array<{
+      id: string;
+      source: "ai_receptionist" | "voicemail";
+      caller_phone: string | null;
+      caller_name: string | null;
+      caller_company: string | null;
+      message_text: string | null;
+      callback_requested: boolean;
+      message_urgency: "normal" | "urgent";
+      recording_url: string | null;
+      transcription: string | null;
+      status: "unread" | "read" | "done";
+      created_at: string;
+    }>).map((row) => ({
+      id: row.id,
+      source: row.source,
+      callerPhone: row.caller_phone,
+      callerName: row.caller_name,
+      callerCompany: row.caller_company,
+      messageText: row.message_text,
+      callbackRequested: row.callback_requested,
+      messageUrgency: row.message_urgency,
+      recordingUrl: row.recording_url,
+      transcription: row.transcription,
+      status: row.status,
+      createdAt: row.created_at,
+    }));
   });
 
 export const setMySmartAnswerSettings = createServerFn({ method: "POST" })
