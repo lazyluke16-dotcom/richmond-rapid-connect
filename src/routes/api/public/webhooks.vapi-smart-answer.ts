@@ -288,6 +288,7 @@ export async function handleVapiSmartAnswer(request: Request): Promise<Response>
   return Response.json({ results });
 }
 
-export const Route = createFileRoute("/api/public/webhooks/vapi-smart-answer")({
+// Vite/TanStack regenerates FileRoutesByPath from this filename during build.
+export const Route = createFileRoute("/api/public/webhooks/vapi-smart-answer" as never)({
   server: { handlers: { POST: ({ request }) => handleVapiSmartAnswer(request) } },
 });
