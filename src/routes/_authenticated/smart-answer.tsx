@@ -22,8 +22,8 @@ import {
 } from "@/lib/smart-answer.functions";
 import { provisionMySmartAnswerStack } from "@/lib/smart-answer-provisioning.functions";
 
-// Vite/TanStack regenerates FileRoutesByPath from this filename during build.
-export const Route = createFileRoute("/_authenticated/smart-answer" as never)({
+// @ts-expect-error routeTree.gen.ts is regenerated from this literal route during Vite build.
+export const Route = createFileRoute("/_authenticated/smart-answer")({
   head: () => ({
     meta: [
       { title: "Smart Answer — Rapid Connect" },
