@@ -86,6 +86,7 @@ export async function handleTwilioSmartAnswerDial(request: Request): Promise<Res
   );
 }
 
-export const Route = createFileRoute("/api/public/webhooks/twilio-smart-answer-dial")({
+// Vite/TanStack regenerates FileRoutesByPath from this filename during build.
+export const Route = createFileRoute("/api/public/webhooks/twilio-smart-answer-dial" as never)({
   server: { handlers: { POST: ({ request }) => handleTwilioSmartAnswerDial(request) } },
 });
