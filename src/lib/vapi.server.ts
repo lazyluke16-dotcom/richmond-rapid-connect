@@ -50,6 +50,8 @@ export interface VapiAssistantConfig {
   recordingEnabled?: boolean;
   maxDurationSeconds?: number;
   structuredDataSchema?: Record<string, unknown>;
+  tools?: Record<string, unknown>[];
+  serverMessages?: string[];
 }
 
 export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string, unknown> {
@@ -85,6 +87,7 @@ export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string,
       provider: "openai",
       model: "gpt-4o-mini",
       messages: [{ role: "system", content: cfg.systemPrompt }],
+      tools: cfg.tools?.length ? cfg.tools : undefined,
     },
     voice: { provider: "11labs", voiceId: "sarah" },
     transcriber: {
@@ -102,7 +105,7 @@ export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string,
             credentialId: cfg.serverCredentialId,
           }
         : undefined,
-    serverMessages: ["end-of-call-report"],
+    serverMessages: cfg.serverMessages ?? ["end-of-call-report"],
     analysisPlan: {
       structuredDataPlan: {
         enabled: true,
