@@ -212,7 +212,7 @@
     },
     {
       "file": "20260813160000_smart_answer_v1.sql",
-      "sha256": "cd6e5d325a8e19d5de0a4811b57be8835076cf9b8ac4eab0935e5c0468dbd883",
+      "sha256": "02983f78a0fc88f589897a6506318958735c4c71fc8a96655a942fdf88bdcf6f",
       "dependsOn": ["20260801130000_seamless_acquisition_activation.sql"]
     },
     {
