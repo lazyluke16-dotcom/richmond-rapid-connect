@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { twimlHangup, twimlReject, twimlVoicemail } from "@/lib/smart-answer";
+import { recordSmartAnswerVoiceUsage } from "@/lib/smart-answer-billing.server";
 import {
   readVerifiedTwilioForm,
   recordReceptionMessage,
@@ -21,12 +22,32 @@ export async function handleTwilioSmartAnswerDial(request: Request): Promise<Res
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const dialStatus = (params.get("DialCallStatus") ?? "").toLowerCase();
-  if (dialStatus === "completed") return twimlResponse(twimlHangup());
-
   const requestUrl = new URL(request.url);
   const businessId = requestUrl.searchParams.get("businessId")?.trim() ?? "";
   const callSid = (params.get("CallSid") ?? "").trim();
+  const dialStatus = (params.get("DialCallStatus") ?? "").toLowerCase();
+  const dialCallSid = (params.get("DialCallSid") ?? "").trim();
+  const durationRaw = Number(params.get("DialCallDuration") ?? "0");
+  const dialCallDuration = Number.isFinite(durationRaw) && durationRaw > 0 ? durationRaw : 0;
+
+  if (dialStatus === "completed") {
+    if (businessId && callSid && dialCallSid) {
+      try {
+        await recordSmartAnswerVoiceUsage({
+          businessId,
+          twilioDialCallSid: dialCallSid,
+          parentCallSid: callSid,
+          seconds: dialCallDuration,
+          dialStatus,
+        });
+      } catch (error) {
+        // Never hold a caller open because billing persistence failed.
+        console.error("[smart-answer/dial] voice usage persistence failed", error);
+      }
+    }
+    return twimlResponse(twimlHangup());
+  }
+
   const callerPhone = (params.get("From") ?? "").trim() || null;
   if (!businessId || !callSid) return twimlResponse(twimlReject("busy"));
 
