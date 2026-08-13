@@ -439,3 +439,78 @@ REVOKE EXECUTE ON FUNCTION public.record_reception_message(
 GRANT EXECUTE ON FUNCTION public.record_reception_message(
   uuid, text, text, text, text, text, text, text, boolean, text, text, text, integer, text, jsonb
 ) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.get_my_smart_answer_context()
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  bid uuid;
+  result jsonb;
+BEGIN
+  SELECT bu.business_id INTO bid
+  FROM public.business_users bu
+  WHERE bu.user_id = auth.uid()
+  ORDER BY CASE WHEN bu.role IN ('owner','admin') THEN 0 ELSE 1 END, bu.business_id
+  LIMIT 1;
+
+  IF bid IS NULL THEN
+    RAISE EXCEPTION 'No business membership' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT jsonb_build_object(
+    'businessId', bid,
+    'enabled', COALESCE(bt.smart_answer_enabled, false),
+    'ringFirstSeconds', COALESCE(bt.ring_first_seconds, 15),
+    'forwardingStatus', COALESCE(bt.forwarding_setup_status, 'unallocated'),
+    'answeringMode', COALESCE(bt.answering_mode, 'off'),
+    'aiOperational', COALESCE(bt.ai_receptionist_enabled, false),
+    'sipReady', (ai.smart_answer_sip_uri IS NOT NULL AND btrim(ai.smart_answer_sip_uri) <> ''),
+    'bypassNumbers', COALESCE((
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'id', bp.id,
+          'phone', bp.phone_e164,
+          'label', bp.label,
+          'source', bp.source
+        )
+        ORDER BY bp.created_at DESC
+      )
+      FROM public.business_call_bypass_numbers bp
+      WHERE bp.business_id = bid AND bp.active = true
+    ), '[]'::jsonb),
+    'unreadMessages', (
+      SELECT count(*)
+      FROM public.reception_messages rm
+      WHERE rm.business_id = bid AND rm.status = 'unread'
+    )
+  ) INTO result
+  FROM public.business_telephony_settings bt
+  LEFT JOIN public.business_ai_receptionist_settings ai
+    ON ai.business_id = bt.business_id
+  WHERE bt.business_id = bid;
+
+  RETURN COALESCE(
+    result,
+    jsonb_build_object(
+      'businessId', bid,
+      'enabled', false,
+      'ringFirstSeconds', 15,
+      'forwardingStatus', 'unallocated',
+      'answeringMode', 'off',
+      'aiOperational', false,
+      'sipReady', false,
+      'bypassNumbers', '[]'::jsonb,
+      'unreadMessages', 0
+    )
+  );
+END
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.get_my_smart_answer_context()
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_my_smart_answer_context()
+  TO authenticated;
