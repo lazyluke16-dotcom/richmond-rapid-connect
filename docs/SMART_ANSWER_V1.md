@@ -36,20 +36,59 @@ Smart Answer adds:
 
 Use a high-entropy username/password pair stored only in the deployment secret manager. Do not put either value in source, browser configuration or customer-visible settings.
 
+## Protected staging environment prerequisite
+
+The repository's GitHub `staging` environment is branch-protected. On 2026-08-13, a read-only credential-inventory attempt from `feat/smart-answer-v1` was rejected before any workflow step ran because that branch was not permitted to deploy to `staging`.
+
+Do **not** remove the staging environment protection or move staging secrets to an unprotected repository scope to work around this. Before Smart Answer staging deployment, explicitly add `feat/smart-answer-v1` (or the final approved Smart Answer release branch) to the `staging` environment's allowed deployment branches.
+
+The staging access inventory now checks these Smart Answer credentials by name without printing values:
+
+- `VAPI_SERVER_CREDENTIAL_ID`
+- `VAPI_SIP_AUTH_USERNAME`
+- `VAPI_SIP_AUTH_PASSWORD`
+
+After the branch allowlist is updated, run `.github/workflows/staging-access-preflight.yml` against the Smart Answer branch and confirm there are no missing staging variables/secrets.
+
+## Smart Answer staging deployment workflow
+
+Use `.github/workflows/smart-answer-staging-deployment.yml` for this feature rather than the older acquisition staging workflow. The older workflow intentionally verifies that the requested SHA is already contained in `feat/acquisition-funnel`, so it rejects an unmerged Smart Answer head.
+
+The Smart Answer workflow:
+
+- requires an exact 40-character Smart Answer SHA;
+- verifies the SHA belongs to the Smart Answer line and is based on `feat/acquisition-funnel`;
+- runs migration, asset, test, TypeScript and production dependency-audit gates before any hosted mutation;
+- builds the Cloudflare/Nitro staging artifact;
+- links only the isolated staging Supabase project;
+- dry-runs all frozen migrations before applying them;
+- uploads only the new Smart Answer Vapi/SIP credentials to the staging-named Worker;
+- deploys only the staging-named Worker; and
+- never alters production Twilio, Vapi, Supabase or Cloudflare resources.
+
+The workflow confirmation text must be exactly `DEPLOY_SMART_ANSWER_STAGING_ONLY`.
+
+### Current dependency-audit blocker
+
+As of 2026-08-13, the repository production dependency audit reports inherited high-severity advisories in existing transitive dependencies. Smart Answer changes neither `package.json` nor `package-lock.json`, but the staging deployment workflow intentionally retains `npm audit --omit=dev --audit-level=high` as a hard gate. Therefore staging deployment remains blocked until the dependency-maintenance work clears that gate. Do not bypass or downgrade this audit simply to reach staging.
+
 ## Staging activation order
 
 Do not point a production customer number at Smart Answer until this sequence passes in staging.
 
-1. Apply the Smart Answer migrations in manifest order.
-2. Confirm the customer's normal AI Receptionist is provisioned and operational.
-3. Configure the two SIP authentication secrets in the staging runtime.
-4. Open **Smart Answer** in the plumber workspace and provision the isolated Smart Answer stack.
-5. Configure one staging Twilio overflow number's inbound voice webhook to:
+1. Allow the approved Smart Answer release branch in the protected GitHub `staging` environment.
+2. Run the staging access inventory and confirm all required variables/secrets are present without exposing their values.
+3. Clear the production dependency-audit gate.
+4. Run `smart-answer-staging-deployment.yml` with the exact approved release SHA and `DEPLOY_SMART_ANSWER_STAGING_ONLY`.
+5. Confirm the frozen Smart Answer migrations were dry-run and applied only to isolated staging.
+6. Confirm the customer's normal AI Receptionist is provisioned and operational in staging.
+7. Open **Smart Answer** in the staging plumber workspace and provision the isolated Smart Answer stack.
+8. Configure one staging Twilio overflow number's inbound voice webhook to:
    - `POST {PUBLIC_JOB_REQUEST_URL}/api/public/webhooks/twilio-smart-answer`
-6. Verify the customer's no-answer forwarding to that staging overflow number.
-7. Set the carrier's no-answer delay to the desired ring-first interval (15 seconds is the V1 default). The application records the preferred interval but does not control the carrier timer.
-8. Add at least one known test mobile to the protected-number list.
-9. Switch Smart Answer on.
+9. Verify the customer's no-answer forwarding to that staging overflow number.
+10. Set the carrier's no-answer delay to the desired ring-first interval (15 seconds is the V1 default). The application records the preferred interval but does not control the carrier timer.
+11. Add at least one known test mobile to the protected-number list.
+12. Switch Smart Answer on in staging only.
 
 ## Mandatory call matrix
 
