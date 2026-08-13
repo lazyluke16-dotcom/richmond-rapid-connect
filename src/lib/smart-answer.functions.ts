@@ -68,8 +68,10 @@ export const getMySmartAnswerContext = createServerFn({ method: "GET" })
 export const getMyReceptionMessages = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<ReceptionMessage[]> => {
+    // The committed generated Supabase types pre-date this migration. Runtime
+    // access is still constrained by the reception_messages RLS policy.
     const { data, error } = await context.supabase
-      .from("reception_messages")
+      .from("reception_messages" as never)
       .select(
         "id,source,caller_phone,caller_name,caller_company,message_text,callback_requested,message_urgency,recording_url,transcription,status,created_at",
       )
