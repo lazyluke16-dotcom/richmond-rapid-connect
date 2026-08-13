@@ -1,0 +1,226 @@
+name: Deploy Smart Answer isolated staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Exact 40-character Smart Answer release SHA
+        required: true
+        type: string
+      environment_id:
+        description: Exact isolated staging environment ID
+        required: true
+        default: staging-commercial-rc
+        type: string
+      apply_migrations:
+        description: Apply frozen migrations after the dry run
+        required: true
+        default: true
+        type: boolean
+      confirmation:
+        description: Type DEPLOY_SMART_ANSWER_STAGING_ONLY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: smart-answer-isolated-staging-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy-smart-answer-staging:
+    if: ${{ inputs.confirmation == 'DEPLOY_SMART_ANSWER_STAGING_ONLY' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: staging
+      url: ${{ vars.CERTIFICATION_BASE_URL }}
+
+    steps:
+      - name: Check out exact requested Smart Answer release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify exact immutable Smart Answer release
+        env:
+          REQUESTED_SHA: ${{ inputs.release_sha }}
+        shell: bash
+        run: |
+          if ! [[ "$REQUESTED_SHA" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "release_sha must be an exact lowercase 40-character Git SHA" >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$REQUESTED_SHA"
+          git fetch --no-tags origin feat/acquisition-funnel feat/smart-answer-v1
+          git merge-base --is-ancestor origin/feat/acquisition-funnel "$REQUESTED_SHA"
+          git merge-base --is-ancestor "$REQUESTED_SHA" origin/feat/smart-answer-v1
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run immutable source gates
+        run: |
+          npm run verify:migrations
+          npm run verify:assets
+          npm test
+          npx tsc --noEmit
+          npm audit --omit=dev --audit-level=high
+
+      - name: Build exact Cloudflare artifact with staging client configuration
+        env:
+          LOCAL_BUILD_DISABLE_MCP_PLUGIN: "1"
+          VITE_SMS_MODE: twilio
+          VITE_SUPABASE_PROJECT_ID: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          VITE_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm run build
+
+      - name: Validate Smart Answer staging credentials without revealing values
+        env:
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          STAGING_SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+          STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+          STAGING_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+          VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
+          VAPI_SERVER_SECRET: ${{ secrets.VAPI_SERVER_SECRET }}
+          VAPI_SERVER_CREDENTIAL_ID: ${{ secrets.VAPI_SERVER_CREDENTIAL_ID }}
+          VAPI_SIP_AUTH_USERNAME: ${{ secrets.VAPI_SIP_AUTH_USERNAME }}
+          VAPI_SIP_AUTH_PASSWORD: ${{ secrets.VAPI_SIP_AUTH_PASSWORD }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const required = [
+            "CERTIFICATION_BASE_URL",
+            "CLOUDFLARE_STAGING_WORKER_NAME",
+            "STAGING_SUPABASE_PROJECT_REF",
+            "STAGING_SUPABASE_URL",
+            "CLOUDFLARE_ACCOUNT_ID",
+            "CLOUDFLARE_API_TOKEN",
+            "SUPABASE_ACCESS_TOKEN",
+            "STAGING_SUPABASE_DB_PASSWORD",
+            "STAGING_SUPABASE_SERVICE_ROLE_KEY",
+            "STAGING_SUPABASE_PUBLISHABLE_KEY",
+            "VAPI_API_KEY",
+            "VAPI_SERVER_SECRET",
+            "VAPI_SERVER_CREDENTIAL_ID",
+            "VAPI_SIP_AUTH_USERNAME",
+            "VAPI_SIP_AUTH_PASSWORD",
+            "TWILIO_ACCOUNT_SID",
+            "TWILIO_AUTH_TOKEN",
+          ];
+          const missing = required.filter((name) => !process.env[name]?.trim());
+          console.log(JSON.stringify({ ready: missing.length === 0, missing, valuesPrinted: false }));
+          if (missing.length) process.exit(1);
+          NODE
+
+      - name: Link isolated Supabase staging project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+        run: npx supabase link --project-ref "$STAGING_SUPABASE_PROJECT_REF"
+
+      - name: Dry-run frozen Smart Answer migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+        run: npx supabase db push --linked --dry-run --include-all
+
+      - name: Apply frozen Smart Answer migrations
+        if: ${{ inputs.apply_migrations }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+        run: npx supabase db push --linked --include-all
+
+      - name: Refuse worker deployment when migrations are dry-run only
+        if: ${{ inputs.apply_migrations == false }}
+        run: |
+          echo "Migration dry run passed. Worker deployment intentionally stopped." >&2
+          exit 1
+
+      - name: Upload Smart Answer-only secrets to staging Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          VAPI_SERVER_CREDENTIAL_ID: ${{ secrets.VAPI_SERVER_CREDENTIAL_ID }}
+          VAPI_SIP_AUTH_USERNAME: ${{ secrets.VAPI_SIP_AUTH_USERNAME }}
+          VAPI_SIP_AUTH_PASSWORD: ${{ secrets.VAPI_SIP_AUTH_PASSWORD }}
+        run: |
+          node - <<'NODE' |
+          const names = [
+            "VAPI_SERVER_CREDENTIAL_ID",
+            "VAPI_SIP_AUTH_USERNAME",
+            "VAPI_SIP_AUTH_PASSWORD",
+          ];
+          process.stdout.write(JSON.stringify(Object.fromEntries(names.map((name) => [name, process.env[name]]))));
+          NODE
+          npx wrangler secret bulk \
+            --config .output/server/wrangler.json \
+            --name "$CLOUDFLARE_STAGING_WORKER_NAME"
+
+      - name: Deploy only the staging-named Cloudflare Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.114.0"
+          command: >-
+            deploy
+            --config .output/server/wrangler.json
+            --name ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+            --var DEPLOYMENT_TARGET:staging
+            --var CERTIFICATION_TARGET:staging
+            --var CERTIFICATION_ENVIRONMENT_ID:${{ inputs.environment_id }}
+            --var DEPLOYED_RELEASE_SHA:${{ inputs.release_sha }}
+            --var PUBLIC_JOB_REQUEST_URL:${{ vars.CERTIFICATION_BASE_URL }}
+            --var SUPABASE_URL:${{ vars.STAGING_SUPABASE_URL }}
+            --var SUPABASE_PUBLISHABLE_KEY:${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+            --var SMS_MODE:twilio
+            --var STRIPE_MODE:test
+            --var STAGING_CERTIFICATION_ENABLED:true
+            --var STAGING_CERTIFICATION_EXECUTE:I_UNDERSTAND_STAGING_ONLY
+
+      - name: Verify hosted staging responds
+        env:
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+        run: curl --fail --silent --show-error --max-time 20 "$CERTIFICATION_BASE_URL/" >/dev/null
+
+      - name: Record staging handoff
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          ENVIRONMENT_ID: ${{ inputs.environment_id }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          # Smart Answer staging source deployed
+
+          - Release SHA: \`$RELEASE_SHA\`
+          - Environment: \`$ENVIRONMENT_ID\`
+          - Frozen migrations: applied
+          - Worker: staging only
+          - Production resources: unchanged
+
+          Remaining operator certification is the real-call matrix in \`docs/SMART_ANSWER_V1.md\`, including original caller-ID preservation and protected-number bypass verification.
+          EOF
