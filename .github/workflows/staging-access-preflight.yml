@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feat/smart-answer-v1
     paths:
       - .github/workflows/staging-access-preflight.yml
   workflow_dispatch:
@@ -35,6 +36,9 @@ jobs:
       TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
       VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
       VAPI_SERVER_SECRET: ${{ secrets.VAPI_SERVER_SECRET }}
+      VAPI_SERVER_CREDENTIAL_ID: ${{ secrets.VAPI_SERVER_CREDENTIAL_ID }}
+      VAPI_SIP_AUTH_USERNAME: ${{ secrets.VAPI_SIP_AUTH_USERNAME }}
+      VAPI_SIP_AUTH_PASSWORD: ${{ secrets.VAPI_SIP_AUTH_PASSWORD }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
       STRIPE_SMS_GST_TAX_RATE_ID: ${{ secrets.STRIPE_SMS_GST_TAX_RATE_ID }}
@@ -74,6 +78,9 @@ jobs:
             "TWILIO_FROM_NUMBER",
             "VAPI_API_KEY",
             "VAPI_SERVER_SECRET",
+            "VAPI_SERVER_CREDENTIAL_ID",
+            "VAPI_SIP_AUTH_USERNAME",
+            "VAPI_SIP_AUTH_PASSWORD",
             "STRIPE_SECRET_KEY",
             "STRIPE_WEBHOOK_SECRET",
             "STRIPE_SMS_GST_TAX_RATE_ID",
