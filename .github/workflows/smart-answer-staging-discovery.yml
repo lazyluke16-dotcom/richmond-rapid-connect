@@ -1,0 +1,271 @@
+name: Smart Answer staging asset discovery
+
+# READ-ONLY discovery of an isolated-staging Smart Answer certification
+# candidate. Performs NO mutations against Supabase, Twilio, Vapi, Cloudflare
+# or GitHub. Prints no secret values; emits only a sanitised artifact.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: staging
+
+    env:
+      RELEASE_SHA: ${{ github.sha }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      CERTIFICATION_STAGING_HOSTNAME: ${{ vars.CERTIFICATION_STAGING_HOSTNAME }}
+      STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+
+    steps:
+      - name: Read-only staging Supabase + Twilio discovery
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { writeFileSync, appendFileSync } = require("node:fs");
+
+          void (async () => {
+          const SUPA_URL = (process.env.STAGING_SUPABASE_URL || "").replace(/\/+$/, "");
+          const SUPA_KEY = process.env.STAGING_SUPABASE_SERVICE_ROLE_KEY || "";
+          const TW_SID = process.env.TWILIO_ACCOUNT_SID || "";
+          const TW_TOKEN = process.env.TWILIO_AUTH_TOKEN || "";
+          const RELEASE_SHA = process.env.RELEASE_SHA || "";
+          const PROJECT = process.env.STAGING_SUPABASE_PROJECT_REF || "";
+
+          // Mask customer PII numbers; platform/Twilio numbers are platform-owned
+          // and shown in full for matching + certification.
+          const maskPII = (v) => {
+            if (!v) return null;
+            const s = String(v);
+            const d = s.replace(/[^0-9]/g, "");
+            return d.length >= 4 ? `***${d.slice(-4)}` : "***";
+          };
+          const digits = (v) => (v ? String(v).replace(/[^0-9]/g, "") : "");
+          const stagingishName = (s) =>
+            /(^|[^a-z])(staging|stg|test|sandbox|demo|certif|qa)([^a-z]|$)/i.test(String(s || ""));
+          const prodish = (s) => /\b(prod|production|live|customer)\b/i.test(String(s || ""));
+
+          async function supa(table) {
+            const res = await fetch(`${SUPA_URL}/rest/v1/${table}?select=*`, {
+              headers: { apikey: SUPA_KEY, Authorization: `Bearer ${SUPA_KEY}` },
+            });
+            if (!res.ok) throw new Error(`Supabase ${table} -> HTTP ${res.status}`);
+            return res.json();
+          }
+
+          async function twilioIncoming() {
+            const auth = Buffer.from(`${TW_SID}:${TW_TOKEN}`).toString("base64");
+            const out = [];
+            let url = `https://api.twilio.com/2010-04-01/Accounts/${TW_SID}/IncomingPhoneNumbers.json?PageSize=100`;
+            for (let i = 0; i < 10 && url; i++) {
+              const res = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
+              if (!res.ok) throw new Error(`Twilio -> HTTP ${res.status}`);
+              const body = await res.json();
+              for (const n of body.incoming_phone_numbers || []) out.push(n);
+              url = body.next_page_uri ? `https://api.twilio.com${body.next_page_uri}` : null;
+            }
+            return out;
+          }
+
+          const errors = [];
+          let businesses = [], telephony = [], aiSettings = [], inventory = [], twilioNums = [];
+          try { businesses = await supa("businesses"); } catch (e) { errors.push(String(e.message)); }
+          try { telephony = await supa("business_telephony_settings"); } catch (e) { errors.push(String(e.message)); }
+          try { aiSettings = await supa("business_ai_receptionist_settings"); } catch (e) { errors.push(String(e.message)); }
+          try { inventory = await supa("platform_phone_inventory"); } catch (e) { errors.push(String(e.message)); }
+          try { twilioNums = await twilioIncoming(); } catch (e) { errors.push(String(e.message)); }
+
+          const byBiz = (rows) => Object.fromEntries(rows.map((r) => [r.business_id, r]));
+          const tel = byBiz(telephony);
+          const ai = byBiz(aiSettings);
+          const invById = Object.fromEntries(inventory.map((r) => [r.id, r]));
+
+          // Twilio lookup by trailing digits (handles +61 vs 0 formatting)
+          const twByDigits = {};
+          for (const n of twilioNums) {
+            const key = digits(n.phone_number).slice(-9);
+            if (key) twByDigits[key] = n;
+          }
+
+          const candidates = businesses.map((b) => {
+            const t = tel[b.id] || {};
+            const a = ai[b.id] || {};
+            const inv = t.inventory_phone_id ? invById[t.inventory_phone_id] : null;
+            const platformNumber = inv ? inv.phone_number : null;
+            const tw = platformNumber ? twByDigits[digits(platformNumber).slice(-9)] : null;
+
+            const stdReceptionist = Boolean(a.provider_assistant_id);
+            const smartAssistant = Boolean(a.smart_answer_assistant_id);
+            const sipPresent = Boolean(t.smart_answer_sip_phone_id || t.smart_answer_sip_uri);
+            const liveActive = t.live_status === "active";
+
+            return {
+              businessId: b.id,
+              name: b.name || null,
+              slug: b.slug || null,
+              nameLooksStaging: stagingishName(b.name) || stagingishName(b.slug),
+              telephonyLiveStatus: t.live_status ?? null,
+              activeSignal: liveActive,
+              answeringMode: t.answering_mode ?? null,
+              aiReceptionistEnabled: a.ai_receptionist_enabled === true,
+              providerAssistantId: stdReceptionist ? "PRESENT" : "ABSENT",
+              standardReceptionistProvisioned: stdReceptionist,
+              smartAnswerAssistant: smartAssistant ? "PRESENT" : "ABSENT",
+              sipEndpoint: sipPresent ? "PRESENT" : "ABSENT",
+              smartAnswerEnabled: t.smart_answer_enabled === true,
+              customerForwardingTarget: maskPII(t.forwarding_number),
+              customerInbound: maskPII(t.inbound_number || b.phone),
+              inventoryPhoneId: t.inventory_phone_id ?? null,
+              platformPhoneNumber: platformNumber,
+              inventoryStatus: inv ? inv.status : null,
+              inventoryAssignedBusinessId: inv ? (inv.assigned_business_id ?? null) : null,
+              inventoryReservedBusinessId: inv ? (inv.reserved_business_id ?? null) : null,
+              inventoryAllocationMatchesBusiness: Boolean(
+                inv && (inv.assigned_business_id === b.id || inv.reserved_business_id === b.id),
+              ),
+              twilioSidPresent: Boolean(tw),
+            };
+          });
+
+          // A tenant is provisionable-candidate when: staging-ish, has AI access +
+          // standard receptionist, an allocated platform phone, and no Smart Answer yet.
+          const scored = candidates
+            .map((c) => {
+              let score = 0;
+              if (c.nameLooksStaging) score += 3;
+              if (c.aiReceptionistEnabled) score += 2;
+              if (c.standardReceptionistProvisioned) score += 3;
+              if (c.platformPhoneNumber) score += 2;
+              if (c.inventoryAllocationMatchesBusiness) score += 1;
+              if (c.smartAnswerAssistant === "ABSENT") score += 1;
+              if (c.activeSignal) score += 1;
+              if (prodish(c.name) || prodish(c.slug)) score -= 5;
+              return { ...c, score };
+            })
+            .sort((x, y) => y.score - x.score);
+
+          const eligible = scored.filter(
+            (c) =>
+              c.standardReceptionistProvisioned &&
+              c.aiReceptionistEnabled &&
+              c.platformPhoneNumber &&
+              c.smartAnswerAssistant === "ABSENT" &&
+              !prodish(c.name) &&
+              !prodish(c.slug),
+          );
+          const recommended = eligible[0] || null;
+
+          // Twilio match + safety classification for the recommended number
+          let twilioMatch = null;
+          let phoneSafety = null;
+          if (recommended && recommended.platformPhoneNumber) {
+            const tw = twByDigits[digits(recommended.platformPhoneNumber).slice(-9)] || null;
+            if (!tw) {
+              phoneSafety = "NOT_PRESENT_IN_TWILIO";
+            } else {
+              const webhook = tw.voice_url || "";
+              const webhookStagingOnly =
+                webhook.includes(process.env.CERTIFICATION_STAGING_HOSTNAME || " ") ||
+                /staging/i.test(webhook);
+              const nameStaging = stagingishName(tw.friendly_name);
+              const exclusivelyAllocated =
+                recommended.inventoryAllocationMatchesBusiness &&
+                !prodish(recommended.name) &&
+                !prodish(recommended.slug);
+              const positive =
+                (nameStaging || webhookStagingOnly) && exclusivelyAllocated && recommended.nameLooksStaging;
+              phoneSafety = positive ? "CONFIRMED_STAGING_ONLY" : "POSSIBLY_SHARED_OR_PRODUCTION";
+              twilioMatch = {
+                phoneNumber: tw.phone_number,
+                twilioSid: tw.sid,
+                friendlyName: tw.friendly_name || null,
+                voiceUrl: webhook || null,
+                voiceMethod: tw.voice_method || null,
+                status: tw.status || null,
+                capabilities: tw.capabilities || null,
+                webhookLooksStagingOnly: webhookStagingOnly,
+                friendlyNameLooksStaging: nameStaging,
+              };
+            }
+          }
+
+          const readyForProvisioning = Boolean(recommended) && phoneSafety === "CONFIRMED_STAGING_ONLY";
+
+          const report = {
+            releaseSha: RELEASE_SHA,
+            stagingProject: PROJECT,
+            counts: {
+              businesses: businesses.length,
+              telephony: telephony.length,
+              aiSettings: aiSettings.length,
+              inventory: inventory.length,
+              twilioIncoming: twilioNums.length,
+              eligibleCandidates: eligible.length,
+            },
+            candidateBusinesses: scored,
+            twilioMatches: twilioMatch ? [twilioMatch] : [],
+            recommendedBusinessId: recommended ? recommended.businessId : null,
+            recommendedPlatformPhone: recommended ? recommended.platformPhoneNumber : null,
+            standardReceptionistPrerequisite: recommended
+              ? (recommended.standardReceptionistProvisioned ? "MET" : "NOT_MET")
+              : "NO_CANDIDATE",
+            phoneSafety: phoneSafety,
+            readyForProvisioning,
+            errors,
+            valuesPrinted: false,
+          };
+
+          writeFileSync("smart-answer-staging-discovery.json", `${JSON.stringify(report, null, 2)}\n`, {
+            mode: 0o600,
+          });
+
+          const summary = [
+            "# Smart Answer staging asset discovery",
+            "",
+            `Release SHA: \`${RELEASE_SHA}\``,
+            `Staging project: \`${PROJECT}\``,
+            "",
+            `Businesses: **${report.counts.businesses}** · Inventory: **${report.counts.inventory}** · Twilio numbers: **${report.counts.twilioIncoming}**`,
+            `Eligible candidates: **${report.counts.eligibleCandidates}**`,
+            `Recommended business: \`${report.recommendedBusinessId || "none"}\``,
+            `Recommended platform phone: \`${report.recommendedPlatformPhone || "none"}\``,
+            `Phone safety: **${report.phoneSafety || "n/a"}**`,
+            `Ready for provisioning: **${report.readyForProvisioning}**`,
+            errors.length ? `\nErrors: ${errors.map((e) => `\`${e}\``).join(", ")}` : "",
+            "",
+            "No secret values were printed. Customer numbers are masked. No writes were performed.",
+          ].join("\n");
+          if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+
+          console.log(
+            JSON.stringify({
+              counts: report.counts,
+              recommendedBusinessId: report.recommendedBusinessId,
+              phoneSafety: report.phoneSafety,
+              readyForProvisioning: report.readyForProvisioning,
+              errorCount: errors.length,
+              valuesPrinted: false,
+            }),
+          );
+          })().catch((e) => {
+            console.error("discovery failed:", e && e.message ? e.message : e);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload sanitised discovery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-staging-discovery
+          path: smart-answer-staging-discovery.json
+          if-no-files-found: error
+          retention-days: 7
