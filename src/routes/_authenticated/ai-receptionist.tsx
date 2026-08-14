@@ -127,6 +127,7 @@ function Page() {
   const s = ctx.settings;
   const locked = !ctx.has_access;
   const isProvisioned = Boolean(s.provider_assistant_id);
+  const providerReady = isProvisioned && s.status === "active";
   const isLive = isProvisioned && s.status === "active" && s.enabled && s.mode === "live";
 
   return (
@@ -161,6 +162,14 @@ function Page() {
           </div>
         )}
 
+        <div className="rounded-md border border-primary/40 bg-primary/5 p-3 text-sm">
+          This page configures the receptionist. Inbound routing is controlled from{" "}
+          <Link to="/call-handling" className="font-bold text-primary underline">
+            Call Handling
+          </Link>
+          , where only one answering mode can run at a time.
+        </div>
+
         {locked && (
           <div className="rounded-md border border-yellow-500/40 bg-yellow-500/5 p-4 text-sm">
             <div className="font-bold flex items-center gap-2">
@@ -178,20 +187,26 @@ function Page() {
 
         {!locked && (
           <section
-            className={`rounded-md border p-4 text-sm ${isLive ? "border-green-500/40 bg-green-500/5" : "border-yellow-500/40 bg-yellow-500/5"}`}
+            className={`rounded-md border p-4 text-sm ${providerReady ? "border-green-500/40 bg-green-500/5" : "border-yellow-500/40 bg-yellow-500/5"}`}
           >
             <div className="font-bold flex items-center gap-2">
-              {isLive ? (
+              {providerReady ? (
                 <Radio className="h-4 w-4 text-green-500" />
               ) : (
                 <AlertTriangle className="h-4 w-4" />
               )}
-              {isLive ? "AI receptionist is live" : "Provider activation required"}
+              {isLive
+                ? "AI Receptionist is the active mode"
+                : providerReady
+                  ? "AI provider is ready"
+                  : "Provider activation required"}
             </div>
             <p className="mt-1 text-muted-foreground">
               {isLive
                 ? "Vapi is configured with your current services, areas, hours and call script. New calls are resolved to this business by the trusted assistant mapping."
-                : "Create the managed Vapi assistant after reviewing the settings below. A phone number can then be assigned to this assistant during customer activation."}
+                : providerReady
+                  ? "The managed assistant is ready. Choose AI Receptionist from Call Handling when you want it to answer inbound calls."
+                  : "Create the managed Vapi assistant after reviewing the settings below. Provider setup does not change your active call handling mode."}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               {!isProvisioned ? (
@@ -205,7 +220,7 @@ function Page() {
                   ) : (
                     <Power className="h-4 w-4" />
                   )}{" "}
-                  Create and activate assistant
+                  Create assistant
                 </button>
               ) : (
                 <>
@@ -237,25 +252,6 @@ function Page() {
         <section className="rounded-lg border border-border bg-card p-4 space-y-4">
           <h2 className="text-sm uppercase tracking-widest text-muted-foreground">Basics</h2>
           <div className="grid md:grid-cols-2 gap-3">
-            <Field label="Enabled">
-              <input
-                type="checkbox"
-                checked={s.enabled}
-                disabled={locked || saving}
-                onChange={(e) => void patch({ enabled: e.target.checked })}
-              />
-            </Field>
-            <Field label="Mode">
-              <select
-                value={s.mode}
-                disabled={locked || saving}
-                onChange={(e) => void patch({ mode: e.target.value as "demo" | "live" })}
-                className="w-full rounded-md bg-background border border-border px-2 py-1 text-sm"
-              >
-                <option value="demo">Demo / simulator</option>
-                <option value="live">Live (requires provider mapping)</option>
-              </select>
-            </Field>
             <Field label="Assistant name">
               <Text
                 v={s.assistant_name}

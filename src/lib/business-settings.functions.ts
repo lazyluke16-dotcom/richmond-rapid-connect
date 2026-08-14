@@ -1,11 +1,12 @@
-import { createServerFn } from '@tanstack/react-start';
-import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
+import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import {
   CoveragePayloadSchema,
   LicencePayloadSchema,
   type CoveragePayload,
   type LicencePayload,
-} from '@/lib/onboarding-validation';
+} from "@/lib/onboarding-validation";
+import { normalizeAustralianPhone } from "@/lib/call-handling";
 
 export interface EditableBusiness {
   id: string;
@@ -38,21 +39,32 @@ export interface EditableBusiness {
 
 // Column lists for tolerant reads while the Phase 1 migration is unapplied.
 const BASE_COLS =
-  'id,name,slug,public_phone,public_email,logo_url,primary_colour,secondary_colour,accent_colour,short_description,hero_heading,hero_subheading,emergency_message';
+  "id,name,slug,public_phone,public_email,logo_url,primary_colour,secondary_colour,accent_colour,short_description,hero_heading,hero_subheading,emergency_message";
 const PHASE1_COLS =
   BASE_COLS +
-  ',base_suburb,base_state,base_postcode,travel_radius_km,region_labels,postcode_ranges,excluded_areas,licence_number,licence_holder_name,licence_expiry,licence_public';
+  ",base_suburb,base_state,base_postcode,travel_radius_km,region_labels,postcode_ranges,excluded_areas,licence_number,licence_holder_name,licence_expiry,licence_public";
 
 function isMissingPhase1Column(err: { message?: string; code?: string } | null): boolean {
   if (!err) return false;
-  if (err.code === '42703') return true;
-  const m = (err.message ?? '').toLowerCase();
+  if (err.code === "42703") return true;
+  const m = (err.message ?? "").toLowerCase();
   const cols = [
-    'base_suburb','base_state','base_postcode','travel_radius_km',
-    'region_labels','postcode_ranges','excluded_areas',
-    'licence_number','licence_holder_name','licence_expiry','licence_public',
+    "base_suburb",
+    "base_state",
+    "base_postcode",
+    "travel_radius_km",
+    "region_labels",
+    "postcode_ranges",
+    "excluded_areas",
+    "licence_number",
+    "licence_holder_name",
+    "licence_expiry",
+    "licence_public",
   ];
-  return cols.some((c) => m.includes(c)) && (m.includes('does not exist') || m.includes('not found') || m.includes('could not find'));
+  return (
+    cols.some((c) => m.includes(c)) &&
+    (m.includes("does not exist") || m.includes("not found") || m.includes("could not find"))
+  );
 }
 
 // -------------------------------------------------------------------------
@@ -99,7 +111,7 @@ export async function applyCoverageUpdate(
 ): Promise<{ success: true }> {
   const data = CoveragePayloadSchema.parse(input);
   const id = await deps.resolveCurrentBusinessId();
-  if (!id) throw new Error('No business membership found');
+  if (!id) throw new Error("No business membership found");
   await deps.updateBusinessById(id, buildCoveragePatch(data));
   return { success: true };
 }
@@ -110,42 +122,56 @@ export async function applyLicenceUpdate(
 ): Promise<{ success: true }> {
   const data = LicencePayloadSchema.parse(input);
   const id = await deps.resolveCurrentBusinessId();
-  if (!id) throw new Error('No business membership found');
+  if (!id) throw new Error("No business membership found");
   await deps.updateBusinessById(id, buildLicencePatch(data));
   return { success: true };
 }
 
 function makeSupabaseDeps(supabase: {
   from: (t: string) => {
-    select: (c: string) => { limit: (n: number) => { maybeSingle: () => Promise<{ data: { id?: string } | null; error: { message: string } | null }> } };
-    update: (patch: Record<string, unknown>) => { eq: (col: string, val: string) => Promise<{ error: { message: string } | null }> };
+    select: (c: string) => {
+      limit: (n: number) => {
+        maybeSingle: () => Promise<{
+          data: { id?: string } | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+    update: (patch: Record<string, unknown>) => {
+      eq: (col: string, val: string) => Promise<{ error: { message: string } | null }>;
+    };
   };
 }): BusinessUpdateDeps {
   return {
     resolveCurrentBusinessId: async () => {
-      const { data, error } = await supabase.from('businesses').select('id').limit(1).maybeSingle();
+      const { data, error } = await supabase.from("businesses").select("id").limit(1).maybeSingle();
       if (error) throw new Error(error.message);
       return data?.id ?? null;
     },
     updateBusinessById: async (id, patch) => {
-      const { error } = await supabase.from('businesses').update(patch).eq('id', id);
+      const { error } = await supabase.from("businesses").update(patch).eq("id", id);
       if (error) throw new Error(error.message);
     },
   };
 }
 
 /** Authenticated: returns ONLY the caller's own business (RLS-enforced). */
-export const getMyBusiness = createServerFn({ method: 'GET' })
+export const getMyBusiness = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<EditableBusiness | null> => {
     type Row = Record<string, unknown> | null;
     type Err = { message: string; code?: string } | null;
     const read = (cols: string) =>
-      (context.supabase.from('businesses') as unknown as {
-        select: (c: string) => {
-          limit: (n: number) => { maybeSingle: () => Promise<{ data: Row; error: Err }> };
-        };
-      }).select(cols).limit(1).maybeSingle();
+      (
+        context.supabase.from("businesses") as unknown as {
+          select: (c: string) => {
+            limit: (n: number) => { maybeSingle: () => Promise<{ data: Row; error: Err }> };
+          };
+        }
+      )
+        .select(cols)
+        .limit(1)
+        .maybeSingle();
     let { data, error } = await read(PHASE1_COLS);
     if (error && isMissingPhase1Column(error)) {
       ({ data, error } = await read(BASE_COLS));
@@ -159,13 +185,23 @@ export const getMyBusiness = createServerFn({ method: 'GET' })
  * update to `id = current_business_id()`, so any client-supplied `id` in the
  * payload cannot target another tenant.
  */
-export const updateMyBusiness = createServerFn({ method: 'POST' })
+export const updateMyBusiness = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: Partial<EditableBusiness>) => data)
   .handler(async ({ data, context }) => {
+    const normalizedPhone =
+      data.public_phone === undefined
+        ? undefined
+        : normalizeAustralianPhone(data.public_phone ?? "");
+    if (normalizedPhone) {
+      const { error: phoneError } = await context.supabase.rpc(
+        "set_my_customer_phone" as never,
+        { _phone_e164: normalizedPhone } as never,
+      );
+      if (phoneError) throw new Error(phoneError.message);
+    }
     const editable = {
       name: data.name,
-      public_phone: data.public_phone,
       public_email: data.public_email,
       logo_url: data.logo_url,
       primary_colour: data.primary_colour,
@@ -177,13 +213,16 @@ export const updateMyBusiness = createServerFn({ method: 'POST' })
       emergency_message: data.emergency_message,
     };
     const { data: current, error: qErr } = await context.supabase
-      .from('businesses').select('id').limit(1).maybeSingle();
+      .from("businesses")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
     if (qErr) throw new Error(qErr.message);
-    if (!current?.id) throw new Error('No business membership found');
+    if (!current?.id) throw new Error("No business membership found");
     const { error } = await context.supabase
-      .from('businesses')
+      .from("businesses")
       .update(editable as never)
-      .eq('id', current.id);
+      .eq("id", current.id);
     if (error) throw new Error(error.message);
     return { success: true };
   });
@@ -195,7 +234,7 @@ export const updateMyBusiness = createServerFn({ method: 'POST' })
  * and are NOT touched by this fn — the two coexist, and this call must
  * never overwrite/delete existing suburb rows.
  */
-export const setMyCoverage = createServerFn({ method: 'POST' })
+export const setMyCoverage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => data)
   .handler(async ({ data, context }) =>
@@ -208,7 +247,7 @@ export const setMyCoverage = createServerFn({ method: 'POST' })
  * public surfaces must respect it before rendering. No external
  * verification is performed here — a future Go-Live step may add that.
  */
-export const setMyLicence = createServerFn({ method: 'POST' })
+export const setMyLicence = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => data)
   .handler(async ({ data, context }) =>

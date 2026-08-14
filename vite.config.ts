@@ -7,6 +7,12 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
 
+// @lovable.dev/mcp-js 0.24.0 compares mixed slash styles on Windows linked
+// worktrees and aborts before Vite can build. Lovable/Linux builds keep the
+// plugin; local Windows verification can skip only its route-generation step
+// because the generated MCP route files are already committed.
+const localWindowsMcpWorkaround = process.env.LOCAL_BUILD_DISABLE_MCP_PLUGIN === "1";
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
@@ -14,6 +20,6 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    plugins: [mcpPlugin()],
+    plugins: localWindowsMcpWorkaround ? [] : [mcpPlugin()],
   },
 });

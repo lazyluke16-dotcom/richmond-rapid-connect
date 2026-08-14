@@ -11,7 +11,12 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify:migrations": "node scripts/verify-migration-manifest.mjs",
+    "certify:local": "npm run verify:migrations && vitest run src/lib/__tests__/sms-invoicing.behavior.test.ts src/lib/__tests__/sms-invoice-certification-route.behavior.test.ts src/lib/__tests__/vapi-text-link.behavior.test.ts src/lib/__tests__/onboarding-phone-continuity.behavior.test.ts src/lib/__tests__/migration-manifest.behavior.test.ts src/lib/__tests__/staging-certification-guard.behavior.test.ts src/lib/__tests__/staging-deployment.behavior.test.ts",
+    "certify:staging": "node scripts/staging-certification.mjs",
+    "deploy:staging:plan": "node scripts/staging-deployment.mjs --plan",
+    "deploy:staging:preflight": "node scripts/staging-deployment.mjs --preflight"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -86,6 +91,7 @@
     "globals": "^15.15.0",
     "nitro": "3.0.260603-beta",
     "prettier": "^3.7.3",
+    "supabase": "2.109.1",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.16",

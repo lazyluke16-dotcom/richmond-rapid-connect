@@ -1,16 +1,10 @@
--- Phase 2G.1 acceptance gap fix: persist the exact onboarding wizard step.
---
--- Idempotent, repository-only. NOT AUTO-EXECUTED. Placed under
--- supabase/migrations-pending/ for human review because this Lovable
--- environment forbids adding files under supabase/migrations/ without
--- running them through the migration tool. Move (or copy) this file into
--- supabase/migrations/ once approved for execution.
+-- Persist the exact onboarding wizard step.
 --
 -- What this does:
 --   - Adds public.businesses.onboarding_step (smallint, NOT NULL DEFAULT 0).
 --   - Constrains it to the wizard's 0..7 range via a named CHECK constraint.
 --
--- What this does NOT do: no data changes, no RLS changes, no grant changes.
+-- No data, RLS, or grant changes are made.
 -- Range matches src/lib/onboarding-validation.ts (ONBOARDING_STEP_MIN/MAX).
 
 ALTER TABLE public.businesses

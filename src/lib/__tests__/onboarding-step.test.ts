@@ -45,6 +45,7 @@ describe("OnboardingStepSchema strict write validation", () => {
 describe("server-authoritative onboarding readiness", () => {
   const ready = {
     businessName: "Harbour Plumbing",
+    publicPhone: "+61412000111",
     servicesCount: 2,
     areasCount: 3,
     hoursCount: 7,
@@ -59,6 +60,7 @@ describe("server-authoritative onboarding readiness", () => {
 
   it.each([
     ["business profile", { businessName: " " }],
+    ["an Australian business phone", { publicPhone: "+1 415 555 0100" }],
     ["at least one service", { servicesCount: 0 }],
     ["at least one service area", { areasCount: 0 }],
     ["business hours", { hoursCount: 0 }],
@@ -78,6 +80,7 @@ describe("server-authoritative onboarding readiness", () => {
       }),
     ).toEqual([
       "business profile",
+      "an Australian business phone",
       "at least one service",
       "at least one service area",
       "business hours",

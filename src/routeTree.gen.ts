@@ -24,6 +24,7 @@ import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as AuthenticatedAiReceptionistRouteImport } from './routes/_authenticated/ai-receptionist'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
+import { Route as AuthenticatedCallHandlingRouteImport } from './routes/_authenticated/call-handling'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedMissedCallSettingsRouteImport } from './routes/_authenticated/missed-call-settings'
 import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
@@ -36,6 +37,8 @@ import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[
 import { Route as ApiDashboardVerifyPinRouteImport } from './routes/api/dashboard.verify-pin'
 import { Route as ApiDemoTriggerSmsRouteImport } from './routes/api/demo.trigger-sms'
 import { Route as ApiPublicProcessEnrichmentJobsRouteImport } from './routes/api/public/process-enrichment-jobs'
+import { Route as ApiPublicProcessSmsInvoiceRouteImport } from './routes/api/public/process-sms-invoice'
+import { Route as ApiPublicStagingReleaseRouteImport } from './routes/api/public/staging-release'
 import { Route as ApiWebhooksAiPhoneLeadRouteImport } from './routes/api/webhooks.ai-phone-lead'
 import { Route as BSlugIndexRouteImport } from './routes/b.$slug.index'
 import { Route as BSlugChatRouteImport } from './routes/b.$slug.chat'
@@ -126,6 +129,12 @@ const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
   path: '/billing',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCallHandlingRoute =
+  AuthenticatedCallHandlingRouteImport.update({
+    id: '/call-handling',
+    path: '/call-handling',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -189,6 +198,17 @@ const ApiPublicProcessEnrichmentJobsRoute =
     path: '/api/public/process-enrichment-jobs',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicProcessSmsInvoiceRoute =
+  ApiPublicProcessSmsInvoiceRouteImport.update({
+    id: '/api/public/process-sms-invoice',
+    path: '/api/public/process-sms-invoice',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicStagingReleaseRoute = ApiPublicStagingReleaseRouteImport.update({
+  id: '/api/public/staging-release',
+  path: '/api/public/staging-release',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiWebhooksAiPhoneLeadRoute = ApiWebhooksAiPhoneLeadRouteImport.update({
   id: '/api/webhooks/ai-phone-lead',
   path: '/api/webhooks/ai-phone-lead',
@@ -269,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/call-handling': typeof AuthenticatedCallHandlingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
@@ -281,6 +302,8 @@ export interface FileRoutesByFullPath {
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
+  '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
+  '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
   '/api/webhooks/ai-phone-lead': typeof ApiWebhooksAiPhoneLeadRoute
   '/b/$slug/chat': typeof BSlugChatRoute
   '/b/$slug/confirmation': typeof BSlugConfirmationRoute
@@ -309,6 +332,7 @@ export interface FileRoutesByTo {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/call-handling': typeof AuthenticatedCallHandlingRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/onboarding': typeof AuthenticatedOnboardingRoute
@@ -320,6 +344,8 @@ export interface FileRoutesByTo {
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
+  '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
+  '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
   '/api/webhooks/ai-phone-lead': typeof ApiWebhooksAiPhoneLeadRoute
   '/b/$slug/chat': typeof BSlugChatRoute
   '/b/$slug/confirmation': typeof BSlugConfirmationRoute
@@ -350,6 +376,7 @@ export interface FileRoutesById {
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/_authenticated/ai-receptionist': typeof AuthenticatedAiReceptionistRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
+  '/_authenticated/call-handling': typeof AuthenticatedCallHandlingRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/missed-call-settings': typeof AuthenticatedMissedCallSettingsRoute
   '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
@@ -362,6 +389,8 @@ export interface FileRoutesById {
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/process-enrichment-jobs': typeof ApiPublicProcessEnrichmentJobsRoute
+  '/api/public/process-sms-invoice': typeof ApiPublicProcessSmsInvoiceRoute
+  '/api/public/staging-release': typeof ApiPublicStagingReleaseRoute
   '/api/webhooks/ai-phone-lead': typeof ApiWebhooksAiPhoneLeadRoute
   '/b/$slug/chat': typeof BSlugChatRoute
   '/b/$slug/confirmation': typeof BSlugConfirmationRoute
@@ -392,6 +421,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/ai-receptionist'
     | '/billing'
+    | '/call-handling'
     | '/dashboard'
     | '/missed-call-settings'
     | '/onboarding'
@@ -404,6 +434,8 @@ export interface FileRouteTypes {
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/process-enrichment-jobs'
+    | '/api/public/process-sms-invoice'
+    | '/api/public/staging-release'
     | '/api/webhooks/ai-phone-lead'
     | '/b/$slug/chat'
     | '/b/$slug/confirmation'
@@ -432,6 +464,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/ai-receptionist'
     | '/billing'
+    | '/call-handling'
     | '/dashboard'
     | '/missed-call-settings'
     | '/onboarding'
@@ -443,6 +476,8 @@ export interface FileRouteTypes {
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/process-enrichment-jobs'
+    | '/api/public/process-sms-invoice'
+    | '/api/public/staging-release'
     | '/api/webhooks/ai-phone-lead'
     | '/b/$slug/chat'
     | '/b/$slug/confirmation'
@@ -472,6 +507,7 @@ export interface FileRouteTypes {
     | '/.well-known/oauth-protected-resource'
     | '/_authenticated/ai-receptionist'
     | '/_authenticated/billing'
+    | '/_authenticated/call-handling'
     | '/_authenticated/dashboard'
     | '/_authenticated/missed-call-settings'
     | '/_authenticated/onboarding'
@@ -484,6 +520,8 @@ export interface FileRouteTypes {
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/process-enrichment-jobs'
+    | '/api/public/process-sms-invoice'
+    | '/api/public/staging-release'
     | '/api/webhooks/ai-phone-lead'
     | '/b/$slug/chat'
     | '/b/$slug/confirmation'
@@ -520,6 +558,8 @@ export interface RootRouteChildren {
   ApiDashboardVerifyPinRoute: typeof ApiDashboardVerifyPinRoute
   ApiDemoTriggerSmsRoute: typeof ApiDemoTriggerSmsRoute
   ApiPublicProcessEnrichmentJobsRoute: typeof ApiPublicProcessEnrichmentJobsRoute
+  ApiPublicProcessSmsInvoiceRoute: typeof ApiPublicProcessSmsInvoiceRoute
+  ApiPublicStagingReleaseRoute: typeof ApiPublicStagingReleaseRoute
   ApiWebhooksAiPhoneLeadRoute: typeof ApiWebhooksAiPhoneLeadRoute
   ApiPublicBillingCheckoutRoute: typeof ApiPublicBillingCheckoutRoute
   ApiPublicBillingPortalRoute: typeof ApiPublicBillingPortalRoute
@@ -636,6 +676,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBillingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/call-handling': {
+      id: '/_authenticated/call-handling'
+      path: '/call-handling'
+      fullPath: '/call-handling'
+      preLoaderRoute: typeof AuthenticatedCallHandlingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -718,6 +765,20 @@ declare module '@tanstack/react-router' {
       path: '/api/public/process-enrichment-jobs'
       fullPath: '/api/public/process-enrichment-jobs'
       preLoaderRoute: typeof ApiPublicProcessEnrichmentJobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/process-sms-invoice': {
+      id: '/api/public/process-sms-invoice'
+      path: '/api/public/process-sms-invoice'
+      fullPath: '/api/public/process-sms-invoice'
+      preLoaderRoute: typeof ApiPublicProcessSmsInvoiceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/staging-release': {
+      id: '/api/public/staging-release'
+      path: '/api/public/staging-release'
+      fullPath: '/api/public/staging-release'
+      preLoaderRoute: typeof ApiPublicStagingReleaseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/webhooks/ai-phone-lead': {
@@ -810,6 +871,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAiReceptionistRoute: typeof AuthenticatedAiReceptionistRoute
   AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
+  AuthenticatedCallHandlingRoute: typeof AuthenticatedCallHandlingRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedMissedCallSettingsRoute: typeof AuthenticatedMissedCallSettingsRoute
   AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
@@ -819,6 +881,7 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAiReceptionistRoute: AuthenticatedAiReceptionistRoute,
   AuthenticatedBillingRoute: AuthenticatedBillingRoute,
+  AuthenticatedCallHandlingRoute: AuthenticatedCallHandlingRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedMissedCallSettingsRoute: AuthenticatedMissedCallSettingsRoute,
   AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
@@ -869,6 +932,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDashboardVerifyPinRoute: ApiDashboardVerifyPinRoute,
   ApiDemoTriggerSmsRoute: ApiDemoTriggerSmsRoute,
   ApiPublicProcessEnrichmentJobsRoute: ApiPublicProcessEnrichmentJobsRoute,
+  ApiPublicProcessSmsInvoiceRoute: ApiPublicProcessSmsInvoiceRoute,
+  ApiPublicStagingReleaseRoute: ApiPublicStagingReleaseRoute,
   ApiWebhooksAiPhoneLeadRoute: ApiWebhooksAiPhoneLeadRoute,
   ApiPublicBillingCheckoutRoute: ApiPublicBillingCheckoutRoute,
   ApiPublicBillingPortalRoute: ApiPublicBillingPortalRoute,
