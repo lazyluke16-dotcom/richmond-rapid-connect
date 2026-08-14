@@ -53,7 +53,10 @@ jobs:
             --outfile=staging-tenant-bootstrap.mjs
 
       - name: Run the guarded staging tenant bootstrap
-        run: node staging-tenant-bootstrap.mjs | tee staging-tenant-bootstrap-result.json
+        shell: bash
+        run: |
+          set -o pipefail
+          node staging-tenant-bootstrap.mjs | tee staging-tenant-bootstrap-result.json
 
       - name: Upload sanitised bootstrap result
         if: always()

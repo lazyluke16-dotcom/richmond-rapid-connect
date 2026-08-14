@@ -87,7 +87,9 @@ async function findOrCreateCertificationBusiness(
       slug,
       selected_plan: "ai_receptionist",
       active: true,
-      // trial_ends_at left null => AI receptionist access is granted.
+      // Service-role-only, staging-test billing exemption. has_ai_receptionist_access
+      // grants entitlement via effective_billing_state() = 'billing_exempt_test'.
+      billing_exempt: true,
     } as never)
     .select("id")
     .single();
@@ -181,6 +183,15 @@ export async function bootstrapSmartAnswerCertificationTenant(
   const supabaseAdmin = rawAdmin as unknown as SupabaseAdminLike;
 
   const { businessId, created } = await findOrCreateCertificationBusiness(supabaseAdmin, slug);
+
+  // Ensure the staging-test billing exemption even for a tenant created by an
+  // earlier partial run (service role may change billing_exempt; the immutable-
+  // lock trigger only blocks the 'authenticated' role).
+  const { error: exemptError } = await supabaseAdmin
+    .from("businesses")
+    .update({ billing_exempt: true } as never)
+    .eq("id", businessId);
+  if (exemptError) throw new Error(`Set staging billing exemption failed: ${exemptError.message}`);
 
   // Minimal valid application state for standard AI receptionist provisioning.
   // AI settings and telephony rows rely on their column defaults; we only pin
