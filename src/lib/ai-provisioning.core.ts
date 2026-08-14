@@ -157,16 +157,18 @@ export async function provisionAiAssistantForBusinessInternal(
     "Failed to persist assistant settings",
   );
   try {
+    // A freshly created Vapi assistant always has a new provider_assistant_id,
+    // so this is an insert. The unique index on (provider, provider_assistant_id)
+    // is PARTIAL (WHERE provider_assistant_id IS NOT NULL), which Postgres cannot
+    // use for ON CONFLICT inference — so a plain insert is used, and any genuine
+    // duplicate surfaces as a unique violation that triggers the cleanup below.
     await requireWrite(
-      supabaseAdmin.from("ai_provider_mappings").upsert(
-        {
-          business_id: businessId,
-          provider: "vapi",
-          provider_assistant_id: created.id,
-          active: true,
-        } as never,
-        { onConflict: "provider,provider_assistant_id" } as never,
-      ),
+      supabaseAdmin.from("ai_provider_mappings").insert({
+        business_id: businessId,
+        provider: "vapi",
+        provider_assistant_id: created.id,
+        active: true,
+      } as never),
       "Failed to persist assistant mapping",
     );
   } catch (error) {

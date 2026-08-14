@@ -15,7 +15,7 @@ const state = vi.hoisted(() => ({
   createdAssistants: [] as unknown[],
   deletedAssistants: [] as string[],
   updates: [] as { table: string; row: Record<string, unknown> }[],
-  upserts: [] as { table: string; row: Record<string, unknown> }[],
+  inserts: [] as { table: string; row: Record<string, unknown> }[],
   mappingError: null as string | null,
 }));
 
@@ -64,11 +64,15 @@ vi.mock("@/integrations/supabase/client.server", () => {
         state.updates.push({ table, row });
         return chain;
       },
-      upsert: async (row: Record<string, unknown>) => {
-        state.upserts.push({ table, row });
-        return { error: state.mappingError ? { message: state.mappingError } : null };
+      insert: async (row: Record<string, unknown>) => {
+        state.inserts.push({ table, row });
+        return {
+          error:
+            table === "ai_provider_mappings" && state.mappingError
+              ? { message: state.mappingError }
+              : null,
+        };
       },
-      insert: async () => ({ error: null }),
       maybeSingle: async () => {
         if (table === "businesses") return { data: biz, error: null };
         if (table === "business_ai_receptionist_settings") return { data: settings, error: null };
@@ -93,7 +97,7 @@ beforeEach(() => {
   state.createdAssistants.length = 0;
   state.deletedAssistants.length = 0;
   state.updates.length = 0;
-  state.upserts.length = 0;
+  state.inserts.length = 0;
   state.mappingError = null;
   process.env.PUBLIC_JOB_REQUEST_URL = "https://staging.example";
 });
@@ -124,7 +128,7 @@ describe("provisionAiAssistantForBusinessInternal", () => {
       status: "active",
       provider: "vapi",
     });
-    const mapping = state.upserts.find((u) => u.table === "ai_provider_mappings");
+    const mapping = state.inserts.find((u) => u.table === "ai_provider_mappings");
     expect(mapping?.row).toMatchObject({
       provider: "vapi",
       provider_assistant_id: "vapi-assistant-1",

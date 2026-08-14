@@ -217,12 +217,20 @@ export async function bootstrapSmartAnswerCertificationTenant(
     .select("provider_assistant_id,status")
     .eq("business_id", businessId)
     .maybeSingle();
-  const existingAssistant = (
-    existingSettings as { provider_assistant_id?: string; status?: string } | null
-  )?.provider_assistant_id;
+  const existingRow = existingSettings as {
+    provider_assistant_id?: string;
+    status?: string;
+  } | null;
+  // Only reuse a genuinely active assistant. A leftover error/inactive state
+  // (e.g. from a partial earlier run whose mapping write failed and rolled back)
+  // must re-provision rather than trust a stale/deleted assistant id.
+  const reusableAssistant =
+    existingRow?.provider_assistant_id && existingRow.status === "active"
+      ? existingRow.provider_assistant_id
+      : null;
 
   let provisioning: "created" | "reused" = "reused";
-  if (!existingAssistant) {
+  if (!reusableAssistant) {
     const result = await provisionAiAssistantForBusinessInternal(businessId);
     if (!result.provisioned) {
       throw new Error(`Standard receptionist provisioning failed: ${result.reason}`);
