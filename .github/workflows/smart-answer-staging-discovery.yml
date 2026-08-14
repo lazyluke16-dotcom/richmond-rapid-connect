@@ -173,8 +173,9 @@ jobs:
               phoneSafety = "NOT_PRESENT_IN_TWILIO";
             } else {
               const webhook = tw.voice_url || "";
+              const stagingHost = process.env.CERTIFICATION_STAGING_HOSTNAME || "";
               const webhookStagingOnly =
-                webhook.includes(process.env.CERTIFICATION_STAGING_HOSTNAME || " ") ||
+                (stagingHost !== "" && webhook.includes(stagingHost)) ||
                 /staging/i.test(webhook);
               const nameStaging = stagingishName(tw.friendly_name);
               const exclusivelyAllocated =
