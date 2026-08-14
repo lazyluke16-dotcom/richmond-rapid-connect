@@ -238,14 +238,21 @@ export async function bootstrapSmartAnswerCertificationTenant(
     provisioning = "created";
   }
 
-  // Establish standard AI receptionist call-handling readiness. Smart Answer
-  // stays OFF; forwarding is never falsely marked verified.
+  // Enable the AI receptionist entitlement flag. We intentionally do NOT flip
+  // answering_mode to 'ai_receptionist' here: the deferred call-handling
+  // consistency trigger couples that mode to ai_settings.enabled+mode='live'
+  // and missed-call off in a single transaction, and the canonical activation
+  // (set_my_call_handling_mode) additionally requires an allocated platform
+  // phone and VERIFIED no-answer forwarding. Those belong to the later Twilio
+  // stage; activating the mode now would require faking forwarding or bypassing
+  // a readiness rule — both forbidden. Smart Answer stays OFF; forwarding is
+  // never falsely marked verified.
   const { error: telephonyError } = await supabaseAdmin
     .from("business_telephony_settings")
-    .update({ answering_mode: "ai_receptionist", ai_receptionist_enabled: true } as never)
+    .update({ ai_receptionist_enabled: true } as never)
     .eq("business_id", businessId);
   if (telephonyError)
-    throw new Error(`Set call-handling readiness failed: ${telephonyError.message}`);
+    throw new Error(`Set AI receptionist entitlement failed: ${telephonyError.message}`);
 
   // Read back the final, sanitised state for verification.
   const [{ data: settings }, { data: telephony }, { data: mapping }] = await Promise.all([

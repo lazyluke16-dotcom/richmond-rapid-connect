@@ -149,12 +149,15 @@ describe("bootstrap establishes standard readiness without Smart Answer", () => 
     expect(result.provisioning).toBe("created");
     expect(result.providerAssistantId).toBe("vapi-assistant-1");
 
-    // Standard readiness set; Smart Answer strictly untouched.
+    // AI receptionist entitlement enabled; answering_mode NOT force-activated
+    // here (that is gated on phone + verified forwarding), and Smart Answer
+    // strictly untouched.
     const telephonyUpdate = state.updates.find((u) => u.table === "business_telephony_settings");
-    expect(telephonyUpdate?.row).toEqual({
-      answering_mode: "ai_receptionist",
-      ai_receptionist_enabled: true,
-    });
+    expect(telephonyUpdate?.row).toEqual({ ai_receptionist_enabled: true });
+    for (const u of state.updates) {
+      expect(Object.keys(u.row)).not.toContain("answering_mode");
+      expect(Object.keys(u.row)).not.toContain("forwarding_setup_status");
+    }
     // No update anywhere wrote a Smart Answer / SIP field.
     for (const u of state.updates) {
       expect(Object.keys(u.row)).not.toContain("smart_answer_enabled");
