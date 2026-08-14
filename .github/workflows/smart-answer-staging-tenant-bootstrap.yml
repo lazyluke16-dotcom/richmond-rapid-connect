@@ -1,0 +1,65 @@
+name: Smart Answer staging tenant bootstrap
+
+# Provisions (or reuses) the isolated-staging Smart Answer certification tenant
+# and its STANDARD Vapi receptionist, by running the shared provisioning core in
+# the protected staging environment. Fails closed unless every staging guard in
+# staging-tenant-bootstrap.core.ts passes. Does NOT enable Smart Answer, touch
+# SIP/phone inventory, Twilio, or carrier forwarding. Prints no secret values.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: staging
+
+    env:
+      DEPLOYMENT_TARGET: staging
+      STAGING_CERTIFICATION_ENABLED: "true"
+      CERTIFICATION_ENVIRONMENT_ID: staging-commercial-rc
+      EXPECTED_STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      PUBLIC_JOB_REQUEST_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+      VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
+      VAPI_SERVER_CREDENTIAL_ID: ${{ secrets.VAPI_SERVER_CREDENTIAL_ID }}
+
+    steps:
+      - name: Check out the requested Smart Answer source
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Bundle the staging bootstrap entry
+        run: |
+          npx esbuild scripts/staging-smart-answer-tenant-bootstrap.ts \
+            --bundle \
+            --platform=node \
+            --format=esm \
+            --tsconfig=tsconfig.json \
+            --outfile=staging-tenant-bootstrap.mjs
+
+      - name: Run the guarded staging tenant bootstrap
+        run: node staging-tenant-bootstrap.mjs | tee staging-tenant-bootstrap-result.json
+
+      - name: Upload sanitised bootstrap result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-staging-tenant-bootstrap
+          path: staging-tenant-bootstrap-result.json
+          if-no-files-found: warn
+          retention-days: 7
