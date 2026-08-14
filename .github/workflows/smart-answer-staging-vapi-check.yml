@@ -79,8 +79,31 @@ jobs:
           );
 
           const keyWorks = raw.ok;
+          const workingKey = trimmed.ok ? KEY_TRIMMED : raw.ok ? KEY_RAW : null;
+
+          // Vapi requires server.credentialId to be a UUID that exists in the
+          // account. Validate the configured id without ever printing it.
+          const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const credentialIdIsUuid = UUID_RE.test(CRED_ENV);
+          let credentialExistsInAccount = false;
+          if (workingKey && credentialIdIsUuid) {
+            try {
+              const res = await fetch(`${BASE}/credential`, {
+                headers: { Authorization: `Bearer ${workingKey}` },
+              });
+              if (res.ok) {
+                const creds = await res.json();
+                credentialExistsInAccount =
+                  Array.isArray(creds) && creds.some((c) => c && c.id === CRED_ENV);
+              }
+            } catch {
+              credentialExistsInAccount = false;
+            }
+          }
+          const configuredCredentialUsable =
+            Boolean(CRED_ENV) && credentialIdIsUuid && credentialExistsInAccount;
           const credentialResolvable =
-            Boolean(CRED_ENV) || matchingStandardUrl.length > 0;
+            configuredCredentialUsable || matchingStandardUrl.length > 0;
 
           const report = {
             vapiKeyWorks: keyWorks,
@@ -89,6 +112,9 @@ jobs:
             httpStatus,
             assistantCount: assistants.length,
             serverCredentialEnvSet: Boolean(CRED_ENV),
+            credentialIdIsUuid,
+            credentialExistsInAccount,
+            configuredCredentialUsable,
             assistantsWithServerCredential: withServerCred.length,
             assistantsMatchingStandardStagingWebhook: matchingStandardUrl.length,
             standardServerUrlPresent: Boolean(standardServerUrl),
