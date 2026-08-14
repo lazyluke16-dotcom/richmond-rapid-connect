@@ -1,0 +1,114 @@
+name: Smart Answer staging Vapi readiness check
+
+# READ-ONLY probe of staging Vapi reachability and server-credential
+# resolvability. Determines whether the standard AI receptionist can be
+# provisioned (which requires resolveVapiServerCredentialId to succeed).
+# No mutations; prints no secret values.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  vapi-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: staging
+
+    env:
+      CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+      VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
+      VAPI_SERVER_CREDENTIAL_ID: ${{ secrets.VAPI_SERVER_CREDENTIAL_ID }}
+
+    steps:
+      - name: Read-only Vapi readiness probe
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { writeFileSync, appendFileSync } = require("node:fs");
+
+          void (async () => {
+          const BASE = process.env.VAPI_API_BASE || "https://api.vapi.ai";
+          const KEY = process.env.VAPI_API_KEY || "";
+          const CRED_ENV = (process.env.VAPI_SERVER_CREDENTIAL_ID || "").trim();
+          const certBase = (process.env.CERTIFICATION_BASE_URL || "").replace(/\/$/, "");
+          const standardServerUrl = certBase ? `${certBase}/api/public/webhooks/vapi-inbound` : "";
+
+          let httpStatus = null;
+          let assistants = [];
+          let error = null;
+          try {
+            const res = await fetch(`${BASE}/assistant`, {
+              headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" },
+            });
+            httpStatus = res.status;
+            if (res.ok) {
+              const body = await res.json();
+              assistants = Array.isArray(body) ? body : [];
+            } else {
+              error = `Vapi GET /assistant -> HTTP ${res.status}`;
+            }
+          } catch (e) {
+            error = String(e && e.message ? e.message : e);
+          }
+
+          const withServerCred = assistants.filter((a) => {
+            const s = a && a.server;
+            return s && typeof s.credentialId === "string" && s.credentialId.trim();
+          });
+          const matchingStandardUrl = withServerCred.filter(
+            (a) => a.server && a.server.url === standardServerUrl,
+          );
+
+          const keyWorks = httpStatus === 200;
+          const credentialResolvable =
+            Boolean(CRED_ENV) || matchingStandardUrl.length > 0;
+
+          const report = {
+            vapiKeyWorks: keyWorks,
+            httpStatus,
+            assistantCount: assistants.length,
+            serverCredentialEnvSet: Boolean(CRED_ENV),
+            assistantsWithServerCredential: withServerCred.length,
+            assistantsMatchingStandardStagingWebhook: matchingStandardUrl.length,
+            standardServerUrlPresent: Boolean(standardServerUrl),
+            standardProvisioningCredentialResolvable: credentialResolvable,
+            error,
+            valuesPrinted: false,
+          };
+          writeFileSync("smart-answer-staging-vapi-check.json", `${JSON.stringify(report, null, 2)}\n`, {
+            mode: 0o600,
+          });
+
+          const summary = [
+            "# Smart Answer staging Vapi readiness",
+            "",
+            `Vapi key works (HTTP 200): **${report.vapiKeyWorks}** (status ${httpStatus})`,
+            `Assistants in account: **${report.assistantCount}**`,
+            `VAPI_SERVER_CREDENTIAL_ID set: **${report.serverCredentialEnvSet}**`,
+            `Assistants with a server credential: **${report.assistantsWithServerCredential}**`,
+            `Assistants matching the standard staging webhook: **${report.assistantsMatchingStandardStagingWebhook}**`,
+            "",
+            `Standard receptionist credential resolvable: **${report.standardProvisioningCredentialResolvable}**`,
+            error ? `\nError: \`${error}\`` : "",
+            "",
+            "No secret values were printed. No mutations were performed.",
+          ].join("\n");
+          if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+          console.log(JSON.stringify(report));
+          })().catch((e) => {
+            console.error("vapi check failed:", e && e.message ? e.message : e);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload sanitised Vapi readiness artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-staging-vapi-check
+          path: smart-answer-staging-vapi-check.json
+          if-no-files-found: error
+          retention-days: 7
