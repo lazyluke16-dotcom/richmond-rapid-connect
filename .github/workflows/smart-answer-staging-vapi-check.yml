@@ -32,32 +32,43 @@ jobs:
 
           void (async () => {
           const BASE = process.env.VAPI_API_BASE || "https://api.vapi.ai";
-          const KEY = process.env.VAPI_API_KEY || "";
+          const KEY_RAW = process.env.VAPI_API_KEY || "";
+          const KEY_TRIMMED = KEY_RAW.replace(/^\uFEFF/, "").trim();
+          const keyNeededTrimming = KEY_RAW !== KEY_TRIMMED;
           const CRED_ENV = (process.env.VAPI_SERVER_CREDENTIAL_ID || "").trim();
           const certBase = (process.env.CERTIFICATION_BASE_URL || "").replace(/\/$/, "");
           const standardServerUrl = certBase ? `${certBase}/api/public/webhooks/vapi-inbound` : "";
 
-          let httpStatus = null;
-          let assistants = [];
-          let error = null;
-          try {
-            const res = await fetch(`${BASE}/assistant`, {
-              headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" },
-            });
-            httpStatus = res.status;
-            if (res.ok) {
-              const body = await res.json();
-              assistants = Array.isArray(body) ? body : [];
-            } else {
-              error = `Vapi GET /assistant -> HTTP ${res.status}`;
+          async function probeKey(key) {
+            if (!key) return { status: null, ok: false, assistants: [], error: "empty key" };
+            try {
+              const res = await fetch(`${BASE}/assistant`, {
+                headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+              });
+              if (res.ok) {
+                const body = await res.json();
+                return {
+                  status: res.status,
+                  ok: true,
+                  assistants: Array.isArray(body) ? body : [],
+                  error: null,
+                };
+              }
+              return { status: res.status, ok: false, assistants: [], error: `HTTP ${res.status}` };
+            } catch (e) {
+              // Never echo the Authorization header (which contains the key).
+              let m = String(e && e.message ? e.message : e);
+              if (key) m = m.split(key).join("[REDACTED_KEY]");
+              m = m.replace(/Bearer[\s\S]*/i, "Bearer [REDACTED]");
+              return { status: null, ok: false, assistants: [], error: m.slice(0, 160) };
             }
-          } catch (e) {
-            // Never echo the Authorization header (which contains the key).
-            let m = String(e && e.message ? e.message : e);
-            if (KEY) m = m.split(KEY).join("[REDACTED_KEY]");
-            m = m.replace(/Bearer[\s\S]*/i, "Bearer [REDACTED]");
-            error = m.slice(0, 200);
           }
+
+          const trimmed = await probeKey(KEY_TRIMMED);
+          const raw = keyNeededTrimming ? await probeKey(KEY_RAW) : trimmed;
+          const assistants = trimmed.ok ? trimmed.assistants : raw.ok ? raw.assistants : [];
+          const httpStatus = raw.status;
+          const error = raw.ok ? null : raw.error || trimmed.error;
 
           const withServerCred = assistants.filter((a) => {
             const s = a && a.server;
@@ -67,12 +78,14 @@ jobs:
             (a) => a.server && a.server.url === standardServerUrl,
           );
 
-          const keyWorks = httpStatus === 200;
+          const keyWorks = raw.ok;
           const credentialResolvable =
             Boolean(CRED_ENV) || matchingStandardUrl.length > 0;
 
           const report = {
             vapiKeyWorks: keyWorks,
+            vapiKeyWorksTrimmed: trimmed.ok,
+            keyNeededTrimming,
             httpStatus,
             assistantCount: assistants.length,
             serverCredentialEnvSet: Boolean(CRED_ENV),
