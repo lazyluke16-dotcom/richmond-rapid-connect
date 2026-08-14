@@ -52,7 +52,11 @@ jobs:
               error = `Vapi GET /assistant -> HTTP ${res.status}`;
             }
           } catch (e) {
-            error = String(e && e.message ? e.message : e);
+            // Never echo the Authorization header (which contains the key).
+            let m = String(e && e.message ? e.message : e);
+            if (KEY) m = m.split(KEY).join("[REDACTED_KEY]");
+            m = m.replace(/Bearer[\s\S]*/i, "Bearer [REDACTED]");
+            error = m.slice(0, 200);
           }
 
           const withServerCred = assistants.filter((a) => {
