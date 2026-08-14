@@ -1,0 +1,116 @@
+name: Smart Answer staging Twilio readiness check
+
+# READ-ONLY probe of staging Twilio credential validity + account identity.
+# Distinguishes wrong credentials from whitespace/BOM contamination (raw vs
+# trimmed). Never prints secret values. Performs NO mutations.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  twilio-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: staging
+
+    env:
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+
+    steps:
+      - name: Read-only Twilio credential probe
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { writeFileSync, appendFileSync } = require("node:fs");
+
+          void (async () => {
+          const clean = (v) => (v || "").replace(/^\uFEFF/, "").trim();
+          const SID_RAW = process.env.TWILIO_ACCOUNT_SID || "";
+          const TOKEN_RAW = process.env.TWILIO_AUTH_TOKEN || "";
+          const SID = clean(SID_RAW);
+          const TOKEN = clean(TOKEN_RAW);
+          const sidNeededTrimming = SID_RAW !== SID;
+          const tokenNeededTrimming = TOKEN_RAW !== TOKEN;
+          const sidLooksValid = /^AC[0-9a-f]{32}$/i.test(SID);
+
+          async function probe(sid, token) {
+            if (!sid || !token) return { status: null, ok: false, account: null, error: "empty credential" };
+            try {
+              const auth = Buffer.from(`${sid}:${token}`).toString("base64");
+              const res = await fetch(
+                `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(sid)}.json`,
+                { headers: { Authorization: `Basic ${auth}` } },
+              );
+              if (res.ok) {
+                const body = await res.json();
+                return {
+                  status: res.status,
+                  ok: true,
+                  account: {
+                    friendlyName: body.friendly_name || null,
+                    status: body.status || null,
+                    type: body.type || null,
+                  },
+                  error: null,
+                };
+              }
+              return { status: res.status, ok: false, account: null, error: `HTTP ${res.status}` };
+            } catch (e) {
+              let m = String(e && e.message ? e.message : e);
+              if (token) m = m.split(token).join("[REDACTED]");
+              return { status: null, ok: false, account: null, error: m.slice(0, 160) };
+            }
+          }
+
+          const raw = await probe(SID_RAW, TOKEN_RAW);
+          const trimmed = sidNeededTrimming || tokenNeededTrimming ? await probe(SID, TOKEN) : raw;
+
+          const report = {
+            twilioAuthWorks: raw.ok,
+            twilioAuthWorksTrimmed: trimmed.ok,
+            sidNeededTrimming,
+            tokenNeededTrimming,
+            sidLooksValid,
+            httpStatus: raw.status,
+            accountFriendlyName: (trimmed.ok ? trimmed.account : raw.account)?.friendlyName ?? null,
+            accountStatus: (trimmed.ok ? trimmed.account : raw.account)?.status ?? null,
+            accountType: (trimmed.ok ? trimmed.account : raw.account)?.type ?? null,
+            error: raw.ok ? null : raw.error,
+            valuesPrinted: false,
+          };
+          writeFileSync("smart-answer-staging-twilio-check.json", `${JSON.stringify(report, null, 2)}\n`, {
+            mode: 0o600,
+          });
+
+          const summary = [
+            "# Smart Answer staging Twilio readiness",
+            "",
+            `Auth works (raw): **${report.twilioAuthWorks}** (status ${report.httpStatus})`,
+            `Auth works (trimmed): **${report.twilioAuthWorksTrimmed}**`,
+            `SID had whitespace/BOM: **${report.sidNeededTrimming}** · Token had whitespace/BOM: **${report.tokenNeededTrimming}**`,
+            `SID format valid (AC + 32 hex): **${report.sidLooksValid}**`,
+            `Account: friendlyName **${report.accountFriendlyName ?? "n/a"}**, status **${report.accountStatus ?? "n/a"}**, type **${report.accountType ?? "n/a"}**`,
+            report.error ? `\nError: \`${report.error}\`` : "",
+            "",
+            "No secret values were printed. No mutations were performed.",
+          ].join("\n");
+          if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+          console.log(JSON.stringify(report));
+          })().catch((e) => {
+            console.error("twilio check failed:", e && e.message ? e.message : e);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload sanitised Twilio readiness artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-staging-twilio-check
+          path: smart-answer-staging-twilio-check.json
+          if-no-files-found: error
+          retention-days: 7
