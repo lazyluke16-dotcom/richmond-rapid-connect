@@ -179,17 +179,21 @@ jobs:
           echo "Migration dry run passed. Worker deployment intentionally stopped." >&2
           exit 1
 
-      - name: Upload Smart Answer-only secrets to staging Worker
+      - name: Upload Vapi runtime secrets to staging Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
+          VAPI_SERVER_SECRET: ${{ secrets.VAPI_SERVER_SECRET }}
           VAPI_SERVER_CREDENTIAL_ID: ${{ secrets.VAPI_SERVER_CREDENTIAL_ID }}
           VAPI_SIP_AUTH_USERNAME: ${{ secrets.VAPI_SIP_AUTH_USERNAME }}
           VAPI_SIP_AUTH_PASSWORD: ${{ secrets.VAPI_SIP_AUTH_PASSWORD }}
         run: |
           node - <<'NODE' |
           const names = [
+            "VAPI_API_KEY",
+            "VAPI_SERVER_SECRET",
             "VAPI_SERVER_CREDENTIAL_ID",
             "VAPI_SIP_AUTH_USERNAME",
             "VAPI_SIP_AUTH_PASSWORD",
