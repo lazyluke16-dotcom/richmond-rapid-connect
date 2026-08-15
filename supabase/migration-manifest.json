@@ -209,6 +209,11 @@
         "20260801130000_seamless_acquisition_activation.sql",
         "20260801200000_authoritative_gst_pricing.sql"
       ]
+    },
+    {
+      "file": "20260815120000_prospect_intelligence.sql",
+      "sha256": "32e40d80bc9f9d44cb0b71d0f5f2f4aa062352f8c7e25062e1aa5c96911a4afa",
+      "dependsOn": ["20260715074344_624e3ef2-f240-4a59-b722-02eaaaa6416d.sql"]
     }
   ]
 }
