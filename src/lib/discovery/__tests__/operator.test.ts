@@ -122,6 +122,7 @@ describe("operator projections are privacy-minimal", () => {
       reason: "demo_built",
       acceptedProspectId: "prospect-9",
       rawHash: null,
+      providerContentExpiresAt: null,
       discoveredAt: "2026-08-15T00:00:00Z",
       createdAt: "2026-08-15T00:00:00Z",
       updatedAt: "2026-08-15T00:00:00Z",
