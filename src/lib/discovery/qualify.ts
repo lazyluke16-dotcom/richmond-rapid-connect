@@ -7,7 +7,7 @@
  * unsafe website is rejected before any fetch is attempted.
  */
 import { isFetchableUrl } from "../prospect/url-safety";
-import { normalizeLocality, normalizeName } from "./normalize";
+import { normalizeLocality } from "./normalize";
 import type { CandidateReason, NormalizedCandidate } from "./types";
 
 // Prefix match (no trailing \b) so "plumbing"/"plumbers"/"drains" are recognised.
@@ -42,16 +42,15 @@ export function qualifyCandidate(
     return { ok: false, reason: "not_target_vertical" };
   }
 
-  // 3. Geography (only when the mission constrains it).
+  // 3. Geography (only when the mission constrains it). Conservative: match ONLY against the
+  //    candidate's explicit locality — never the business name or domain, since either can
+  //    contain a suburb word coincidentally (e.g. "Richmond Plumbing" or
+  //    "richmond-plumbing-sydney.com.au" operating in Sydney). A geo-constrained mission
+  //    therefore requires a locality it can confirm; an unconfirmable candidate is rejected.
   if (mission.geoTerms.length > 0) {
-    const geoHay = [
-      normalizeName(candidate.businessName),
-      normalizeLocality(candidate.locality),
-      candidate.canonicalDomain,
-    ]
-      .filter(Boolean)
-      .join(" ");
-    const inGeo = mission.geoTerms.some((term) => geoHay.includes(term.toLowerCase()));
+    const locality = normalizeLocality(candidate.locality);
+    const inGeo =
+      locality != null && mission.geoTerms.some((term) => locality.includes(term.toLowerCase()));
     if (!inGeo) return { ok: false, reason: "outside_geography" };
   }
 

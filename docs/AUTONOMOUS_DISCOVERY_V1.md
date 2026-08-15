@@ -108,6 +108,47 @@ out of the hot `getMission` path via an explicit column list and fetched only wh
 runs. Discovery at internet scale (continuous crawling, a durable queue/cron) is a later
 concern; V1 is operator-triggered, bounded batches.
 
+## Hardening (independent review) & known limitations
+
+Independent adversarial review hardened the engine:
+
+- **Termination is guaranteed** even against a misbehaving provider: a hard per-mission page
+  cap (`ceil(max_candidates / pageSize) + 5`, tracked in the cursor) stops a source that
+  returns endless empty/repeating pages with a non-null cursor.
+- **Cancel/pause win over completion**: terminal writes (`complete`/`failed`) re-check the
+  live status, so a cancel/pause racing an in-flight advance is never overridden. (Cancel
+  takes effect after the in-flight page finishes; no further pages are fetched.)
+- **Crash recovery**: a candidate left non-terminal (`accepted`/`discovered`) by an
+  interrupted build is reprocessed on the next advance; `buildProspectDemo` idempotency by
+  canonical domain guarantees no duplicate prospect/demo.
+- **Provider usage is sanitised** (`NaN`/negative cost → 0) before it touches spend accounting.
+- **Geography is conservative**: matched ONLY against the candidate's explicit locality, never
+  the business name or domain (either can contain a suburb word coincidentally). A
+  geo-constrained mission therefore requires a confirmable locality.
+
+Known limitations (safe for V1, relevant before a live/metered provider):
+
+- **Metered-cost concurrency**: cost accumulation is read-modify-write, so two workers
+  advancing the _same_ mission concurrently could under-count spend (lost update). V1 sources
+  are free (`import`/`fixture`), so there is no overspend risk today. **Before connecting a
+  metered provider**, advance must be serial per mission (the operator UI already drives it
+  serially) or cost must use an atomic DB increment. Concurrent advance is otherwise safe:
+  candidate claiming is atomic (`UNIQUE (mission_id, dedup_key)`) and no duplicate prospect
+  can result.
+- **Vertical keyword fallback** can admit plumbing suppliers/wholesalers when the provider
+  gives no explicit `vertical`; the `import` operator curates and sets the vertical.
+- Per-advance counter recompute + identity-index load are O(candidates) — fine for bounded
+  V1 missions (≤5000), a cliff to revisit for continuous discovery.
+
+## Live-provider readiness (Slice 2.5)
+
+The adapter contract (`search(input, cursor) → { candidates, nextCursor, usage }`) already
+supports query/geography, pagination, provider ids, websites, usage/cost and retry/terminal
+failure signalling — sufficient to connect a lawful provider (e.g. an official Places API)
+without engine/schema changes. Two prerequisites before enabling a metered live provider:
+(1) serial-per-mission advance or atomic cost increment (above); (2) provider-side vertical
+classification rather than keyword fallback.
+
 ## Explicitly deferred to Slice 3+
 
 Live discovery providers; continuous/autonomous discovery at scale; and all outreach

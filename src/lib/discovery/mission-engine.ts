@@ -21,7 +21,12 @@ import { normalizeCandidate } from "./normalize";
 import { DiscoveryProviderError, type ProviderRegistry } from "./provider";
 import { qualifyCandidate } from "./qualify";
 import type { MissionStore } from "./mission-store";
-import type { CandidateReason, DiscoveryMissionRecord } from "./types";
+import type {
+  CandidateReason,
+  DiscoveryCandidateRecord,
+  DiscoveryMissionRecord,
+  NormalizedCandidate,
+} from "./types";
 
 export interface EngineDeps {
   missionStore: MissionStore;
@@ -105,11 +110,146 @@ export async function cancelMission(
   return updated;
 }
 
-async function complete(deps: EngineDeps, missionId: string, reason: string): Promise<void> {
+/**
+ * Complete the mission ONLY if it is still running. If a concurrent pause/cancel changed the
+ * status while this advance was mid-flight, that transition wins (cancel/pause is terminal
+ * for this step) and we do not override it. Returns the actual resulting status.
+ */
+async function completeIfRunning(
+  deps: EngineDeps,
+  missionId: string,
+  reason: string,
+): Promise<DiscoveryMissionRecord["status"]> {
   const clock = deps.clock ?? (() => new Date().toISOString());
   await refreshCounts(deps, missionId);
+  const current = await deps.missionStore.getMission(missionId);
+  if (!current || current.status !== "running") return current?.status ?? "failed";
   await deps.missionStore.updateMission(missionId, { status: "completed", completedAt: clock() });
   await deps.missionStore.addMissionEvent(missionId, "completed", { reason });
+  return "completed";
+}
+
+/** Clamp provider-reported usage to a safe, non-negative integer (defends NaN/negative). */
+function sanitizeCostCents(raw: unknown): number {
+  const value = Math.floor(Number(raw));
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function terminalReasonFor(
+  mission: DiscoveryMissionRecord,
+  opts: { pageCapReached: boolean; exhausted: boolean },
+): string | null {
+  if (mission.counts.demoReady >= mission.targetCount) return "target_reached";
+  if (mission.counts.discovered >= mission.maxCandidates) return "max_candidates_reached";
+  if (mission.costCeilingCents != null && mission.costCents > mission.costCeilingCents)
+    return "cost_ceiling_reached";
+  if (opts.pageCapReached) return "page_cap_reached";
+  if (opts.exhausted) return "source_exhausted";
+  return null;
+}
+
+/** Hard cap on pages fetched per mission — guarantees termination even if a provider returns
+ * endless empty/repeating pages with a non-null cursor. */
+function maxPagesFor(mission: DiscoveryMissionRecord, pageSize: number): number {
+  return Math.ceil(mission.maxCandidates / Math.max(1, pageSize)) + 5;
+}
+
+/** Reconstruct a normalised candidate from a stored row (used by crash recovery). */
+function normalizedFromRow(row: DiscoveryCandidateRecord): NormalizedCandidate {
+  return {
+    source: row.source,
+    providerBusinessId: row.providerBusinessId,
+    sourceUrl: row.sourceUrl,
+    businessName: row.businessName,
+    website: row.website,
+    canonicalDomain: row.canonicalDomain,
+    publicPhone: row.publicPhone,
+    locality: row.locality,
+    vertical: null,
+    dedupKey: row.dedupKey,
+  };
+}
+
+/**
+ * Qualify a claimed candidate and, if accepted, hand it to the Slice-1 pipeline. Sets the
+ * terminal disposition (rejected / duplicate:existing_prospect / demo_ready / failed) and
+ * returns whether a demo was built. Idempotent: buildProspectDemo dedups by canonical domain,
+ * so re-running after an interrupted build supersedes rather than duplicates.
+ */
+async function qualifyAndBuild(
+  deps: EngineDeps,
+  mission: DiscoveryMissionRecord,
+  candidateId: string,
+  normalized: NormalizedCandidate,
+): Promise<boolean> {
+  const qualified = qualifyCandidate(normalized, {
+    vertical: mission.vertical,
+    geoTerms: mission.geoTerms,
+  });
+  if (!qualified.ok) {
+    await deps.missionStore.updateCandidate(candidateId, {
+      disposition: "rejected",
+      reason: qualified.reason,
+    });
+    return false;
+  }
+  const existing = normalized.canonicalDomain
+    ? await deps.prospectStore.findByDomain(normalized.canonicalDomain)
+    : null;
+  if (existing) {
+    await deps.missionStore.updateCandidate(candidateId, {
+      disposition: "duplicate",
+      reason: "existing_prospect",
+      acceptedProspectId: existing.id,
+    });
+    return false;
+  }
+  // Mark accepted before the (interruptible) build; a crash here leaves it recoverable.
+  await deps.missionStore.updateCandidate(candidateId, {
+    disposition: "accepted",
+    reason: "accepted",
+  });
+  try {
+    const result = await buildProspectDemo(deps.prospectStore, normalized.website!, {
+      fetchImpl: deps.fetchImpl,
+      dnsLookup: deps.dnsLookup,
+      clock: deps.clock,
+      baseUrl: deps.baseUrl,
+      demoTtlDays: deps.demoTtlDays,
+    });
+    await deps.missionStore.updateCandidate(candidateId, {
+      disposition: "demo_ready",
+      reason: "demo_built",
+      acceptedProspectId: result.prospectId,
+    });
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "research failed";
+    await deps.missionStore.updateCandidate(candidateId, {
+      disposition: "failed",
+      reason: "research_failed" as CandidateReason,
+    });
+    await deps.missionStore.addMissionEvent(mission.id, "candidate_processed", {
+      candidateId,
+      failed: message,
+    });
+    return false;
+  }
+}
+
+/**
+ * Reprocess candidates left in a non-terminal state by a prior interrupted advance (a crash
+ * between claiming/accepting a candidate and completing its build). buildProspectDemo is
+ * idempotent by canonical domain, so recovery never creates a duplicate prospect/demo.
+ */
+async function recoverInFlight(deps: EngineDeps, mission: DiscoveryMissionRecord): Promise<void> {
+  const stuck = [
+    ...(await deps.missionStore.listCandidates(mission.id, { disposition: "accepted" })),
+    ...(await deps.missionStore.listCandidates(mission.id, { disposition: "discovered" })),
+  ];
+  for (const row of stuck) {
+    await qualifyAndBuild(deps, mission, row.id, normalizedFromRow(row));
+  }
 }
 
 /**
@@ -119,12 +259,12 @@ async function complete(deps: EngineDeps, missionId: string, reason: string): Pr
 export async function advanceMission(deps: EngineDeps, missionId: string): Promise<AdvanceResult> {
   const clock = deps.clock ?? (() => new Date().toISOString());
   const pageSize = Math.max(1, deps.pageSize ?? 25);
-  const mission = await deps.missionStore.getMission(missionId);
-  if (!mission) throw new Error(`Mission ${missionId} not found`);
+  const initial = await deps.missionStore.getMission(missionId);
+  if (!initial) throw new Error(`Mission ${missionId} not found`);
 
-  if (mission.status !== "running") {
+  if (initial.status !== "running") {
     return {
-      status: mission.status,
+      status: initial.status,
       processed: 0,
       accepted: 0,
       collapsed: 0,
@@ -133,26 +273,26 @@ export async function advanceMission(deps: EngineDeps, missionId: string): Promi
     };
   }
 
-  // Terminal bounds reached before doing any work.
-  if (mission.counts.demoReady >= mission.targetCount) {
-    await complete(deps, missionId, "target_reached");
+  // Recover any candidates left non-terminal by a prior interrupted advance (a crash between
+  // claim/accept and build completion). Idempotent — never creates a duplicate prospect.
+  await recoverInFlight(deps, initial);
+  await refreshCounts(deps, missionId);
+  let mission = (await deps.missionStore.getMission(missionId))!;
+  const pagesFetched = (mission.cursor.__pages as number | undefined) ?? 0;
+
+  // Terminal bounds reached before fetching another page (uses fresh counts).
+  const preReason = terminalReasonFor(mission, {
+    pageCapReached: pagesFetched >= maxPagesFor(mission, pageSize),
+    exhausted: false,
+  });
+  if (preReason) {
+    const status = await completeIfRunning(deps, missionId, preReason);
     return {
-      status: "completed",
+      status,
       processed: 0,
       accepted: 0,
       collapsed: 0,
-      completed: true,
-      retriedTransientFailure: false,
-    };
-  }
-  if (mission.counts.discovered >= mission.maxCandidates) {
-    await complete(deps, missionId, "max_candidates_reached");
-    return {
-      status: "completed",
-      processed: 0,
-      accepted: 0,
-      collapsed: 0,
-      completed: true,
+      completed: status === "completed",
       retriedTransientFailure: false,
     };
   }
@@ -195,14 +335,18 @@ export async function advanceMission(deps: EngineDeps, missionId: string): Promi
         retriedTransientFailure: true,
       };
     }
-    await deps.missionStore.updateMission(missionId, {
-      status: "failed",
-      lastError: message,
-      completedAt: clock(),
-    });
-    await deps.missionStore.addMissionEvent(missionId, "failed", { transient, message });
+    // Only mark failed if a concurrent cancel/pause has not intervened.
+    const live = await deps.missionStore.getMission(missionId);
+    if (live && live.status === "running") {
+      await deps.missionStore.updateMission(missionId, {
+        status: "failed",
+        lastError: message,
+        completedAt: clock(),
+      });
+      await deps.missionStore.addMissionEvent(missionId, "failed", { transient, message });
+    }
     return {
-      status: "failed",
+      status: live?.status ?? "failed",
       processed: 0,
       accepted: 0,
       collapsed: 0,
@@ -211,9 +355,12 @@ export async function advanceMission(deps: EngineDeps, missionId: string): Promi
     };
   }
 
-  // Successful page resets the retry counter and charges any metered cost.
-  const newCost = mission.costCents + page.usage.costCents;
-  await deps.missionStore.updateMission(missionId, { retryCount: 0, costCents: newCost });
+  // Successful page resets the retry counter and charges any metered (sanitised) cost.
+  const nextPages = pagesFetched + 1;
+  await deps.missionStore.updateMission(missionId, {
+    retryCount: 0,
+    costCents: mission.costCents + sanitizeCostCents(page.usage.costCents),
+  });
 
   // Build the dedup index from candidates already stored for this mission.
   const index = new MissionDedupIndex(await deps.missionStore.listCandidateIdentities(missionId));
@@ -245,136 +392,51 @@ export async function advanceMission(deps: EngineDeps, missionId: string): Promi
 
     // Cross-dimension duplicate within the mission (weaker signals than the primary key).
     const dup = index.findDuplicate(normalized);
+    index.add(toIdentityEntry(claim.record.id, normalized));
     if (dup) {
       await deps.missionStore.updateCandidate(claim.record.id, {
         disposition: "duplicate",
         reason: dup.reason,
         duplicateOf: dup.matchId,
       });
-      index.add(toIdentityEntry(claim.record.id, normalized));
-      continue;
-    }
-    index.add(toIdentityEntry(claim.record.id, normalized));
-
-    // Cheap explainable pre-qualification.
-    const qualified = qualifyCandidate(normalized, {
-      vertical: mission.vertical,
-      geoTerms: mission.geoTerms,
-    });
-    if (!qualified.ok) {
-      await deps.missionStore.updateCandidate(claim.record.id, {
-        disposition: "rejected",
-        reason: qualified.reason,
-      });
       continue;
     }
 
-    // Already a prospect (from this or a prior mission)? Link it; never re-research/rebuild.
-    const existing = normalized.canonicalDomain
-      ? await deps.prospectStore.findByDomain(normalized.canonicalDomain)
-      : null;
-    if (existing) {
-      await deps.missionStore.updateCandidate(claim.record.id, {
-        disposition: "duplicate",
-        reason: "existing_prospect",
-        acceptedProspectId: existing.id,
-      });
-      continue;
-    }
-
-    // Accept → hand to the Slice-1 pipeline to research + build a private demo.
-    await deps.missionStore.updateCandidate(claim.record.id, {
-      disposition: "accepted",
-      reason: "accepted",
-    });
-    try {
-      const result = await buildProspectDemo(deps.prospectStore, normalized.website!, {
-        fetchImpl: deps.fetchImpl,
-        dnsLookup: deps.dnsLookup,
-        clock: deps.clock,
-        baseUrl: deps.baseUrl,
-        demoTtlDays: deps.demoTtlDays,
-      });
-      await deps.missionStore.updateCandidate(claim.record.id, {
-        disposition: "demo_ready",
-        reason: "demo_built",
-        acceptedProspectId: result.prospectId,
-      });
-      accepted += 1;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "research failed";
-      await deps.missionStore.updateCandidate(claim.record.id, {
-        disposition: "failed",
-        reason: "research_failed" as CandidateReason,
-      });
-      await deps.missionStore.addMissionEvent(missionId, "candidate_processed", {
-        candidateId: claim.record.id,
-        failed: message,
-      });
-    }
+    // Qualify + (if accepted) hand to the reviewed Slice-1 demo pipeline.
+    if (await qualifyAndBuild(deps, mission, claim.record.id, normalized)) accepted += 1;
   }
 
-  // Persist the cursor + recomputed counts.
+  // Persist the cursor + page counter + recomputed counts.
   await deps.missionStore.updateMission(missionId, {
-    cursor: { ...mission.cursor, [cursorKey]: page.nextCursor },
+    cursor: { ...mission.cursor, [cursorKey]: page.nextCursor, __pages: nextPages },
   });
   await refreshCounts(deps, missionId);
   await deps.missionStore.addMissionEvent(missionId, "page_fetched", {
     processed,
     accepted,
-    costCents: page.usage.costCents,
+    costCents: sanitizeCostCents(page.usage.costCents),
     exhausted: page.nextCursor === null,
   });
 
-  // Terminal conditions.
-  const after = await deps.missionStore.getMission(missionId);
-  const done = after!;
-  if (done.counts.demoReady >= done.targetCount) {
-    await complete(deps, missionId, "target_reached");
+  // Terminal conditions (guarded: a concurrent cancel/pause wins over completion).
+  mission = (await deps.missionStore.getMission(missionId))!;
+  const reason = terminalReasonFor(mission, {
+    pageCapReached: nextPages >= maxPagesFor(mission, pageSize),
+    exhausted: page.nextCursor === null,
+  });
+  if (reason) {
+    const status = await completeIfRunning(deps, missionId, reason);
     return {
-      status: "completed",
+      status,
       processed,
       accepted,
       collapsed,
-      completed: true,
-      retriedTransientFailure: false,
-    };
-  }
-  if (done.counts.discovered >= done.maxCandidates) {
-    await complete(deps, missionId, "max_candidates_reached");
-    return {
-      status: "completed",
-      processed,
-      accepted,
-      collapsed,
-      completed: true,
-      retriedTransientFailure: false,
-    };
-  }
-  if (done.costCeilingCents != null && done.costCents > done.costCeilingCents) {
-    await complete(deps, missionId, "cost_ceiling_reached");
-    return {
-      status: "completed",
-      processed,
-      accepted,
-      collapsed,
-      completed: true,
-      retriedTransientFailure: false,
-    };
-  }
-  if (page.nextCursor === null) {
-    await complete(deps, missionId, "source_exhausted");
-    return {
-      status: "completed",
-      processed,
-      accepted,
-      collapsed,
-      completed: true,
+      completed: status === "completed",
       retriedTransientFailure: false,
     };
   }
   return {
-    status: "running",
+    status: mission.status,
     processed,
     accepted,
     collapsed,
