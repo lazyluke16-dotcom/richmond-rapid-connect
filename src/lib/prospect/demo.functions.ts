@@ -49,7 +49,7 @@ function toViewData(config: DemoConfig): DemoViewData {
 }
 
 export const loadDemoView = createServerFn({ method: "GET" })
-  .inputValidator((data: { slug: string; token: string }) => data)
+  .validator((data: { slug: string; token: string }) => data)
   .handler(async ({ data }): Promise<{ ok: true; view: DemoViewData } | { ok: false }> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const store = createSupabaseProspectStore(supabaseAdmin);
