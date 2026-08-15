@@ -74,7 +74,10 @@ jobs:
             "src/lib/prospect/**/*.ts" \
             "src/routes/api/public/prospect/*.ts" \
             "src/routes/demo.\$slug.\$token.tsx" \
-            src/routes/_authenticated/acquisition.prospects.tsx
+            src/routes/_authenticated/acquisition.prospects.tsx \
+            "src/lib/discovery/**/*.ts" \
+            "src/routes/api/public/discovery/*.ts" \
+            src/routes/_authenticated/acquisition.discovery.tsx
           npx eslint \
             scripts/configure-staging-auth-email.mjs \
             scripts/configure-staging-commercial-gst.mjs \
@@ -95,7 +98,10 @@ jobs:
             "src/lib/prospect/**/*.ts" \
             "src/routes/api/public/prospect/*.ts" \
             "src/routes/demo.\$slug.\$token.tsx" \
-            src/routes/_authenticated/acquisition.prospects.tsx
+            src/routes/_authenticated/acquisition.prospects.tsx \
+            "src/lib/discovery/**/*.ts" \
+            "src/routes/api/public/discovery/*.ts" \
+            src/routes/_authenticated/acquisition.discovery.tsx
 
       - name: Build Cloudflare production artifact
         env:
