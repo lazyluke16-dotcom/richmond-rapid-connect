@@ -70,6 +70,44 @@ jobs:
           const raw = await probe(SID_RAW, TOKEN_RAW);
           const trimmed = sidNeededTrimming || tokenNeededTrimming ? await probe(SID, TOKEN) : raw;
 
+          // Read-only enumeration of incoming phone numbers (uses whichever
+          // credential authenticated). Reports platform-owned number metadata
+          // only — never auth tokens.
+          const authOk = raw.ok || trimmed.ok;
+          const useSid = raw.ok ? SID_RAW : SID;
+          const useToken = raw.ok ? TOKEN_RAW : TOKEN;
+          let numbers = [];
+          let numbersError = null;
+          if (authOk) {
+            try {
+              const authHeader = Buffer.from(`${useSid}:${useToken}`).toString("base64");
+              let url = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(useSid)}/IncomingPhoneNumbers.json?PageSize=100`;
+              for (let i = 0; i < 10 && url; i++) {
+                const res = await fetch(url, { headers: { Authorization: `Basic ${authHeader}` } });
+                if (!res.ok) {
+                  numbersError = `HTTP ${res.status}`;
+                  break;
+                }
+                const body = await res.json();
+                for (const n of body.incoming_phone_numbers || []) {
+                  numbers.push({
+                    phoneNumber: n.phone_number || null,
+                    sid: n.sid || null,
+                    friendlyName: n.friendly_name || null,
+                    voiceUrl: n.voice_url || null,
+                    voiceMethod: n.voice_method || null,
+                    smsUrl: n.sms_url || null,
+                    status: n.status || null,
+                    capabilities: n.capabilities || null,
+                  });
+                }
+                url = body.next_page_uri ? `https://api.twilio.com${body.next_page_uri}` : null;
+              }
+            } catch (e) {
+              numbersError = String(e && e.message ? e.message : e).slice(0, 120);
+            }
+          }
+
           const report = {
             twilioAuthWorks: raw.ok,
             twilioAuthWorksTrimmed: trimmed.ok,
@@ -80,6 +118,11 @@ jobs:
             accountFriendlyName: (trimmed.ok ? trimmed.account : raw.account)?.friendlyName ?? null,
             accountStatus: (trimmed.ok ? trimmed.account : raw.account)?.status ?? null,
             accountType: (trimmed.ok ? trimmed.account : raw.account)?.type ?? null,
+            accountLooksProduction:
+              ((trimmed.ok ? trimmed.account : raw.account)?.type ?? "") === "Full",
+            incomingNumberCount: numbers.length,
+            numbers,
+            numbersError,
             error: raw.ok ? null : raw.error,
             valuesPrinted: false,
           };
