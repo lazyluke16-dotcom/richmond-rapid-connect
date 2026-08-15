@@ -135,22 +135,30 @@
     {
       "file": "20260725160000_customer_call_handling.sql",
       "sha256": "fda5813fd9f92a34bde8e4aa036a8ba195bb4cb45657c417036886edd810d989",
-      "dependsOn": ["20260723120000_twilio_missed_call_idempotency.sql"]
+      "dependsOn": [
+        "20260723120000_twilio_missed_call_idempotency.sql"
+      ]
     },
     {
       "file": "20260726120000_text_link_dispatch_hardening.sql",
       "sha256": "2af82ad64aad8550990a9b691526e76b5972859b30c14d1bfccdf6792339cb85",
-      "dependsOn": ["20260725160000_customer_call_handling.sql"]
+      "dependsOn": [
+        "20260725160000_customer_call_handling.sql"
+      ]
     },
     {
       "file": "20260727120000_text_link_sms_billable.sql",
       "sha256": "94d7762eaa4b294e8405b26a419901c7718154cc13df0257a3d7bb5f579de99b",
-      "dependsOn": ["20260726120000_text_link_dispatch_hardening.sql"]
+      "dependsOn": [
+        "20260726120000_text_link_dispatch_hardening.sql"
+      ]
     },
     {
       "file": "20260728100000_onboarding_step.sql",
       "sha256": "02eec1b15900d219dc42790279f60f32ac652be28f0c69790177526ca0f022bd",
-      "dependsOn": ["20260711045456_3cca7ee8-e722-4172-aaaf-15790bc18c91.sql"]
+      "dependsOn": [
+        "20260711045456_3cca7ee8-e722-4172-aaaf-15790bc18c91.sql"
+      ]
     },
     {
       "file": "20260728120000_commercial_sms_invoicing.sql",
@@ -171,12 +179,16 @@
     {
       "file": "20260728160000_outreach_compliance.sql",
       "sha256": "cd1e30b1d47f4994e15fcc69e7c0f3819fdfad4ba916deee0e08468249b9c314",
-      "dependsOn": ["20260728140000_acquisition_funnel.sql"]
+      "dependsOn": [
+        "20260728140000_acquisition_funnel.sql"
+      ]
     },
     {
       "file": "20260731120000_acquisition_account_recovery.sql",
       "sha256": "fce7898efa1adb3d805a2791105237ab8df2368ec3173cb9d5f5b7d3ebc6b2fb",
-      "dependsOn": ["20260728140000_acquisition_funnel.sql"]
+      "dependsOn": [
+        "20260728140000_acquisition_funnel.sql"
+      ]
     },
     {
       "file": "20260801130000_seamless_acquisition_activation.sql",
@@ -213,7 +225,17 @@
     {
       "file": "20260815120000_prospect_intelligence.sql",
       "sha256": "32e40d80bc9f9d44cb0b71d0f5f2f4aa062352f8c7e25062e1aa5c96911a4afa",
-      "dependsOn": ["20260715074344_624e3ef2-f240-4a59-b722-02eaaaa6416d.sql"]
+      "dependsOn": [
+        "20260715074344_624e3ef2-f240-4a59-b722-02eaaaa6416d.sql"
+      ]
+    },
+    {
+      "file": "20260815140000_autonomous_discovery.sql",
+      "sha256": "1a12c1c9bad210039d232a10774d479f0ed47beeaf05178d85b3a70042d3bab5",
+      "dependsOn": [
+        "20260715074344_624e3ef2-f240-4a59-b722-02eaaaa6416d.sql",
+        "20260815120000_prospect_intelligence.sql"
+      ]
     }
   ]
 }
