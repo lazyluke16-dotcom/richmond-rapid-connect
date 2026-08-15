@@ -1,0 +1,73 @@
+name: Smart Answer staging phone provision
+
+# Purchases (or reuses) ONE Australian mobile Voice number in the isolated Twilio
+# subaccount "Richmond Rapid Connect Hosted Staging" and allocates it to the
+# Smart Answer Certification tenant. MUTATING — buys a number and writes staging
+# Supabase. Hard-gated (staging guards + Twilio account-name guard). Never marks
+# forwarding verified, never changes answering_mode, never provisions Smart
+# Answer SIP, never touches production. Prints no secret values.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-answer-staging-phone-provision
+  cancel-in-progress: false
+
+jobs:
+  provision-phone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: staging
+
+    env:
+      DEPLOYMENT_TARGET: staging
+      STAGING_CERTIFICATION_ENABLED: "true"
+      CERTIFICATION_ENVIRONMENT_ID: staging-commercial-rc
+      EXPECTED_STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+
+    steps:
+      - name: Check out the requested Smart Answer source
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Bundle the staging phone-provision entry
+        run: |
+          npx esbuild scripts/staging-smart-answer-phone-provision.ts \
+            --bundle \
+            --platform=node \
+            --format=esm \
+            --tsconfig=tsconfig.json \
+            --outfile=staging-phone-provision.mjs
+
+      - name: Run the guarded staging phone provisioning
+        shell: bash
+        run: |
+          set -o pipefail
+          node staging-phone-provision.mjs | tee staging-phone-provision-result.json
+
+      - name: Upload sanitised phone-provision result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-staging-phone-provision
+          path: staging-phone-provision-result.json
+          if-no-files-found: warn
+          retention-days: 7
