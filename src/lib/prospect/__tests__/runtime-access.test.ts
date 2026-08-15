@@ -141,7 +141,7 @@ describe("DemoAccessService fail-closed", () => {
   });
 
   it("denies a revoked demo", async () => {
-    await service.revokeLatest((await store.findByDomain("richmondrapid.com.au"))!.id);
+    await service.revokeForProspect((await store.findByDomain("richmondrapid.com.au"))!.id);
     expect(await service.resolve("richmond-rapid-abcd", token)).toMatchObject({
       ok: false,
       reason: "revoked",

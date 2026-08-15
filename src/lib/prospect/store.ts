@@ -100,6 +100,8 @@ export interface ProspectStore {
   ): Promise<{ type: ProspectEventType; detail: Record<string, unknown>; createdAt: string }[]>;
   insertDemo(demo: Omit<DemoRecord, "createdAt">): Promise<DemoRecord>;
   latestDemo(prospectId: string): Promise<DemoRecord | null>;
+  /** All demo versions for a prospect (used to revoke every active version). */
+  listDemos(prospectId: string): Promise<DemoRecord[]>;
   findDemoBySlug(slug: string): Promise<DemoRecord | null>;
   revokeDemo(demoId: string, revokedAt: string): Promise<void>;
   list(options?: {
@@ -243,6 +245,13 @@ export class InMemoryProspectStore implements ProspectStore {
       .filter((d) => d.prospectId === prospectId)
       .sort((a, b) => b.version - a.version);
     return matches[0] ? { ...matches[0] } : null;
+  }
+
+  async listDemos(prospectId: string): Promise<DemoRecord[]> {
+    return [...this.demos.values()]
+      .filter((d) => d.prospectId === prospectId)
+      .sort((a, b) => b.version - a.version)
+      .map((d) => ({ ...d }));
   }
 
   async findDemoBySlug(slug: string): Promise<DemoRecord | null> {

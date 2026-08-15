@@ -311,6 +311,15 @@ export class SupabaseProspectStore implements ProspectStore {
     return data ? mapDemo(data as unknown as DemoRow) : null;
   }
 
+  async listDemos(prospectId: string): Promise<DemoRecord[]> {
+    const { data, error } = await this.table("prospect_demo_configs")
+      .select("*")
+      .eq("prospect_id", prospectId)
+      .order("version", { ascending: false });
+    if (error) throw new Error(`demo list failed: ${error.message}`);
+    return ((data ?? []) as unknown as DemoRow[]).map(mapDemo);
+  }
+
   async findDemoBySlug(slug: string): Promise<DemoRecord | null> {
     const { data, error } = await this.table("prospect_demo_configs")
       .select("*")

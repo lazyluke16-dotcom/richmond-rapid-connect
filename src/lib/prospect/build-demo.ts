@@ -113,10 +113,21 @@ export async function buildProspectDemo(
   }
   if (!inserted) throw new Error("Could not allocate a unique demo slug after several attempts.");
 
+  // A rebuild supersedes prior versions: revoke every earlier active demo so old links
+  // (and their tokens) fail closed and only the newest link is live.
+  const priorDemos = await store.listDemos(prospect.id);
+  const supersededAt = clock();
+  for (const demo of priorDemos) {
+    if (demo.id !== inserted.id && !demo.revokedAt) {
+      await store.revokeDemo(demo.id, supersededAt);
+    }
+  }
+
   await store.addEvent(prospect.id, "demo_built", {
     slug: inserted.slug,
     version,
     score: result.score.score,
+    supersededPriorVersions: priorDemos.filter((d) => d.id !== inserted.id).length,
   });
   await store.update(prospect.id, { demoBuiltAt: clock() });
 

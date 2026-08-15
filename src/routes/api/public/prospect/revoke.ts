@@ -38,8 +38,8 @@ export async function handleProspectRevoke(request: Request): Promise<Response> 
   try {
     const store = createSupabaseProspectStore(supabaseAdmin);
     const service = new DemoAccessService(store);
-    const revoked = await service.revokeLatest(body.prospectId);
-    return json({ revoked });
+    const revokedCount = await service.revokeForProspect(body.prospectId);
+    return json({ revoked: revokedCount > 0, revokedCount });
   } catch {
     return json({ error: "Revocation failed" }, 500);
   }

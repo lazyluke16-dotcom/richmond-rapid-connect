@@ -116,6 +116,12 @@ export function isPublicIpv6(host: string): boolean {
     return false; // IPv4-mapped
   if (lower.startsWith("64:ff9b:")) return false; // NAT64
   if (lower.startsWith("2001:db8")) return false; // documentation
+  // 6to4 (2002::/16) and Teredo (2001:0000::/32) embed an arbitrary IPv4 address, so a
+  // literal here can reach a private/loopback/metadata IPv4 (e.g. 2002:a9fe:a9fe:: -> the
+  // 169.254.169.254 metadata address). They fall inside 2000::/3, so the global-unicast
+  // whitelist below would otherwise accept them. Reject outright.
+  if (lower.startsWith("2002:")) return false; // 6to4
+  if (lower.startsWith("2001:0:") || lower.startsWith("2001::")) return false; // Teredo 2001:0000::/32
   // Global unicast 2000::/3 -> first hextet 2000-3fff.
   const firstHextet = parseInt(lower.split(":")[0] || "0", 16);
   return firstHextet >= 0x2000 && firstHextet <= 0x3fff;

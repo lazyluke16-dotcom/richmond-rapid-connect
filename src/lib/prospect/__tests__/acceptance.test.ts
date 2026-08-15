@@ -111,6 +111,32 @@ describe("acceptance — build a demo from a website with no further input", () 
     });
     expect(auditDemoConfig(config, result.facts)).toHaveLength(0);
   });
+
+  it("a rebuild supersedes the prior demo (old token fails closed) and revoke kills all", async () => {
+    const fixture = buildFixtures()[1];
+    const store = new InMemoryProspectStore(CLOCK);
+    const access = new DemoAccessService(store, () => Date.parse(CLOCK()));
+
+    const first = await buildProspectDemo(store, fixture.origin, depsFor([fixture]));
+    expect((await access.resolve(first.demo.slug, first.demo.token)).ok).toBe(true);
+
+    // Rebuild: the new link is live, the OLD link must now fail closed (revoked).
+    const second = await buildProspectDemo(store, fixture.origin, depsFor([fixture]));
+    expect(second.demo.version).toBe(2);
+    expect((await access.resolve(second.demo.slug, second.demo.token)).ok).toBe(true);
+    expect(await access.resolve(first.demo.slug, first.demo.token)).toMatchObject({
+      ok: false,
+      reason: "revoked",
+    });
+
+    // Revoking the prospect kills every remaining active version.
+    const prospectId = (await store.findByDomain(second.canonicalDomain))!.id;
+    const revoked = await access.revokeForProspect(prospectId);
+    expect(revoked).toBe(1); // only v2 was still active
+    expect((await access.resolve(second.demo.slug, second.demo.token)).ok).toBe(false);
+    // Idempotent: nothing left to revoke.
+    expect(await access.revokeForProspect(prospectId)).toBe(0);
+  });
 });
 
 describe("ProspectRepository idempotency + lifecycle", () => {

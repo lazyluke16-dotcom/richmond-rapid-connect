@@ -71,10 +71,14 @@ prospect to an outreach/customer state.
 
 1. **SSRF-safe fetch** (`url-safety.ts` + `safe-fetch.ts`): only http/https, no embedded
    credentials, only ports 80/443, no localhost/private-use hostnames, no private/loopback/
-   link-local/reserved IPv4 or IPv6 literals. Hostnames are resolved and every resolved
-   address is re-validated (DNS-rebinding defence). Redirects are followed manually with
-   per-hop re-validation. A timeout, a byte cap and a content-type allow-list bound every
-   request.
+   link-local/reserved IPv4 or IPv6 literals — including octal/hex/decimal IPv4 forms
+   (canonicalised by the WHATWG URL parser), IPv4-mapped IPv6, NAT64, and the IPv4-embedding
+   transition ranges 6to4 (`2002::/16`) and Teredo (`2001:0000::/32`). Redirects are followed
+   manually with per-hop re-validation. A timeout, a byte cap and a content-type allow-list
+   bound every request. Where a DNS resolver is available (Node/Nitro), the hostname is
+   resolved and every resolved address is re-validated (DNS-rebinding defence); on an edge
+   runtime without `node:dns` this guard is a no-op, and the platform's own inability to reach
+   RFC1918/link-local/metadata addresses is the backstop for domain→private rebinding.
 2. **Deterministic extraction** (`html-extract.ts`): schema.org JSON-LD (preferred, high
    confidence) plus visible-text heuristics for services, service areas, phone, hours,
    emergency availability, positioning, brand colours, logo and favicon.
@@ -158,8 +162,9 @@ Authorization: Bearer <operator token>
 { "prospectId": "<id>" }
 ```
 
-Revocation is idempotent and makes the private link fail closed immediately. To re-issue a
-link, rebuild the demo (mints a new version + token).
+Revocation is idempotent and revokes **every** active demo version for the prospect, so all
+outstanding private links fail closed immediately. A rebuild also supersedes prior versions:
+minting a new demo revokes all earlier ones, so only the newest link is ever live.
 
 ## Safety boundary (V1)
 

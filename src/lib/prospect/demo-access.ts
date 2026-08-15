@@ -57,12 +57,25 @@ export class DemoAccessService {
     }
   }
 
-  /** Revoke the latest demo for a prospect. Idempotent. */
-  async revokeLatest(prospectId: string): Promise<boolean> {
-    const demo = await this.store.latestDemo(prospectId);
-    if (!demo || demo.revokedAt) return false;
-    await this.store.revokeDemo(demo.id, new Date(this.clock()).toISOString());
-    await this.store.addEvent(prospectId, "demo_revoked", { demoId: demo.id, slug: demo.slug });
-    return true;
+  /**
+   * Revoke EVERY active demo version for a prospect (optionally excluding one, used when a
+   * rebuild supersedes prior versions). Revoking only the latest would leave earlier
+   * rebuilt-over links live, so revocation must cover all active versions. Idempotent;
+   * returns the number of demos newly revoked.
+   */
+  async revokeForProspect(prospectId: string, exceptDemoId?: string): Promise<number> {
+    const demos = await this.store.listDemos(prospectId);
+    const active = demos.filter((demo) => !demo.revokedAt && demo.id !== exceptDemoId);
+    if (active.length === 0) return 0;
+    const revokedAt = new Date(this.clock()).toISOString();
+    for (const demo of active) {
+      await this.store.revokeDemo(demo.id, revokedAt);
+    }
+    await this.store.addEvent(prospectId, "demo_revoked", {
+      revokedCount: active.length,
+      demoIds: active.map((demo) => demo.id),
+      slugs: active.map((demo) => demo.slug),
+    });
+    return active.length;
   }
 }

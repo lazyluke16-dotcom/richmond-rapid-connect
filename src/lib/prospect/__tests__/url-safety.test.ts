@@ -83,6 +83,21 @@ describe("SSRF url-safety", () => {
     expect(isFetchableUrl("http://[fe80::1]")).toBe(false);
   });
 
+  it("rejects IPv6 transition addresses that embed a private IPv4 (6to4 / Teredo)", () => {
+    // 2002:a9fe:a9fe:: is 6to4 for 169.254.169.254 (the cloud metadata address);
+    // 2002:7f00:1:: is 6to4 for 127.0.0.1. Both fall inside 2000::/3 but must be rejected.
+    expect(isPublicIpv6("2002:a9fe:a9fe::")).toBe(false);
+    expect(isPublicIpv6("2002:7f00:1::")).toBe(false);
+    expect(isFetchableUrl("http://[2002:a9fe:a9fe::]")).toBe(false);
+    expect(isFetchableUrl("http://[2002:7f00:1::]")).toBe(false);
+    // Teredo 2001:0000::/32 also embeds an IPv4 client/server address.
+    expect(isPublicIpv6("2001::1")).toBe(false);
+    expect(isPublicIpv6("2001:0:0:0:0:0:0:1")).toBe(false);
+    expect(isFetchableUrl("http://[2001:0:0:0:0:0:0:1]")).toBe(false);
+    // A genuine global-unicast 2001: address (e.g. Google 2001:4860::) stays allowed.
+    expect(isPublicIpv6("2001:4860:4860::8888")).toBe(true);
+  });
+
   it("isPublicIpAddress dispatches on family", () => {
     expect(isPublicIpAddress("8.8.8.8")).toBe(true);
     expect(isPublicIpAddress("10.0.0.1")).toBe(false);
