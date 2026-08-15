@@ -42,6 +42,7 @@ import { Route as ServicesBlockedDrainsRouteImport } from './routes/services.blo
 import { Route as ServicesEmergencyRouteImport } from './routes/services.emergency'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as AuthenticatedAcquisitionDiscoveryRouteImport } from './routes/_authenticated/acquisition.discovery'
 import { Route as AuthenticatedAcquisitionProspectsRouteImport } from './routes/_authenticated/acquisition.prospects'
 import { Route as ApiDashboardVerifyPinRouteImport } from './routes/api/dashboard.verify-pin'
 import { Route as ApiDemoTriggerSmsRouteImport } from './routes/api/demo.trigger-sms'
@@ -62,6 +63,10 @@ import { Route as ApiPublicBillingCheckoutStatusRouteImport } from './routes/api
 import { Route as ApiPublicBillingPlanRouteImport } from './routes/api/public/billing.plan'
 import { Route as ApiPublicBillingPortalRouteImport } from './routes/api/public/billing.portal'
 import { Route as ApiPublicBillingSummaryRouteImport } from './routes/api/public/billing.summary'
+import { Route as ApiPublicDiscoveryAdvanceRouteImport } from './routes/api/public/discovery/advance'
+import { Route as ApiPublicDiscoveryControlRouteImport } from './routes/api/public/discovery/control'
+import { Route as ApiPublicDiscoveryDetailRouteImport } from './routes/api/public/discovery/detail'
+import { Route as ApiPublicDiscoveryMissionsRouteImport } from './routes/api/public/discovery/missions'
 import { Route as ApiPublicOutreachReportRouteImport } from './routes/api/public/outreach/report'
 import { Route as ApiPublicOutreachUnsubscribeRouteImport } from './routes/api/public/outreach/unsubscribe'
 import { Route as ApiPublicProspectBuildRouteImport } from './routes/api/public/prospect/build'
@@ -245,6 +250,12 @@ const Char91DotmcpChar93InvokeToolToolRoute =
     path: '/.mcp/invoke-tool/$tool',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AuthenticatedAcquisitionDiscoveryRoute =
+  AuthenticatedAcquisitionDiscoveryRouteImport.update({
+    id: '/acquisition/discovery',
+    path: '/acquisition/discovery',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAcquisitionProspectsRoute =
   AuthenticatedAcquisitionProspectsRouteImport.update({
     id: '/acquisition/prospects',
@@ -350,6 +361,30 @@ const ApiPublicBillingSummaryRoute = ApiPublicBillingSummaryRouteImport.update({
   path: '/api/public/billing/summary',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicDiscoveryAdvanceRoute =
+  ApiPublicDiscoveryAdvanceRouteImport.update({
+    id: '/api/public/discovery/advance',
+    path: '/api/public/discovery/advance',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicDiscoveryControlRoute =
+  ApiPublicDiscoveryControlRouteImport.update({
+    id: '/api/public/discovery/control',
+    path: '/api/public/discovery/control',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicDiscoveryDetailRoute =
+  ApiPublicDiscoveryDetailRouteImport.update({
+    id: '/api/public/discovery/detail',
+    path: '/api/public/discovery/detail',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicDiscoveryMissionsRoute =
+  ApiPublicDiscoveryMissionsRouteImport.update({
+    id: '/api/public/discovery/missions',
+    path: '/api/public/discovery/missions',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicOutreachReportRoute = ApiPublicOutreachReportRouteImport.update({
   id: '/api/public/outreach/report',
   path: '/api/public/outreach/report',
@@ -445,6 +480,7 @@ export interface FileRoutesByFullPath {
   '/services/emergency': typeof ServicesEmergencyRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
+  '/acquisition/discovery': typeof AuthenticatedAcquisitionDiscoveryRoute
   '/acquisition/prospects': typeof AuthenticatedAcquisitionProspectsRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
@@ -465,6 +501,10 @@ export interface FileRoutesByFullPath {
   '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
+  '/api/public/discovery/advance': typeof ApiPublicDiscoveryAdvanceRoute
+  '/api/public/discovery/control': typeof ApiPublicDiscoveryControlRoute
+  '/api/public/discovery/detail': typeof ApiPublicDiscoveryDetailRoute
+  '/api/public/discovery/missions': typeof ApiPublicDiscoveryMissionsRoute
   '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
   '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
   '/api/public/prospect/build': typeof ApiPublicProspectBuildRoute
@@ -509,6 +549,7 @@ export interface FileRoutesByTo {
   '/services/emergency': typeof ServicesEmergencyRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
+  '/acquisition/discovery': typeof AuthenticatedAcquisitionDiscoveryRoute
   '/acquisition/prospects': typeof AuthenticatedAcquisitionProspectsRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
@@ -529,6 +570,10 @@ export interface FileRoutesByTo {
   '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
+  '/api/public/discovery/advance': typeof ApiPublicDiscoveryAdvanceRoute
+  '/api/public/discovery/control': typeof ApiPublicDiscoveryControlRoute
+  '/api/public/discovery/detail': typeof ApiPublicDiscoveryDetailRoute
+  '/api/public/discovery/missions': typeof ApiPublicDiscoveryMissionsRoute
   '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
   '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
   '/api/public/prospect/build': typeof ApiPublicProspectBuildRoute
@@ -576,6 +621,7 @@ export interface FileRoutesById {
   '/services/emergency': typeof ServicesEmergencyRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
+  '/_authenticated/acquisition/discovery': typeof AuthenticatedAcquisitionDiscoveryRoute
   '/_authenticated/acquisition/prospects': typeof AuthenticatedAcquisitionProspectsRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
@@ -596,6 +642,10 @@ export interface FileRoutesById {
   '/api/public/billing/plan': typeof ApiPublicBillingPlanRoute
   '/api/public/billing/portal': typeof ApiPublicBillingPortalRoute
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
+  '/api/public/discovery/advance': typeof ApiPublicDiscoveryAdvanceRoute
+  '/api/public/discovery/control': typeof ApiPublicDiscoveryControlRoute
+  '/api/public/discovery/detail': typeof ApiPublicDiscoveryDetailRoute
+  '/api/public/discovery/missions': typeof ApiPublicDiscoveryMissionsRoute
   '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
   '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
   '/api/public/prospect/build': typeof ApiPublicProspectBuildRoute
@@ -643,6 +693,7 @@ export interface FileRouteTypes {
     | '/services/emergency'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
+    | '/acquisition/discovery'
     | '/acquisition/prospects'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
@@ -663,6 +714,10 @@ export interface FileRouteTypes {
     | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
+    | '/api/public/discovery/advance'
+    | '/api/public/discovery/control'
+    | '/api/public/discovery/detail'
+    | '/api/public/discovery/missions'
     | '/api/public/outreach/report'
     | '/api/public/outreach/unsubscribe'
     | '/api/public/prospect/build'
@@ -707,6 +762,7 @@ export interface FileRouteTypes {
     | '/services/emergency'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
+    | '/acquisition/discovery'
     | '/acquisition/prospects'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
@@ -727,6 +783,10 @@ export interface FileRouteTypes {
     | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
+    | '/api/public/discovery/advance'
+    | '/api/public/discovery/control'
+    | '/api/public/discovery/detail'
+    | '/api/public/discovery/missions'
     | '/api/public/outreach/report'
     | '/api/public/outreach/unsubscribe'
     | '/api/public/prospect/build'
@@ -773,6 +833,7 @@ export interface FileRouteTypes {
     | '/services/emergency'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
+    | '/_authenticated/acquisition/discovery'
     | '/_authenticated/acquisition/prospects'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
@@ -793,6 +854,10 @@ export interface FileRouteTypes {
     | '/api/public/billing/plan'
     | '/api/public/billing/portal'
     | '/api/public/billing/summary'
+    | '/api/public/discovery/advance'
+    | '/api/public/discovery/control'
+    | '/api/public/discovery/detail'
+    | '/api/public/discovery/missions'
     | '/api/public/outreach/report'
     | '/api/public/outreach/unsubscribe'
     | '/api/public/prospect/build'
@@ -842,6 +907,10 @@ export interface RootRouteChildren {
   ApiPublicBillingPlanRoute: typeof ApiPublicBillingPlanRoute
   ApiPublicBillingPortalRoute: typeof ApiPublicBillingPortalRoute
   ApiPublicBillingSummaryRoute: typeof ApiPublicBillingSummaryRoute
+  ApiPublicDiscoveryAdvanceRoute: typeof ApiPublicDiscoveryAdvanceRoute
+  ApiPublicDiscoveryControlRoute: typeof ApiPublicDiscoveryControlRoute
+  ApiPublicDiscoveryDetailRoute: typeof ApiPublicDiscoveryDetailRoute
+  ApiPublicDiscoveryMissionsRoute: typeof ApiPublicDiscoveryMissionsRoute
   ApiPublicOutreachReportRoute: typeof ApiPublicOutreachReportRoute
   ApiPublicOutreachUnsubscribeRoute: typeof ApiPublicOutreachUnsubscribeRoute
   ApiPublicProspectBuildRoute: typeof ApiPublicProspectBuildRoute
@@ -1088,6 +1157,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/acquisition/discovery': {
+      id: '/_authenticated/acquisition/discovery'
+      path: '/acquisition/discovery'
+      fullPath: '/acquisition/discovery'
+      preLoaderRoute: typeof AuthenticatedAcquisitionDiscoveryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/acquisition/prospects': {
       id: '/_authenticated/acquisition/prospects'
       path: '/acquisition/prospects'
@@ -1228,6 +1304,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicBillingSummaryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/discovery/advance': {
+      id: '/api/public/discovery/advance'
+      path: '/api/public/discovery/advance'
+      fullPath: '/api/public/discovery/advance'
+      preLoaderRoute: typeof ApiPublicDiscoveryAdvanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/discovery/control': {
+      id: '/api/public/discovery/control'
+      path: '/api/public/discovery/control'
+      fullPath: '/api/public/discovery/control'
+      preLoaderRoute: typeof ApiPublicDiscoveryControlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/discovery/detail': {
+      id: '/api/public/discovery/detail'
+      path: '/api/public/discovery/detail'
+      fullPath: '/api/public/discovery/detail'
+      preLoaderRoute: typeof ApiPublicDiscoveryDetailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/discovery/missions': {
+      id: '/api/public/discovery/missions'
+      path: '/api/public/discovery/missions'
+      fullPath: '/api/public/discovery/missions'
+      preLoaderRoute: typeof ApiPublicDiscoveryMissionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/outreach/report': {
       id: '/api/public/outreach/report'
       path: '/api/public/outreach/report'
@@ -1321,6 +1425,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSetupGuideRoute: typeof AuthenticatedSetupGuideRoute
   AuthenticatedUsageRoute: typeof AuthenticatedUsageRoute
+  AuthenticatedAcquisitionDiscoveryRoute: typeof AuthenticatedAcquisitionDiscoveryRoute
   AuthenticatedAcquisitionProspectsRoute: typeof AuthenticatedAcquisitionProspectsRoute
 }
 
@@ -1337,6 +1442,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSetupGuideRoute: AuthenticatedSetupGuideRoute,
   AuthenticatedUsageRoute: AuthenticatedUsageRoute,
+  AuthenticatedAcquisitionDiscoveryRoute:
+    AuthenticatedAcquisitionDiscoveryRoute,
   AuthenticatedAcquisitionProspectsRoute:
     AuthenticatedAcquisitionProspectsRoute,
 }
@@ -1399,6 +1506,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicBillingPlanRoute: ApiPublicBillingPlanRoute,
   ApiPublicBillingPortalRoute: ApiPublicBillingPortalRoute,
   ApiPublicBillingSummaryRoute: ApiPublicBillingSummaryRoute,
+  ApiPublicDiscoveryAdvanceRoute: ApiPublicDiscoveryAdvanceRoute,
+  ApiPublicDiscoveryControlRoute: ApiPublicDiscoveryControlRoute,
+  ApiPublicDiscoveryDetailRoute: ApiPublicDiscoveryDetailRoute,
+  ApiPublicDiscoveryMissionsRoute: ApiPublicDiscoveryMissionsRoute,
   ApiPublicOutreachReportRoute: ApiPublicOutreachReportRoute,
   ApiPublicOutreachUnsubscribeRoute: ApiPublicOutreachUnsubscribeRoute,
   ApiPublicProspectBuildRoute: ApiPublicProspectBuildRoute,
