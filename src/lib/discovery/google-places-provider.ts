@@ -127,7 +127,9 @@ export class GooglePlacesProvider implements DiscoveryProvider {
     }
     this.apiKey = options.apiKey.trim();
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.estimatedRequestCostCents = Math.max(0, Math.floor(options.perRequestCostCents ?? 4));
+    // Floor at 1 so the engine's pre-request spend gate can never be disabled by a 0/negative
+    // estimate. This is an internal conservative estimate, NOT Google's actual invoice.
+    this.estimatedRequestCostCents = Math.max(1, Math.floor(options.perRequestCostCents ?? 4));
     this.pageSize = Math.min(20, Math.max(1, options.pageSize ?? 20));
     this.timeoutMs = options.timeoutMs ?? 8000;
     this.regionCode = options.regionCode ?? "AU";

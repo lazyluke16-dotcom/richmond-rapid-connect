@@ -236,17 +236,20 @@ export class SupabaseMissionStore implements MissionStore {
 
   async claimCandidate(input: ClaimCandidateInput): Promise<ClaimResult> {
     const n = input.normalized;
+    const redact = input.redactProviderContent === true;
     const insert = await this.table("discovery_candidates")
       .insert({
         mission_id: input.missionId,
         source: n.source,
         provider_business_id: n.providerBusinessId,
-        source_url: n.sourceUrl,
-        business_name: n.businessName,
+        // Provider display content is not persisted when redacted (e.g. Google Maps Content):
+        // only the durable Place ID + website + derived domain are stored.
+        source_url: redact ? null : n.sourceUrl,
+        business_name: redact ? null : n.businessName,
         website: n.website,
         canonical_domain: n.canonicalDomain,
-        public_phone: n.publicPhone,
-        locality: n.locality,
+        public_phone: redact ? null : n.publicPhone,
+        locality: redact ? null : n.locality,
         discovery_query: input.discoveryQuery,
         dedup_key: n.dedupKey,
         raw_hash: input.rawHash,
@@ -397,6 +400,23 @@ export class SupabaseMissionStore implements MissionStore {
       .or(`lease_expires_at.is.null,lease_expires_at.lt.${nowIso}`)
       .select("id");
     if (error) throw new Error(`lease acquire failed: ${error.message}`);
+    return Array.isArray(data) && data.length > 0;
+  }
+
+  async renewLease(
+    missionId: string,
+    token: string,
+    nowIso: string,
+    ttlMs: number,
+  ): Promise<boolean> {
+    const expiresAt = new Date(Date.parse(nowIso) + ttlMs).toISOString();
+    // Extend the lease only while THIS token still holds it.
+    const { data, error } = await this.table("discovery_missions")
+      .update({ lease_expires_at: expiresAt } as never)
+      .eq("id", missionId)
+      .eq("lease_token", token)
+      .select("id");
+    if (error) throw new Error(`lease renew failed: ${error.message}`);
     return Array.isArray(data) && data.length > 0;
   }
 

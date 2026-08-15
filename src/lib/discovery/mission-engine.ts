@@ -50,8 +50,17 @@ function newLeaseToken(): string {
   return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Providers whose display content is temporary-cache-restricted, with the retention window. */
+/**
+ * Providers whose Terms permit caching only a durable id (e.g. Google Places → Place ID). For
+ * these, we do NOT persist provider display content (name/address/locality); it is used only
+ * transiently in-request. The retention window is a defence-in-depth backstop for the id/website
+ * we do keep.
+ */
 const PROVIDER_CONTENT_RETENTION_DAYS: Record<string, number> = { google_places: 30 };
+
+function redactsProviderContent(source: string): boolean {
+  return source in PROVIDER_CONTENT_RETENTION_DAYS;
+}
 
 function providerContentExpiry(source: string, nowIso: string): string | null {
   const days = PROVIDER_CONTENT_RETENTION_DAYS[source];
@@ -172,22 +181,6 @@ function maxPagesFor(mission: DiscoveryMissionRecord, pageSize: number): number 
   return Math.ceil(mission.maxCandidates / Math.max(1, pageSize)) + 5;
 }
 
-/** Reconstruct a normalised candidate from a stored row (used by crash recovery). */
-function normalizedFromRow(row: DiscoveryCandidateRecord): NormalizedCandidate {
-  return {
-    source: row.source,
-    providerBusinessId: row.providerBusinessId,
-    sourceUrl: row.sourceUrl,
-    businessName: row.businessName,
-    website: row.website,
-    canonicalDomain: row.canonicalDomain,
-    publicPhone: row.publicPhone,
-    locality: row.locality,
-    vertical: null,
-    dedupKey: row.dedupKey,
-  };
-}
-
 /**
  * Qualify a claimed candidate and, if accepted, hand it to the Slice-1 pipeline. Sets the
  * terminal disposition (rejected / duplicate:existing_prospect / demo_ready / failed) and
@@ -257,8 +250,11 @@ async function qualifyAndBuild(
 
 /**
  * Reprocess candidates left in a non-terminal state by a prior interrupted advance (a crash
- * between claiming/accepting a candidate and completing its build). buildProspectDemo is
- * idempotent by canonical domain, so recovery never creates a duplicate prospect/demo.
+ * between claiming/accepting a candidate and completing its build). It BUILDS directly from the
+ * stored website rather than re-qualifying: an 'accepted' candidate already qualified, and for
+ * providers that redact display content (e.g. Google Places) the row deliberately lacks the
+ * locality needed to re-run the geography rule. buildProspectDemo re-validates the URL (SSRF)
+ * and is idempotent by canonical domain, so recovery never creates a duplicate prospect/demo.
  */
 async function recoverInFlight(deps: EngineDeps, mission: DiscoveryMissionRecord): Promise<void> {
   const stuck = [
@@ -266,7 +262,32 @@ async function recoverInFlight(deps: EngineDeps, mission: DiscoveryMissionRecord
     ...(await deps.missionStore.listCandidates(mission.id, { disposition: "discovered" })),
   ];
   for (const row of stuck) {
-    await qualifyAndBuild(deps, mission, row.id, normalizedFromRow(row));
+    if (!row.website) {
+      await deps.missionStore.updateCandidate(row.id, {
+        disposition: "failed",
+        reason: "research_failed" as CandidateReason,
+      });
+      continue;
+    }
+    try {
+      const result = await buildProspectDemo(deps.prospectStore, row.website, {
+        fetchImpl: deps.fetchImpl,
+        dnsLookup: deps.dnsLookup,
+        clock: deps.clock,
+        baseUrl: deps.baseUrl,
+        demoTtlDays: deps.demoTtlDays,
+      });
+      await deps.missionStore.updateCandidate(row.id, {
+        disposition: "demo_ready",
+        reason: "demo_built",
+        acceptedProspectId: result.prospectId,
+      });
+    } catch {
+      await deps.missionStore.updateCandidate(row.id, {
+        disposition: "failed",
+        reason: "research_failed" as CandidateReason,
+      });
+    }
   }
 }
 
@@ -281,13 +302,12 @@ async function recoverInFlight(deps: EngineDeps, mission: DiscoveryMissionRecord
  */
 export async function advanceMission(deps: EngineDeps, missionId: string): Promise<AdvanceResult> {
   const clock = deps.clock ?? (() => new Date().toISOString());
+  // Default TTL comfortably exceeds a single candidate's website research; the lease is also
+  // heartbeat-renewed inside the loop, so a long page of slow builds never lets it expire (which
+  // would allow a second worker to make another metered request).
+  const leaseTtlMs = deps.leaseTtlMs ?? 120_000;
   const leaseToken = newLeaseToken();
-  const acquired = await deps.missionStore.acquireLease(
-    missionId,
-    leaseToken,
-    clock(),
-    deps.leaseTtlMs ?? 60_000,
-  );
+  const acquired = await deps.missionStore.acquireLease(missionId, leaseToken, clock(), leaseTtlMs);
   if (!acquired) {
     const busy = await deps.missionStore.getMission(missionId);
     return {
@@ -300,13 +320,18 @@ export async function advanceMission(deps: EngineDeps, missionId: string): Promi
     };
   }
   try {
-    return await advanceLocked(deps, missionId);
+    return await advanceLocked(deps, missionId, leaseToken, leaseTtlMs);
   } finally {
     await deps.missionStore.releaseLease(missionId, leaseToken);
   }
 }
 
-async function advanceLocked(deps: EngineDeps, missionId: string): Promise<AdvanceResult> {
+async function advanceLocked(
+  deps: EngineDeps,
+  missionId: string,
+  leaseToken: string,
+  leaseTtlMs: number,
+): Promise<AdvanceResult> {
   const clock = deps.clock ?? (() => new Date().toISOString());
   const pageSize = Math.max(1, deps.pageSize ?? 25);
   const initial = await deps.missionStore.getMission(missionId);
@@ -368,6 +393,9 @@ async function advanceLocked(deps: EngineDeps, missionId: string): Promise<Advan
       retriedTransientFailure: false,
     };
   }
+
+  // Heartbeat the lease immediately before the metered call so it cannot expire during it.
+  await deps.missionStore.renewLease(missionId, leaseToken, clock(), leaseTtlMs);
 
   // Fetch one page, handling transient (retryable) vs terminal provider failures.
   let page;
@@ -442,6 +470,9 @@ async function advanceLocked(deps: EngineDeps, missionId: string): Promise<Advan
     if (discovered >= mission.maxCandidates) break;
     if (mission.counts.demoReady + accepted >= mission.targetCount) break;
 
+    // Heartbeat each iteration — a slow website build must not let the lease lapse.
+    await deps.missionStore.renewLease(missionId, leaseToken, clock(), leaseTtlMs);
+
     const normalized = normalizeCandidate(raw, discovered);
     const claim = await deps.missionStore.claimCandidate({
       missionId,
@@ -449,6 +480,7 @@ async function advanceLocked(deps: EngineDeps, missionId: string): Promise<Advan
       discoveryQuery: mission.geography,
       rawHash: null,
       providerContentExpiresAt: providerContentExpiry(normalized.source, clock()),
+      redactProviderContent: redactsProviderContent(normalized.source),
     });
     // Another worker (or an earlier page) already claimed this exact identity — the unique
     // (mission, dedup_key) constraint collapsed an exact/differently-formatted duplicate.

@@ -260,9 +260,10 @@ function DiscoveryPage() {
           ) : (
             <p className="mt-3 text-xs text-muted-foreground">
               Google Places (live) discovers businesses in the geography, capped by your spend
-              ceiling. Business listings via Google Maps Platform; durable demo facts still come
-              from each business&apos;s own website. Requires a server-side key — creation fails
-              closed if it is not configured.
+              ceiling (an <strong>internal estimated</strong> provider spend, not Google&apos;s
+              actual invoice). Business listings via Google Maps Platform; only the Place ID and
+              official website are kept — durable demo facts come from each business&apos;s own
+              website. Requires a server-side key — creation fails closed if it is not configured.
             </p>
           )}
         </form>
@@ -302,7 +303,7 @@ function DiscoveryPage() {
                         {mission.counts.demoReady} · dup {mission.counts.duplicate} · rejected{" "}
                         {mission.counts.rejected} · failed {mission.counts.failed}
                         {mission.costCents > 0
-                          ? ` · est. A$${(mission.costCents / 100).toFixed(2)}`
+                          ? ` · est. provider spend A$${(mission.costCents / 100).toFixed(2)}`
                           : ""}
                       </div>
                     </button>

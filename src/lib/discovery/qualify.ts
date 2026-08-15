@@ -14,6 +14,26 @@ import type { CandidateReason, NormalizedCandidate } from "./types";
 const PLUMBING_SIGNAL =
   /\b(plumb|drain|hot\s*water|gas\s*fit|burst\s*pipe|pipe|sewer|stormwater|leak|tap|toilet|backflow|gutter)/i;
 
+/**
+ * Hosts that are social/directory/aggregator/provider-owned pages, NOT a business's own
+ * official website. A discovered "website" on one of these is not a usable research target
+ * (the durable demo facts must come from the business's own site), so we treat it as "no
+ * official website" rather than researching a Facebook page or a Google profile as if it were
+ * the business site.
+ */
+const NON_OFFICIAL_HOST =
+  /(^|\.)(facebook\.com|instagram\.com|twitter\.com|x\.com|linkedin\.com|youtube\.com|tiktok\.com|pinterest\.com|google\.com|business\.site|sites\.google\.com|g\.page|goo\.gl|maps\.app\.goo\.gl|yelp\.com(\.au)?|yellowpages\.com(\.au)?|truelocal\.com\.au|hipages\.com\.au|oneflare\.com\.au|serviceseeking\.com\.au|localsearch\.com\.au|wa\.me|t\.me|linktr\.ee|wixsite\.com)$/i;
+
+export function isLikelyOfficialWebsite(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    return !NON_OFFICIAL_HOST.test(host);
+  } catch {
+    return false;
+  }
+}
+
 export interface QualifyInput {
   vertical: string;
   geoTerms: string[];
@@ -54,8 +74,10 @@ export function qualifyCandidate(
     if (!inGeo) return { ok: false, reason: "outside_geography" };
   }
 
-  // 4. A usable website is required to research + build a demo.
-  if (!candidate.website) {
+  // 4. A usable OFFICIAL business website is required to research + build a demo. A social/
+  //    directory/provider-profile URL is not a research target (durable facts come from the
+  //    business's own site), so it counts as no official website.
+  if (!candidate.website || !isLikelyOfficialWebsite(candidate.website)) {
     return { ok: false, reason: "no_website" };
   }
 
