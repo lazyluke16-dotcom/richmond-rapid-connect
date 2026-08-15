@@ -69,7 +69,12 @@ jobs:
             src/lib/__tests__/sms-invoice-certification-route.behavior.test.ts \
             src/lib/__tests__/staging-deployment.behavior.test.ts \
             src/routes/api/public/process-sms-invoice.ts \
-            src/routes/api/public/staging-release.ts
+            src/routes/api/public/staging-release.ts \
+            src/lib/__tests__/migration-manifest.behavior.test.ts \
+            "src/lib/prospect/**/*.ts" \
+            "src/routes/api/public/prospect/*.ts" \
+            "src/routes/demo.\$slug.\$token.tsx" \
+            src/routes/_authenticated/acquisition.prospects.tsx
           npx eslint \
             scripts/configure-staging-auth-email.mjs \
             scripts/configure-staging-commercial-gst.mjs \
@@ -85,7 +90,12 @@ jobs:
             src/lib/__tests__/sms-invoice-certification-route.behavior.test.ts \
             src/lib/__tests__/staging-deployment.behavior.test.ts \
             src/routes/api/public/process-sms-invoice.ts \
-            src/routes/api/public/staging-release.ts
+            src/routes/api/public/staging-release.ts \
+            src/lib/__tests__/migration-manifest.behavior.test.ts \
+            "src/lib/prospect/**/*.ts" \
+            "src/routes/api/public/prospect/*.ts" \
+            "src/routes/demo.\$slug.\$token.tsx" \
+            src/routes/_authenticated/acquisition.prospects.tsx
 
       - name: Build Cloudflare production artifact
         env:
