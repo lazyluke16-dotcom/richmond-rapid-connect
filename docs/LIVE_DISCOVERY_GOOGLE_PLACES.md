@@ -52,25 +52,57 @@ concurrent workers.
 
 ## Data retention (compliant by construction)
 
-Per the policies + Service Specific Terms:
+The current Places API policy states you **must not pre-fetch, cache, or store Places API
+content beyond the allowed exceptions — only the `place_id` is exempt**. The 30-day figure in
+the Service Specific Terms applies specifically to latitude/longitude, NOT a general content
+cache. This slice therefore does **not** persist Google Maps Content:
 
-- **Place ID is exempt** and may be stored indefinitely → persisted as the durable
-  `provider_business_id` and used for dedup.
-- **Latitude/longitude may be cached ≤30 days** → we do **not request or store lat/long at
-  all**, sidestepping the rule entirely.
-- **Reviews/photos must not be pre-fetched/cached/stored** → never requested, never stored.
-- Other Google-derived content (display name, formatted address, locality) is treated as
-  **temporary cache**: each `google_places` candidate row records
-  `provider_content_expires_at = retrieved_at + 30 days`. A purge helper
-  (`purgeExpiredProviderContent`) nulls the Google-derived display fields after expiry,
-  keeping only the durable Place ID + internal disposition + the business's own website URL.
-- **Durable demo facts always come from the business's own website** through the reviewed
-  Slice-1 SSRF-safe pipeline — Google content is never converted into permanent prospect
-  facts.
+- **Place ID** — exempt; persisted indefinitely as `provider_business_id` and used for dedup.
+- **Google display content (displayName, formattedAddress, locality, source URL)** — **never
+  persisted.** It is used only **transiently, in-request**, to (a) run the geography rule and
+  (b) obtain the business's own website. At claim time the candidate row is written with
+  `redactProviderContent`, so `business_name`, `locality` and `source_url` are stored as NULL
+  for `google_places`. Qualification runs on the in-memory transient values; nothing
+  Google-derived reaches the database.
+- **Latitude/longitude** — not requested and not stored.
+- **Reviews/photos/ratings/hours** — not requested, never stored.
+- **Website URL + derived canonical domain** — kept (a pointer to the business's own site,
+  which Slice-1 then independently fetches). Durable demo facts come only from that site.
+- Crash recovery reprocesses a stuck candidate by **building directly from the stored
+  website** (no re-qualification), so it never needs the redacted locality.
+- `provider_content_expires_at` + `purgeExpiredProviderContent` remain as a defence-in-depth
+  backstop, but with redaction there is normally no Google content left to purge.
 
-Attribution: the discovery operator surface is internal (not an end-user product) and shows
-minimal Google-derived text; it carries a "Business listings via Google Maps Platform" note.
-No Google reviews/photos/map tiles are displayed.
+Operator display: because Google names/addresses are not stored, the operator sees the
+prospect's own business name (derived by Slice-1 from the business website) plus the domain —
+not Google Maps Content. The discovery UI carries a "Business listings via Google Maps
+Platform" note; no Google reviews/photos/map tiles are shown.
+
+## Hardening (independent review)
+
+- **No Google Maps Content persisted** (compliance, above) — redact at claim; recovery builds
+  from the stored website.
+- **Single-flight lease is heartbeat-renewed** every candidate (default TTL 120s), so a long
+  page of slow website builds cannot let the lease expire and allow a second worker to make
+  another metered request. A crashed holder's lease still expires (≤TTL) so the mission resumes.
+- **Per-request cost estimate floored at ≥1c** so the pre-request spend gate can never be
+  disabled by a 0/negative estimate. The estimate is an **internal conservative provider-spend
+  estimate, not Google's actual invoice** — the app never claims an exact Google cost.
+- **Official-website filter**: a discovered "website" on a social/directory/aggregator/Google-
+  profile host (facebook, instagram, business.site, g.page, yelp, hipages, linktr.ee, …) is
+  treated as "no official website" (`no_website`), so we never research a Facebook page or a
+  Google profile as if it were the business's own site.
+
+## Known limitations / observations
+
+- `429 RESOURCE_EXHAUSTED` may be daily-quota exhaustion (not just a short rate-limit); it is
+  retried within the mission retry cap then fails terminally (bounded; 429 responses are not
+  billed).
+- Vertical classification requires a Google `plumber` type; a plumber typed only as
+  `general_contractor` would be conservatively rejected (explainable; import can cover it).
+- The Supabase lease/renew are atomic conditional `UPDATE`s (Postgres row-locking); they are
+  exercised via the in-memory double in CI and by reasoning about the SQL, not against a live
+  Postgres in unit tests.
 
 ## Concurrency-safe metered spend (independent-review prerequisite #1)
 

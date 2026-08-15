@@ -150,8 +150,17 @@ describe("Google-Places mission (mocked)", () => {
     // Cost accounted from the provider estimate (2 pages × 4c).
     expect(final.costCents).toBe(8);
 
-    // Retention metadata stamped on Google-derived candidates.
+    // COMPLIANCE: no Google Maps Content (name/address/locality/sourceUrl) is ever persisted —
+    // only the durable Place ID + website + derived domain. Qualification used transient values.
     const all = await missionStore.listCandidates(mission.id);
+    expect(all.every((c) => c.businessName === null)).toBe(true);
+    expect(all.every((c) => c.locality === null)).toBe(true);
+    expect(all.every((c) => c.sourceUrl === null)).toBe(true);
+    expect(all.every((c) => c.providerBusinessId?.startsWith("ChIJ"))).toBe(true);
+    expect(all.filter((c) => c.disposition === "demo_ready").every((c) => c.website !== null)).toBe(
+      true,
+    );
+    // Retention backstop still stamped on Google candidates.
     expect(all.every((c) => c.providerContentExpiresAt !== null)).toBe(true);
 
     // Zero outreach across all built prospects.
@@ -217,5 +226,47 @@ describe("Google-Places mission (mocked)", () => {
     const result = await advanceMission(deps, mission.id);
     expect(result.processed).toBe(0);
     await missionStore.releaseLease(mission.id, token);
+  });
+
+  it("renews the lease only for the holding token (heartbeat)", async () => {
+    const { missionStore } = harness(null);
+    const mission = await createGoogleMission(missionStore, null);
+    expect(await missionStore.acquireLease(mission.id, "a".repeat(32), CLOCK(), 60_000)).toBe(true);
+    // Wrong token cannot renew.
+    expect(await missionStore.renewLease(mission.id, "b".repeat(32), CLOCK(), 60_000)).toBe(false);
+    // Holder can renew (extends expiry); a fresh acquire still fails while held.
+    expect(await missionStore.renewLease(mission.id, "a".repeat(32), CLOCK(), 60_000)).toBe(true);
+    expect(await missionStore.acquireLease(mission.id, "c".repeat(32), CLOCK(), 60_000)).toBe(
+      false,
+    );
+  });
+
+  it("floors the per-request cost estimate at 1 so the spend gate can't be disabled", async () => {
+    // Even with a 0 configured estimate, the gate must still stop after the first request.
+    const missionStore = new InMemoryMissionStore(CLOCK);
+    const prospectStore = new InMemoryProspectStore(CLOCK);
+    const registry = new ProviderRegistry();
+    const provider = new GooglePlacesProvider({
+      apiKey: "k",
+      fetchImpl: googleFetch(),
+      perRequestCostCents: 0,
+    });
+    expect(provider.estimatedRequestCostCents).toBe(1);
+    registry.register(provider);
+    const deps: EngineDeps = {
+      missionStore,
+      prospectStore,
+      registry,
+      fetchImpl: siteFetch(),
+      dnsLookup: async () => [],
+      clock: CLOCK,
+      baseUrl: "https://rapidconnect.example",
+      pageSize: 20,
+    };
+    const mission = await createGoogleMission(missionStore, 1); // ceiling 1c
+    await startMission(deps, mission.id);
+    const final = await runMissionToCompletion(deps, mission.id, { maxSteps: 50 });
+    expect(final.status).toBe("completed");
+    expect(final.costCents).toBeLessThanOrEqual(1);
   });
 });

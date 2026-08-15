@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { identityKeys, normalizeCandidate, normalizePhone, primaryDedupKey } from "../normalize";
 import { MissionDedupIndex, toIdentityEntry } from "../dedup";
-import { qualifyCandidate } from "../qualify";
+import { isLikelyOfficialWebsite, qualifyCandidate } from "../qualify";
 import type { NormalizedCandidate, RawDiscoveryCandidate } from "../types";
 
 function norm(raw: Partial<RawDiscoveryCandidate>, index = 0): NormalizedCandidate {
@@ -184,6 +184,34 @@ describe("pre-qualification", () => {
         mission,
       ),
     ).toMatchObject({ ok: false, reason: "unsafe_url" });
+  });
+
+  it("treats social/directory/provider-profile URLs as NOT an official website", () => {
+    expect(isLikelyOfficialWebsite("https://ace-plumbing.com.au")).toBe(true);
+    for (const url of [
+      "https://www.facebook.com/aceplumbing",
+      "https://instagram.com/aceplumbing",
+      "https://ace.business.site",
+      "https://g.page/aceplumbing",
+      "https://www.yelp.com.au/biz/ace-plumbing",
+      "https://hipages.com.au/connect/aceplumbing",
+      "https://linktr.ee/aceplumbing",
+    ]) {
+      expect(isLikelyOfficialWebsite(url)).toBe(false);
+    }
+  });
+
+  it("rejects a candidate whose only website is a social/directory page (no_website)", () => {
+    expect(
+      qualifyCandidate(
+        norm({
+          businessName: "Ace Plumbing",
+          website: "https://facebook.com/ace",
+          locality: "Richmond",
+        }),
+        mission,
+      ),
+    ).toMatchObject({ ok: false, reason: "no_website" });
   });
 
   it("skips geography filtering when the mission does not constrain it", () => {
