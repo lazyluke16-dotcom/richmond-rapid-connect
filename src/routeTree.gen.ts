@@ -35,6 +35,7 @@ import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedOutreachOperationsRouteImport } from './routes/_authenticated/outreach-operations'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSetupGuideRouteImport } from './routes/_authenticated/setup-guide'
+import { Route as AuthenticatedSmartAnswerRouteImport } from './routes/_authenticated/smart-answer'
 import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/usage'
 import { Route as AuthConfirmRouteImport } from './routes/auth_.confirm'
 import { Route as BSlugRouteImport } from './routes/b.$slug'
@@ -64,7 +65,12 @@ import { Route as ApiPublicOutreachReportRouteImport } from './routes/api/public
 import { Route as ApiPublicOutreachUnsubscribeRouteImport } from './routes/api/public/outreach/unsubscribe'
 import { Route as ApiPublicWebhooksStripeInboundRouteImport } from './routes/api/public/webhooks.stripe-inbound'
 import { Route as ApiPublicWebhooksTwilioOutreachRouteImport } from './routes/api/public/webhooks/twilio-outreach'
+import { Route as ApiPublicWebhooksTwilioSmartAnswerRouteImport } from './routes/api/public/webhooks.twilio-smart-answer'
+import { Route as ApiPublicWebhooksTwilioSmartAnswerDialRouteImport } from './routes/api/public/webhooks.twilio-smart-answer-dial'
+import { Route as ApiPublicWebhooksTwilioSmartAnswerRecordRouteImport } from './routes/api/public/webhooks.twilio-smart-answer-record'
+import { Route as ApiPublicWebhooksTwilioSmartAnswerTranscribeRouteImport } from './routes/api/public/webhooks.twilio-smart-answer-transcribe'
 import { Route as ApiPublicWebhooksVapiInboundRouteImport } from './routes/api/public/webhooks.vapi-inbound'
+import { Route as ApiPublicWebhooksVapiSmartAnswerRouteImport } from './routes/api/public/webhooks.vapi-smart-answer'
 import { Route as ApiPublicWebhooksTwilioMissedCallSlugRouteImport } from './routes/api/public.webhooks.twilio-missed-call.$slug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -202,6 +208,12 @@ const AuthenticatedSetupGuideRoute = AuthenticatedSetupGuideRouteImport.update({
   path: '/setup-guide',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSmartAnswerRoute =
+  AuthenticatedSmartAnswerRouteImport.update({
+    id: '/smart-answer',
+    path: '/smart-answer',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedUsageRoute = AuthenticatedUsageRouteImport.update({
   id: '/usage',
   path: '/usage',
@@ -355,10 +367,40 @@ const ApiPublicWebhooksTwilioOutreachRoute =
     path: '/api/public/webhooks/twilio-outreach',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicWebhooksTwilioSmartAnswerRoute =
+  ApiPublicWebhooksTwilioSmartAnswerRouteImport.update({
+    id: '/api/public/webhooks/twilio-smart-answer',
+    path: '/api/public/webhooks/twilio-smart-answer',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicWebhooksTwilioSmartAnswerDialRoute =
+  ApiPublicWebhooksTwilioSmartAnswerDialRouteImport.update({
+    id: '/api/public/webhooks/twilio-smart-answer-dial',
+    path: '/api/public/webhooks/twilio-smart-answer-dial',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicWebhooksTwilioSmartAnswerRecordRoute =
+  ApiPublicWebhooksTwilioSmartAnswerRecordRouteImport.update({
+    id: '/api/public/webhooks/twilio-smart-answer-record',
+    path: '/api/public/webhooks/twilio-smart-answer-record',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicWebhooksTwilioSmartAnswerTranscribeRoute =
+  ApiPublicWebhooksTwilioSmartAnswerTranscribeRouteImport.update({
+    id: '/api/public/webhooks/twilio-smart-answer-transcribe',
+    path: '/api/public/webhooks/twilio-smart-answer-transcribe',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicWebhooksVapiInboundRoute =
   ApiPublicWebhooksVapiInboundRouteImport.update({
     id: '/api/public/webhooks/vapi-inbound',
     path: '/api/public/webhooks/vapi-inbound',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicWebhooksVapiSmartAnswerRoute =
+  ApiPublicWebhooksVapiSmartAnswerRouteImport.update({
+    id: '/api/public/webhooks/vapi-smart-answer',
+    path: '/api/public/webhooks/vapi-smart-answer',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiPublicWebhooksTwilioMissedCallSlugRoute =
@@ -394,6 +436,7 @@ export interface FileRoutesByFullPath {
   '/outreach-operations': typeof AuthenticatedOutreachOperationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/setup-guide': typeof AuthenticatedSetupGuideRoute
+  '/smart-answer': typeof AuthenticatedSmartAnswerRoute
   '/usage': typeof AuthenticatedUsageRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/b/$slug': typeof BSlugRouteWithChildren
@@ -423,7 +466,12 @@ export interface FileRoutesByFullPath {
   '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
   '/api/public/webhooks/twilio-outreach': typeof ApiPublicWebhooksTwilioOutreachRoute
+  '/api/public/webhooks/twilio-smart-answer': typeof ApiPublicWebhooksTwilioSmartAnswerRoute
+  '/api/public/webhooks/twilio-smart-answer-dial': typeof ApiPublicWebhooksTwilioSmartAnswerDialRoute
+  '/api/public/webhooks/twilio-smart-answer-record': typeof ApiPublicWebhooksTwilioSmartAnswerRecordRoute
+  '/api/public/webhooks/twilio-smart-answer-transcribe': typeof ApiPublicWebhooksTwilioSmartAnswerTranscribeRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
+  '/api/public/webhooks/vapi-smart-answer': typeof ApiPublicWebhooksVapiSmartAnswerRoute
   '/api/public/webhooks/twilio-missed-call/$slug': typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
 export interface FileRoutesByTo {
@@ -452,6 +500,7 @@ export interface FileRoutesByTo {
   '/outreach-operations': typeof AuthenticatedOutreachOperationsRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/setup-guide': typeof AuthenticatedSetupGuideRoute
+  '/smart-answer': typeof AuthenticatedSmartAnswerRoute
   '/usage': typeof AuthenticatedUsageRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/services/blocked-drains': typeof ServicesBlockedDrainsRoute
@@ -480,7 +529,12 @@ export interface FileRoutesByTo {
   '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
   '/api/public/webhooks/twilio-outreach': typeof ApiPublicWebhooksTwilioOutreachRoute
+  '/api/public/webhooks/twilio-smart-answer': typeof ApiPublicWebhooksTwilioSmartAnswerRoute
+  '/api/public/webhooks/twilio-smart-answer-dial': typeof ApiPublicWebhooksTwilioSmartAnswerDialRoute
+  '/api/public/webhooks/twilio-smart-answer-record': typeof ApiPublicWebhooksTwilioSmartAnswerRecordRoute
+  '/api/public/webhooks/twilio-smart-answer-transcribe': typeof ApiPublicWebhooksTwilioSmartAnswerTranscribeRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
+  '/api/public/webhooks/vapi-smart-answer': typeof ApiPublicWebhooksVapiSmartAnswerRoute
   '/api/public/webhooks/twilio-missed-call/$slug': typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
 export interface FileRoutesById {
@@ -511,6 +565,7 @@ export interface FileRoutesById {
   '/_authenticated/outreach-operations': typeof AuthenticatedOutreachOperationsRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/setup-guide': typeof AuthenticatedSetupGuideRoute
+  '/_authenticated/smart-answer': typeof AuthenticatedSmartAnswerRoute
   '/_authenticated/usage': typeof AuthenticatedUsageRoute
   '/auth_/confirm': typeof AuthConfirmRoute
   '/b/$slug': typeof BSlugRouteWithChildren
@@ -540,7 +595,12 @@ export interface FileRoutesById {
   '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
   '/api/public/webhooks/twilio-outreach': typeof ApiPublicWebhooksTwilioOutreachRoute
+  '/api/public/webhooks/twilio-smart-answer': typeof ApiPublicWebhooksTwilioSmartAnswerRoute
+  '/api/public/webhooks/twilio-smart-answer-dial': typeof ApiPublicWebhooksTwilioSmartAnswerDialRoute
+  '/api/public/webhooks/twilio-smart-answer-record': typeof ApiPublicWebhooksTwilioSmartAnswerRecordRoute
+  '/api/public/webhooks/twilio-smart-answer-transcribe': typeof ApiPublicWebhooksTwilioSmartAnswerTranscribeRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
+  '/api/public/webhooks/vapi-smart-answer': typeof ApiPublicWebhooksVapiSmartAnswerRoute
   '/api/public/webhooks/twilio-missed-call/$slug': typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
 export interface FileRouteTypes {
@@ -571,6 +631,7 @@ export interface FileRouteTypes {
     | '/outreach-operations'
     | '/settings'
     | '/setup-guide'
+    | '/smart-answer'
     | '/usage'
     | '/auth/confirm'
     | '/b/$slug'
@@ -600,7 +661,12 @@ export interface FileRouteTypes {
     | '/api/public/outreach/unsubscribe'
     | '/api/public/webhooks/stripe-inbound'
     | '/api/public/webhooks/twilio-outreach'
+    | '/api/public/webhooks/twilio-smart-answer'
+    | '/api/public/webhooks/twilio-smart-answer-dial'
+    | '/api/public/webhooks/twilio-smart-answer-record'
+    | '/api/public/webhooks/twilio-smart-answer-transcribe'
     | '/api/public/webhooks/vapi-inbound'
+    | '/api/public/webhooks/vapi-smart-answer'
     | '/api/public/webhooks/twilio-missed-call/$slug'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -629,6 +695,7 @@ export interface FileRouteTypes {
     | '/outreach-operations'
     | '/settings'
     | '/setup-guide'
+    | '/smart-answer'
     | '/usage'
     | '/auth/confirm'
     | '/services/blocked-drains'
@@ -657,7 +724,12 @@ export interface FileRouteTypes {
     | '/api/public/outreach/unsubscribe'
     | '/api/public/webhooks/stripe-inbound'
     | '/api/public/webhooks/twilio-outreach'
+    | '/api/public/webhooks/twilio-smart-answer'
+    | '/api/public/webhooks/twilio-smart-answer-dial'
+    | '/api/public/webhooks/twilio-smart-answer-record'
+    | '/api/public/webhooks/twilio-smart-answer-transcribe'
     | '/api/public/webhooks/vapi-inbound'
+    | '/api/public/webhooks/vapi-smart-answer'
     | '/api/public/webhooks/twilio-missed-call/$slug'
   id:
     | '__root__'
@@ -687,6 +759,7 @@ export interface FileRouteTypes {
     | '/_authenticated/outreach-operations'
     | '/_authenticated/settings'
     | '/_authenticated/setup-guide'
+    | '/_authenticated/smart-answer'
     | '/_authenticated/usage'
     | '/auth_/confirm'
     | '/b/$slug'
@@ -716,7 +789,12 @@ export interface FileRouteTypes {
     | '/api/public/outreach/unsubscribe'
     | '/api/public/webhooks/stripe-inbound'
     | '/api/public/webhooks/twilio-outreach'
+    | '/api/public/webhooks/twilio-smart-answer'
+    | '/api/public/webhooks/twilio-smart-answer-dial'
+    | '/api/public/webhooks/twilio-smart-answer-record'
+    | '/api/public/webhooks/twilio-smart-answer-transcribe'
     | '/api/public/webhooks/vapi-inbound'
+    | '/api/public/webhooks/vapi-smart-answer'
     | '/api/public/webhooks/twilio-missed-call/$slug'
   fileRoutesById: FileRoutesById
 }
@@ -759,7 +837,12 @@ export interface RootRouteChildren {
   ApiPublicOutreachUnsubscribeRoute: typeof ApiPublicOutreachUnsubscribeRoute
   ApiPublicWebhooksStripeInboundRoute: typeof ApiPublicWebhooksStripeInboundRoute
   ApiPublicWebhooksTwilioOutreachRoute: typeof ApiPublicWebhooksTwilioOutreachRoute
+  ApiPublicWebhooksTwilioSmartAnswerRoute: typeof ApiPublicWebhooksTwilioSmartAnswerRoute
+  ApiPublicWebhooksTwilioSmartAnswerDialRoute: typeof ApiPublicWebhooksTwilioSmartAnswerDialRoute
+  ApiPublicWebhooksTwilioSmartAnswerRecordRoute: typeof ApiPublicWebhooksTwilioSmartAnswerRecordRoute
+  ApiPublicWebhooksTwilioSmartAnswerTranscribeRoute: typeof ApiPublicWebhooksTwilioSmartAnswerTranscribeRoute
   ApiPublicWebhooksVapiInboundRoute: typeof ApiPublicWebhooksVapiInboundRoute
+  ApiPublicWebhooksVapiSmartAnswerRoute: typeof ApiPublicWebhooksVapiSmartAnswerRoute
   ApiPublicWebhooksTwilioMissedCallSlugRoute: typeof ApiPublicWebhooksTwilioMissedCallSlugRoute
 }
 
@@ -945,6 +1028,13 @@ declare module '@tanstack/react-router' {
       path: '/setup-guide'
       fullPath: '/setup-guide'
       preLoaderRoute: typeof AuthenticatedSetupGuideRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/smart-answer': {
+      id: '/_authenticated/smart-answer'
+      path: '/smart-answer'
+      fullPath: '/smart-answer'
+      preLoaderRoute: typeof AuthenticatedSmartAnswerRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/usage': {
@@ -1150,11 +1240,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicWebhooksTwilioOutreachRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/webhooks/twilio-smart-answer': {
+      id: '/api/public/webhooks/twilio-smart-answer'
+      path: '/api/public/webhooks/twilio-smart-answer'
+      fullPath: '/api/public/webhooks/twilio-smart-answer'
+      preLoaderRoute: typeof ApiPublicWebhooksTwilioSmartAnswerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/twilio-smart-answer-dial': {
+      id: '/api/public/webhooks/twilio-smart-answer-dial'
+      path: '/api/public/webhooks/twilio-smart-answer-dial'
+      fullPath: '/api/public/webhooks/twilio-smart-answer-dial'
+      preLoaderRoute: typeof ApiPublicWebhooksTwilioSmartAnswerDialRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/twilio-smart-answer-record': {
+      id: '/api/public/webhooks/twilio-smart-answer-record'
+      path: '/api/public/webhooks/twilio-smart-answer-record'
+      fullPath: '/api/public/webhooks/twilio-smart-answer-record'
+      preLoaderRoute: typeof ApiPublicWebhooksTwilioSmartAnswerRecordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/twilio-smart-answer-transcribe': {
+      id: '/api/public/webhooks/twilio-smart-answer-transcribe'
+      path: '/api/public/webhooks/twilio-smart-answer-transcribe'
+      fullPath: '/api/public/webhooks/twilio-smart-answer-transcribe'
+      preLoaderRoute: typeof ApiPublicWebhooksTwilioSmartAnswerTranscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/webhooks/vapi-inbound': {
       id: '/api/public/webhooks/vapi-inbound'
       path: '/api/public/webhooks/vapi-inbound'
       fullPath: '/api/public/webhooks/vapi-inbound'
       preLoaderRoute: typeof ApiPublicWebhooksVapiInboundRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/webhooks/vapi-smart-answer': {
+      id: '/api/public/webhooks/vapi-smart-answer'
+      path: '/api/public/webhooks/vapi-smart-answer'
+      fullPath: '/api/public/webhooks/vapi-smart-answer'
+      preLoaderRoute: typeof ApiPublicWebhooksVapiSmartAnswerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/webhooks/twilio-missed-call/$slug': {
@@ -1179,6 +1304,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedOutreachOperationsRoute: typeof AuthenticatedOutreachOperationsRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSetupGuideRoute: typeof AuthenticatedSetupGuideRoute
+  AuthenticatedSmartAnswerRoute: typeof AuthenticatedSmartAnswerRoute
   AuthenticatedUsageRoute: typeof AuthenticatedUsageRoute
 }
 
@@ -1194,6 +1320,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedOutreachOperationsRoute: AuthenticatedOutreachOperationsRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSetupGuideRoute: AuthenticatedSetupGuideRoute,
+  AuthenticatedSmartAnswerRoute: AuthenticatedSmartAnswerRoute,
   AuthenticatedUsageRoute: AuthenticatedUsageRoute,
 }
 
@@ -1258,7 +1385,16 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicOutreachUnsubscribeRoute: ApiPublicOutreachUnsubscribeRoute,
   ApiPublicWebhooksStripeInboundRoute: ApiPublicWebhooksStripeInboundRoute,
   ApiPublicWebhooksTwilioOutreachRoute: ApiPublicWebhooksTwilioOutreachRoute,
+  ApiPublicWebhooksTwilioSmartAnswerRoute:
+    ApiPublicWebhooksTwilioSmartAnswerRoute,
+  ApiPublicWebhooksTwilioSmartAnswerDialRoute:
+    ApiPublicWebhooksTwilioSmartAnswerDialRoute,
+  ApiPublicWebhooksTwilioSmartAnswerRecordRoute:
+    ApiPublicWebhooksTwilioSmartAnswerRecordRoute,
+  ApiPublicWebhooksTwilioSmartAnswerTranscribeRoute:
+    ApiPublicWebhooksTwilioSmartAnswerTranscribeRoute,
   ApiPublicWebhooksVapiInboundRoute: ApiPublicWebhooksVapiInboundRoute,
+  ApiPublicWebhooksVapiSmartAnswerRoute: ApiPublicWebhooksVapiSmartAnswerRoute,
   ApiPublicWebhooksTwilioMissedCallSlugRoute:
     ApiPublicWebhooksTwilioMissedCallSlugRoute,
 }

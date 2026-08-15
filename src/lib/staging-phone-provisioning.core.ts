@@ -17,6 +17,14 @@ export const NUMBER_FRIENDLY_NAME = "Smart Answer Staging Certification";
 export const STAGING_PLACEHOLDER_FORWARDING = "+61491570156";
 
 const TWILIO_BASE = "https://api.twilio.com/2010-04-01";
+const TWILIO_NUMBERS_BASE = "https://numbers.twilio.com";
+const TWILIO_PRICING_BASE = "https://pricing.twilio.com";
+
+// The approved AU Mobile - Business regulatory bundle for the staging subaccount. This is a
+// resource identifier (not an auth secret) so it may be pinned; an env override is honoured.
+export const DEFAULT_STAGING_BUNDLE_SID = "BU1c43633a6ef6580e07204d4b73cf8cd7";
+// Hard recurring-cost cap for the staging number (USD/month).
+export const MAX_MONTHLY_PRICE_USD = 10;
 
 type Json = Record<string, unknown>;
 type TwilioError = Error & { twilioCode?: number | null; httpStatus?: number };
@@ -68,6 +76,106 @@ async function twilioGet(sid: string, token: string, path: string): Promise<Json
     throw e;
   }
   return body;
+}
+
+async function twilioGetAbsolute(sid: string, token: string, url: string): Promise<Json> {
+  const res = await fetch(url, { headers: { Authorization: authHeader(sid, token) } });
+  const text = await res.text();
+  const body: Json = text ? (JSON.parse(text) as Json) : {};
+  if (!res.ok) {
+    const e = new Error(
+      `Twilio GET ${url} -> ${res.status}: ${String(body.message ?? text.slice(0, 200))}`,
+    ) as TwilioError;
+    e.twilioCode = (body.code as number) ?? null;
+    e.httpStatus = res.status;
+    throw e;
+  }
+  return body;
+}
+
+/**
+ * Prove the pinned regulatory bundle is APPROVED and is the correct AU / mobile / business
+ * bundle. Fails closed (never purchases) on any mismatch — wrong SID, not approved, or wrong
+ * country/number-type/end-user context.
+ */
+async function verifyApprovedBundle(
+  sid: string,
+  token: string,
+  expectedBundleSid: string,
+): Promise<{ bundleSid: string; status: string; regulationSid: string }> {
+  const bundle = await twilioGetAbsolute(
+    sid,
+    token,
+    `${TWILIO_NUMBERS_BASE}/v2/RegulatoryCompliance/Bundles/${encodeURIComponent(expectedBundleSid)}`,
+  );
+  const bundleSid = String(bundle.sid ?? "");
+  if (bundleSid !== expectedBundleSid) {
+    throw new Error(
+      `Refused: regulatory bundle SID mismatch ('${bundleSid}' != '${expectedBundleSid}')`,
+    );
+  }
+  const status = String(bundle.status ?? "");
+  if (status !== "twilio-approved") {
+    throw new Error(
+      `Refused: regulatory bundle ${bundleSid} status is '${status}', not 'twilio-approved'`,
+    );
+  }
+  const regulationSid = String(bundle.regulation_sid ?? "");
+  if (!regulationSid) throw new Error(`Refused: bundle ${bundleSid} has no associated regulation`);
+  const regulation = await twilioGetAbsolute(
+    sid,
+    token,
+    `${TWILIO_NUMBERS_BASE}/v2/RegulatoryCompliance/Regulations/${encodeURIComponent(regulationSid)}`,
+  );
+  const iso = String(regulation.iso_country ?? "").toUpperCase();
+  const numberType = String(regulation.number_type ?? "").toLowerCase();
+  const endUser = String(regulation.end_user_type ?? "").toLowerCase();
+  if (iso !== "AU" || numberType !== "mobile" || endUser !== "business") {
+    throw new Error(
+      `Refused: bundle ${bundleSid} regulation is ${iso}/${numberType}/${endUser}, expected AU/mobile/business`,
+    );
+  }
+  return { bundleSid, status, regulationSid };
+}
+
+/** Discover the approved AU Address resource created for the bundle. Fails closed if absent. */
+async function findApprovedAuAddress(sid: string, token: string): Promise<string> {
+  const body = await twilioGet(
+    sid,
+    token,
+    `/Accounts/${encodeURIComponent(sid)}/Addresses.json?PageSize=50`,
+  );
+  const addresses = (body.addresses as Json[] | undefined) ?? [];
+  const au = addresses.find((a) => String(a.iso_country ?? "").toUpperCase() === "AU");
+  const addressSid = au ? String(au.sid ?? "") : "";
+  if (!addressSid) {
+    throw new Error(
+      "Refused: no AU Address resource found on the staging subaccount for the approved bundle",
+    );
+  }
+  return addressSid;
+}
+
+/** Verify the AU mobile recurring price is USD and within the cap. Fails closed otherwise. */
+async function assertAffordableAuMobile(sid: string, token: string): Promise<number> {
+  const pricing = await twilioGetAbsolute(
+    sid,
+    token,
+    `${TWILIO_PRICING_BASE}/v1/PhoneNumbers/Countries/AU`,
+  );
+  const unit = String(pricing.price_unit ?? "").toLowerCase();
+  const prices = (pricing.phone_number_prices as Json[] | undefined) ?? [];
+  const mobile = prices.find((p) => String(p.number_type ?? "").toLowerCase() === "mobile");
+  const price = mobile ? Number(mobile.current_price ?? mobile.base_price) : Number.NaN;
+  if (unit !== "usd" || !Number.isFinite(price)) {
+    throw new Error(`Refused: could not determine AU mobile USD price (unit='${unit}')`);
+  }
+  if (price > MAX_MONTHLY_PRICE_USD) {
+    throw new Error(
+      `Refused: AU mobile recurring price $${price} exceeds the $${MAX_MONTHLY_PRICE_USD}/mo cap`,
+    );
+  }
+  return price;
 }
 
 async function twilioPostForm(
@@ -129,6 +237,13 @@ export interface StagingPhoneResult {
   smartAnswerEnabled: boolean;
   smartAnswerSipPhoneId: string | null;
   tenantResolvesToCertBusiness: boolean;
+  /** Regulatory bundle associated with a newly purchased number (null when reusing). */
+  regulatoryBundleSid: string | null;
+  /** Address resource associated with a newly purchased number (null when reusing). */
+  addressSid: string | null;
+  smsCapable: boolean;
+  /** Verified AU-mobile recurring price in USD/month at purchase time (null when reusing). */
+  monthlyPriceUsd: number | null;
 }
 
 /**
@@ -174,6 +289,10 @@ export async function provisionStagingCertificationPhone(
   // Find (idempotent) or purchase the staging number.
   let number: TwilioNumber;
   let action: StagingPhoneResult["action"];
+  let regulatoryBundleSid: string | null = null;
+  let addressSid: string | null = null;
+  let monthlyPriceUsd: number | null = null;
+  let smsCapable = true;
 
   const owned = await twilioGet(
     sid,
@@ -196,15 +315,37 @@ export async function provisionStagingCertificationPhone(
       number = asNumber(updated);
     }
   } else {
-    const avail = await twilioGet(
+    // Prove compliance BEFORE spending: the pinned bundle is approved (AU/mobile/business), a
+    // matching AU Address exists, and the price is within the cap. Any failure stops here.
+    const expectedBundleSid =
+      (env.TWILIO_STAGING_BUNDLE_SID ?? "").trim() || DEFAULT_STAGING_BUNDLE_SID;
+    const bundle = await verifyApprovedBundle(sid, token, expectedBundleSid);
+    regulatoryBundleSid = bundle.bundleSid;
+    addressSid = await findApprovedAuAddress(sid, token);
+    monthlyPriceUsd = await assertAffordableAuMobile(sid, token);
+
+    // Voice REQUIRED; SMS preferred (fall back to Voice-only if no SMS-capable number exists).
+    let availBody = await twilioGet(
       sid,
       token,
       `/Accounts/${encodeURIComponent(sid)}/AvailablePhoneNumbers/AU/Mobile.json?VoiceEnabled=true&SmsEnabled=true&PageSize=5`,
     );
-    const candidates = (avail.available_phone_numbers as Json[] | undefined) ?? [];
+    let candidates = (availBody.available_phone_numbers as Json[] | undefined) ?? [];
+    if (candidates.length === 0) {
+      availBody = await twilioGet(
+        sid,
+        token,
+        `/Accounts/${encodeURIComponent(sid)}/AvailablePhoneNumbers/AU/Mobile.json?VoiceEnabled=true&PageSize=5`,
+      );
+      candidates = (availBody.available_phone_numbers as Json[] | undefined) ?? [];
+      smsCapable = false;
+    }
     const candidate = candidates[0];
     if (!candidate) throw new Error("No available AU mobile Voice number found to purchase");
+    const caps = (candidate.capabilities as Record<string, unknown> | undefined) ?? {};
+    smsCapable = smsCapable && caps.SMS !== false;
     try {
+      // Associate the approved regulatory Bundle + Address with the new number (fixes 21631).
       const bought = await twilioPostForm(
         sid,
         token,
@@ -214,6 +355,8 @@ export async function provisionStagingCertificationPhone(
           FriendlyName: NUMBER_FRIENDLY_NAME,
           VoiceUrl: voiceUrl,
           VoiceMethod: "POST",
+          BundleSid: regulatoryBundleSid,
+          AddressSid: addressSid,
         },
       );
       number = asNumber(bought);
@@ -258,7 +401,7 @@ export async function provisionStagingCertificationPhone(
         provider_phone_id: number.sid,
         phone_number: number.phone_number,
         voice_capable: true,
-        sms_capable: true,
+        sms_capable: smsCapable,
         status: "available",
       })
       .select("id")
@@ -335,5 +478,9 @@ export async function provisionStagingCertificationPhone(
     smartAnswerEnabled: tel.smart_answer_enabled === true,
     smartAnswerSipPhoneId: (tel.smart_answer_sip_phone_id as string) ?? null,
     tenantResolvesToCertBusiness,
+    regulatoryBundleSid,
+    addressSid,
+    smsCapable,
+    monthlyPriceUsd,
   };
 }
