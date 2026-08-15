@@ -50,6 +50,8 @@ function DiscoveryPage() {
   const [geography, setGeography] = useState("Richmond, VIC");
   const [target, setTarget] = useState(10);
   const [businesses, setBusinesses] = useState("");
+  const [source, setSource] = useState<"import" | "google_places">("import");
+  const [spendCeilingDollars, setSpendCeilingDollars] = useState(2);
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<MissionDetail | null>(null);
 
@@ -78,16 +80,24 @@ function DiscoveryPage() {
     setBusy(true);
     setError(null);
     try {
-      const importCandidates = parseImportLines(businesses);
+      const body =
+        source === "google_places"
+          ? {
+              geography,
+              targetCount: target,
+              sources: ["google_places"],
+              costCeilingCents: Math.max(1, Math.round(spendCeilingDollars * 100)),
+            }
+          : {
+              geography,
+              targetCount: target,
+              sources: ["import"],
+              importCandidates: parseImportLines(businesses),
+            };
       const res = await authedFetch("/api/public/discovery/missions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          geography,
-          targetCount: target,
-          sources: ["import"],
-          importCandidates,
-        }),
+        body: JSON.stringify(body),
       });
       const payload = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(payload.error ?? "Mission creation failed");
@@ -164,9 +174,9 @@ function DiscoveryPage() {
             </div>
             <h1 className="text-3xl font-black">Autonomous discovery</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              Create a bounded mission from a curated list of businesses. The engine deduplicates,
-              qualifies and builds private demos via the Slice-1 pipeline. No outreach is sent and
-              no provider resources are provisioned. Live discovery providers are not yet enabled.
+              Create a bounded mission from a curated business list (import) or the live Google
+              Places provider. The engine deduplicates, qualifies and builds private demos via the
+              Slice-1 pipeline. No outreach is sent and no provider resources are provisioned.
             </p>
           </div>
           <Link to="/acquisition/prospects" className="text-sm text-muted-foreground underline">
@@ -175,6 +185,32 @@ function DiscoveryPage() {
         </div>
 
         <form onSubmit={createMission} className="mt-6 rounded-lg border border-border bg-card p-5">
+          <div className="mb-3 flex flex-wrap gap-4 text-sm">
+            <label>
+              Source
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value as "import" | "google_places")}
+                className="mt-1 block rounded-md border border-border bg-input px-3 py-2 text-sm"
+              >
+                <option value="import">Import (curated list)</option>
+                <option value="google_places">Google Places (live, metered)</option>
+              </select>
+            </label>
+            {source === "google_places" && (
+              <label>
+                Spend ceiling (A$)
+                <input
+                  type="number"
+                  min={0.5}
+                  step={0.5}
+                  value={spendCeilingDollars}
+                  onChange={(e) => setSpendCeilingDollars(Number(e.target.value))}
+                  className="mt-1 block w-32 rounded-md border border-border bg-input px-3 py-2 text-sm"
+                />
+              </label>
+            )}
+          </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="text-sm">
               Geography
@@ -210,16 +246,26 @@ function DiscoveryPage() {
               </button>
             </div>
           </div>
-          <label className="mt-3 block text-sm">
-            Businesses to process (one per line: <code>Name | https://website | Suburb</code>)
-            <textarea
-              value={businesses}
-              onChange={(e) => setBusinesses(e.target.value)}
-              rows={5}
-              placeholder={"Example Plumbing | https://exampleplumbing.com.au | Richmond"}
-              className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 font-mono text-xs"
-            />
-          </label>
+          {source === "import" ? (
+            <label className="mt-3 block text-sm">
+              Businesses to process (one per line: <code>Name | https://website | Suburb</code>)
+              <textarea
+                value={businesses}
+                onChange={(e) => setBusinesses(e.target.value)}
+                rows={5}
+                placeholder={"Example Plumbing | https://exampleplumbing.com.au | Richmond"}
+                className="mt-1 w-full rounded-md border border-border bg-input px-3 py-2 font-mono text-xs"
+              />
+            </label>
+          ) : (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Google Places (live) discovers businesses in the geography, capped by your spend
+              ceiling (an <strong>internal estimated</strong> provider spend, not Google&apos;s
+              actual invoice). Business listings via Google Maps Platform; only the Place ID and
+              official website are kept — durable demo facts come from each business&apos;s own
+              website. Requires a server-side key — creation fails closed if it is not configured.
+            </p>
+          )}
         </form>
 
         {error && (
@@ -252,10 +298,13 @@ function DiscoveryPage() {
                     <button onClick={() => void openDetail(mission.id)} className="text-left">
                       <div className="font-bold">{mission.geography}</div>
                       <div className="text-xs text-muted-foreground">
-                        {mission.status} · target {mission.targetCount} · discovered{" "}
-                        {mission.counts.discovered} · demo-ready {mission.counts.demoReady} · dup{" "}
-                        {mission.counts.duplicate} · rejected {mission.counts.rejected} · failed{" "}
-                        {mission.counts.failed}
+                        {mission.sources.join("+")} · {mission.status} · target{" "}
+                        {mission.targetCount} · discovered {mission.counts.discovered} · demo-ready{" "}
+                        {mission.counts.demoReady} · dup {mission.counts.duplicate} · rejected{" "}
+                        {mission.counts.rejected} · failed {mission.counts.failed}
+                        {mission.costCents > 0
+                          ? ` · est. provider spend A$${(mission.costCents / 100).toFixed(2)}`
+                          : ""}
                       </div>
                     </button>
                     <div className="flex gap-2 text-xs">

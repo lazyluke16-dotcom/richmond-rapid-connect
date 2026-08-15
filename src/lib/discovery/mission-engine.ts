@@ -39,6 +39,33 @@ export interface EngineDeps {
   demoTtlDays?: number;
   /** Candidates requested per provider page (default 25). */
   pageSize?: number;
+  /** Single-flight lease TTL in ms (default 60000). A crashed holder's lease expires. */
+  leaseTtlMs?: number;
+}
+
+/** 128-bit hex token identifying a single-flight advance lease holder. */
+function newLeaseToken(): string {
+  const buf = new Uint8Array(16);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Providers whose Terms permit caching only a durable id (e.g. Google Places → Place ID). For
+ * these, we do NOT persist provider display content (name/address/locality); it is used only
+ * transiently in-request. The retention window is a defence-in-depth backstop for the id/website
+ * we do keep.
+ */
+const PROVIDER_CONTENT_RETENTION_DAYS: Record<string, number> = { google_places: 30 };
+
+function redactsProviderContent(source: string): boolean {
+  return source in PROVIDER_CONTENT_RETENTION_DAYS;
+}
+
+function providerContentExpiry(source: string, nowIso: string): string | null {
+  const days = PROVIDER_CONTENT_RETENTION_DAYS[source];
+  if (!days) return null;
+  return new Date(Date.parse(nowIso) + days * 86_400_000).toISOString();
 }
 
 export interface AdvanceResult {
@@ -154,22 +181,6 @@ function maxPagesFor(mission: DiscoveryMissionRecord, pageSize: number): number 
   return Math.ceil(mission.maxCandidates / Math.max(1, pageSize)) + 5;
 }
 
-/** Reconstruct a normalised candidate from a stored row (used by crash recovery). */
-function normalizedFromRow(row: DiscoveryCandidateRecord): NormalizedCandidate {
-  return {
-    source: row.source,
-    providerBusinessId: row.providerBusinessId,
-    sourceUrl: row.sourceUrl,
-    businessName: row.businessName,
-    website: row.website,
-    canonicalDomain: row.canonicalDomain,
-    publicPhone: row.publicPhone,
-    locality: row.locality,
-    vertical: null,
-    dedupKey: row.dedupKey,
-  };
-}
-
 /**
  * Qualify a claimed candidate and, if accepted, hand it to the Slice-1 pipeline. Sets the
  * terminal disposition (rejected / duplicate:existing_prospect / demo_ready / failed) and
@@ -239,8 +250,11 @@ async function qualifyAndBuild(
 
 /**
  * Reprocess candidates left in a non-terminal state by a prior interrupted advance (a crash
- * between claiming/accepting a candidate and completing its build). buildProspectDemo is
- * idempotent by canonical domain, so recovery never creates a duplicate prospect/demo.
+ * between claiming/accepting a candidate and completing its build). It BUILDS directly from the
+ * stored website rather than re-qualifying: an 'accepted' candidate already qualified, and for
+ * providers that redact display content (e.g. Google Places) the row deliberately lacks the
+ * locality needed to re-run the geography rule. buildProspectDemo re-validates the URL (SSRF)
+ * and is idempotent by canonical domain, so recovery never creates a duplicate prospect/demo.
  */
 async function recoverInFlight(deps: EngineDeps, mission: DiscoveryMissionRecord): Promise<void> {
   const stuck = [
@@ -248,15 +262,76 @@ async function recoverInFlight(deps: EngineDeps, mission: DiscoveryMissionRecord
     ...(await deps.missionStore.listCandidates(mission.id, { disposition: "discovered" })),
   ];
   for (const row of stuck) {
-    await qualifyAndBuild(deps, mission, row.id, normalizedFromRow(row));
+    if (!row.website) {
+      await deps.missionStore.updateCandidate(row.id, {
+        disposition: "failed",
+        reason: "research_failed" as CandidateReason,
+      });
+      continue;
+    }
+    try {
+      const result = await buildProspectDemo(deps.prospectStore, row.website, {
+        fetchImpl: deps.fetchImpl,
+        dnsLookup: deps.dnsLookup,
+        clock: deps.clock,
+        baseUrl: deps.baseUrl,
+        demoTtlDays: deps.demoTtlDays,
+      });
+      await deps.missionStore.updateCandidate(row.id, {
+        disposition: "demo_ready",
+        reason: "demo_built",
+        acceptedProspectId: result.prospectId,
+      });
+    } catch {
+      await deps.missionStore.updateCandidate(row.id, {
+        disposition: "failed",
+        reason: "research_failed" as CandidateReason,
+      });
+    }
   }
 }
 
 /**
  * Advance a running mission by one bounded unit (one provider page). Idempotent and
  * resumable; safe to call repeatedly and concurrently.
+ *
+ * Concurrency is serialised by a DB-backed single-flight lease: only one advance runs per
+ * mission at a time, so the cost read-modify-write and cursor updates cannot race and the
+ * operator spend ceiling can never be bypassed by concurrent workers. A worker that cannot
+ * acquire the lease returns immediately without doing (or duplicating) any work.
  */
 export async function advanceMission(deps: EngineDeps, missionId: string): Promise<AdvanceResult> {
+  const clock = deps.clock ?? (() => new Date().toISOString());
+  // Default TTL comfortably exceeds a single candidate's website research; the lease is also
+  // heartbeat-renewed inside the loop, so a long page of slow builds never lets it expire (which
+  // would allow a second worker to make another metered request).
+  const leaseTtlMs = deps.leaseTtlMs ?? 120_000;
+  const leaseToken = newLeaseToken();
+  const acquired = await deps.missionStore.acquireLease(missionId, leaseToken, clock(), leaseTtlMs);
+  if (!acquired) {
+    const busy = await deps.missionStore.getMission(missionId);
+    return {
+      status: busy?.status ?? "running",
+      processed: 0,
+      accepted: 0,
+      collapsed: 0,
+      completed: false,
+      retriedTransientFailure: false,
+    };
+  }
+  try {
+    return await advanceLocked(deps, missionId, leaseToken, leaseTtlMs);
+  } finally {
+    await deps.missionStore.releaseLease(missionId, leaseToken);
+  }
+}
+
+async function advanceLocked(
+  deps: EngineDeps,
+  missionId: string,
+  leaseToken: string,
+  leaseTtlMs: number,
+): Promise<AdvanceResult> {
   const clock = deps.clock ?? (() => new Date().toISOString());
   const pageSize = Math.max(1, deps.pageSize ?? 25);
   const initial = await deps.missionStore.getMission(missionId);
@@ -300,6 +375,27 @@ export async function advanceMission(deps: EngineDeps, missionId: string): Promi
   const provider = deps.registry.get(mission.sources[0]);
   const cursorKey = provider.name;
   const cursor = (mission.cursor[cursorKey] as string | null | undefined) ?? null;
+
+  // Refuse a metered request that would exceed the spend ceiling BEFORE making it, so the
+  // ceiling can never be exceeded (the single-flight lease keeps costCents current).
+  const estNextCost = sanitizeCostCents(provider.estimatedRequestCostCents ?? 0);
+  if (
+    mission.costCeilingCents != null &&
+    mission.costCents + estNextCost > mission.costCeilingCents
+  ) {
+    const status = await completeIfRunning(deps, missionId, "cost_ceiling_reached");
+    return {
+      status,
+      processed: 0,
+      accepted: 0,
+      collapsed: 0,
+      completed: status === "completed",
+      retriedTransientFailure: false,
+    };
+  }
+
+  // Heartbeat the lease immediately before the metered call so it cannot expire during it.
+  await deps.missionStore.renewLease(missionId, leaseToken, clock(), leaseTtlMs);
 
   // Fetch one page, handling transient (retryable) vs terminal provider failures.
   let page;
@@ -374,12 +470,17 @@ export async function advanceMission(deps: EngineDeps, missionId: string): Promi
     if (discovered >= mission.maxCandidates) break;
     if (mission.counts.demoReady + accepted >= mission.targetCount) break;
 
+    // Heartbeat each iteration — a slow website build must not let the lease lapse.
+    await deps.missionStore.renewLease(missionId, leaseToken, clock(), leaseTtlMs);
+
     const normalized = normalizeCandidate(raw, discovered);
     const claim = await deps.missionStore.claimCandidate({
       missionId,
       normalized,
       discoveryQuery: mission.geography,
       rawHash: null,
+      providerContentExpiresAt: providerContentExpiry(normalized.source, clock()),
+      redactProviderContent: redactsProviderContent(normalized.source),
     });
     // Another worker (or an earlier page) already claimed this exact identity — the unique
     // (mission, dedup_key) constraint collapsed an exact/differently-formatted duplicate.

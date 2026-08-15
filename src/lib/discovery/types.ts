@@ -123,6 +123,8 @@ export interface DiscoveryCandidateRecord {
   reason: CandidateReason | null;
   acceptedProspectId: string | null;
   rawHash: string | null;
+  /** Expiry for temporarily-cacheable provider-derived display content (e.g. Google). */
+  providerContentExpiresAt: string | null;
   discoveredAt: string;
   createdAt: string;
   updatedAt: string;

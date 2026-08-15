@@ -85,6 +85,7 @@ interface CandidateRow {
   reason: string | null;
   accepted_prospect_id: string | null;
   raw_hash: string | null;
+  provider_content_expires_at: string | null;
   discovered_at: string;
   created_at: string;
   updated_at: string;
@@ -141,6 +142,7 @@ function mapCandidate(row: CandidateRow): DiscoveryCandidateRecord {
     reason: (row.reason as DiscoveryCandidateRecord["reason"]) ?? null,
     acceptedProspectId: row.accepted_prospect_id,
     rawHash: row.raw_hash,
+    providerContentExpiresAt: row.provider_content_expires_at,
     discoveredAt: row.discovered_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -234,20 +236,24 @@ export class SupabaseMissionStore implements MissionStore {
 
   async claimCandidate(input: ClaimCandidateInput): Promise<ClaimResult> {
     const n = input.normalized;
+    const redact = input.redactProviderContent === true;
     const insert = await this.table("discovery_candidates")
       .insert({
         mission_id: input.missionId,
         source: n.source,
         provider_business_id: n.providerBusinessId,
-        source_url: n.sourceUrl,
-        business_name: n.businessName,
+        // Provider display content is not persisted when redacted (e.g. Google Maps Content):
+        // only the durable Place ID + website + derived domain are stored.
+        source_url: redact ? null : n.sourceUrl,
+        business_name: redact ? null : n.businessName,
         website: n.website,
         canonical_domain: n.canonicalDomain,
-        public_phone: n.publicPhone,
-        locality: n.locality,
+        public_phone: redact ? null : n.publicPhone,
+        locality: redact ? null : n.locality,
         discovery_query: input.discoveryQuery,
         dedup_key: n.dedupKey,
         raw_hash: input.rawHash,
+        provider_content_expires_at: input.providerContentExpiresAt ?? null,
         disposition: "discovered",
       } as never)
       .select("*")
@@ -377,6 +383,64 @@ export class SupabaseMissionStore implements MissionStore {
         created_at: string;
       }[]
     ).map((row) => ({ type: row.event_type, detail: row.detail ?? {}, createdAt: row.created_at }));
+  }
+
+  async acquireLease(
+    missionId: string,
+    token: string,
+    nowIso: string,
+    ttlMs: number,
+  ): Promise<boolean> {
+    const expiresAt = new Date(Date.parse(nowIso) + ttlMs).toISOString();
+    // Atomic conditional acquire: the row is only updated when no live lease is held. Postgres
+    // row-locks the UPDATE, so exactly one concurrent worker can succeed.
+    const { data, error } = await this.table("discovery_missions")
+      .update({ lease_token: token, lease_expires_at: expiresAt } as never)
+      .eq("id", missionId)
+      .or(`lease_expires_at.is.null,lease_expires_at.lt.${nowIso}`)
+      .select("id");
+    if (error) throw new Error(`lease acquire failed: ${error.message}`);
+    return Array.isArray(data) && data.length > 0;
+  }
+
+  async renewLease(
+    missionId: string,
+    token: string,
+    nowIso: string,
+    ttlMs: number,
+  ): Promise<boolean> {
+    const expiresAt = new Date(Date.parse(nowIso) + ttlMs).toISOString();
+    // Extend the lease only while THIS token still holds it.
+    const { data, error } = await this.table("discovery_missions")
+      .update({ lease_expires_at: expiresAt } as never)
+      .eq("id", missionId)
+      .eq("lease_token", token)
+      .select("id");
+    if (error) throw new Error(`lease renew failed: ${error.message}`);
+    return Array.isArray(data) && data.length > 0;
+  }
+
+  async releaseLease(missionId: string, token: string): Promise<void> {
+    const { error } = await this.table("discovery_missions")
+      .update({ lease_token: null, lease_expires_at: null } as never)
+      .eq("id", missionId)
+      .eq("lease_token", token);
+    if (error) throw new Error(`lease release failed: ${error.message}`);
+  }
+
+  async purgeExpiredProviderContent(nowIso: string): Promise<number> {
+    const { data, error } = await this.table("discovery_candidates")
+      .update({
+        business_name: null,
+        locality: null,
+        source_url: null,
+        provider_content_expires_at: null,
+      } as never)
+      .not("provider_content_expires_at", "is", null)
+      .lte("provider_content_expires_at", nowIso)
+      .select("id");
+    if (error) throw new Error(`provider content purge failed: ${error.message}`);
+    return Array.isArray(data) ? data.length : 0;
   }
 }
 

@@ -47,6 +47,12 @@ export class DiscoveryProviderError extends Error {
 
 export interface DiscoveryProvider {
   readonly name: string;
+  /**
+   * Conservative upper-bound cost (cents) of a single search request, used by the engine to
+   * refuse a request that would exceed the mission spend ceiling BEFORE making it. 0/undefined
+   * for free sources (fixture/import).
+   */
+  readonly estimatedRequestCostCents?: number;
   search(input: DiscoverySearchInput, cursor: string | null): Promise<DiscoveryPage>;
 }
 
