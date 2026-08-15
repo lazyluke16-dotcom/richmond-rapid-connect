@@ -108,6 +108,55 @@ jobs:
             }
           }
 
+          // Phase 4: READ-ONLY availability + pricing discovery for AU voice
+          // numbers (AvailablePhoneNumbers is a search — it does NOT reserve or
+          // buy). Only runs when the subaccount owns no number.
+          let pricing = null;
+          let availableMobileVoice = [];
+          let availableLocalVoice = [];
+          let availabilityError = null;
+          if (authOk && numbers.length === 0) {
+            const authHeader = Buffer.from(`${useSid}:${useToken}`).toString("base64");
+            const H = { Authorization: `Basic ${authHeader}` };
+            const mapNum = (n) => ({
+              phoneNumber: n.phone_number || null,
+              friendlyName: n.friendly_name || null,
+              capabilities: n.capabilities || null,
+              addressRequirements: n.address_requirements ?? null,
+              region: n.region ?? null,
+            });
+            try {
+              const pr = await fetch("https://pricing.twilio.com/v1/PhoneNumbers/Countries/AU", {
+                headers: H,
+              });
+              if (pr.ok) {
+                const pb = await pr.json();
+                pricing = {
+                  priceUnit: pb.price_unit || null,
+                  types: (pb.phone_number_prices || []).map((p) => ({
+                    type: p.number_type,
+                    basePrice: p.base_price,
+                    currentPrice: p.current_price,
+                  })),
+                };
+              } else {
+                availabilityError = `pricing HTTP ${pr.status}`;
+              }
+              const mr = await fetch(
+                `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(useSid)}/AvailablePhoneNumbers/AU/Mobile.json?VoiceEnabled=true&PageSize=5`,
+                { headers: H },
+              );
+              if (mr.ok) availableMobileVoice = ((await mr.json()).available_phone_numbers || []).map(mapNum);
+              const lr = await fetch(
+                `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(useSid)}/AvailablePhoneNumbers/AU/Local.json?VoiceEnabled=true&PageSize=5`,
+                { headers: H },
+              );
+              if (lr.ok) availableLocalVoice = ((await lr.json()).available_phone_numbers || []).map(mapNum);
+            } catch (e) {
+              availabilityError = String(e && e.message ? e.message : e).slice(0, 120);
+            }
+          }
+
           const report = {
             twilioAuthWorks: raw.ok,
             twilioAuthWorksTrimmed: trimmed.ok,
@@ -123,6 +172,10 @@ jobs:
             incomingNumberCount: numbers.length,
             numbers,
             numbersError,
+            pricing,
+            availableMobileVoice,
+            availableLocalVoice,
+            availabilityError,
             error: raw.ok ? null : raw.error,
             valuesPrinted: false,
           };
