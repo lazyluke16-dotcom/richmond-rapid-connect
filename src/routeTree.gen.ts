@@ -42,6 +42,7 @@ import { Route as ServicesBlockedDrainsRouteImport } from './routes/services.blo
 import { Route as ServicesEmergencyRouteImport } from './routes/services.emergency'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as AuthenticatedAcquisitionProspectsRouteImport } from './routes/_authenticated/acquisition.prospects'
 import { Route as ApiDashboardVerifyPinRouteImport } from './routes/api/dashboard.verify-pin'
 import { Route as ApiDemoTriggerSmsRouteImport } from './routes/api/demo.trigger-sms'
 import { Route as ApiPublicAcquisitionRouteImport } from './routes/api/public/acquisition'
@@ -55,6 +56,7 @@ import { Route as BSlugChatRouteImport } from './routes/b.$slug.chat'
 import { Route as BSlugConfirmationRouteImport } from './routes/b.$slug.confirmation'
 import { Route as BSlugMissedCallRouteImport } from './routes/b.$slug.missed-call'
 import { Route as BSlugRequestRouteImport } from './routes/b.$slug.request'
+import { Route as DemoSlugTokenRouteImport } from './routes/demo.$slug.$token'
 import { Route as ApiPublicBillingCheckoutRouteImport } from './routes/api/public/billing.checkout'
 import { Route as ApiPublicBillingCheckoutStatusRouteImport } from './routes/api/public/billing.checkout-status'
 import { Route as ApiPublicBillingPlanRouteImport } from './routes/api/public/billing.plan'
@@ -62,6 +64,11 @@ import { Route as ApiPublicBillingPortalRouteImport } from './routes/api/public/
 import { Route as ApiPublicBillingSummaryRouteImport } from './routes/api/public/billing.summary'
 import { Route as ApiPublicOutreachReportRouteImport } from './routes/api/public/outreach/report'
 import { Route as ApiPublicOutreachUnsubscribeRouteImport } from './routes/api/public/outreach/unsubscribe'
+import { Route as ApiPublicProspectBuildRouteImport } from './routes/api/public/prospect/build'
+import { Route as ApiPublicProspectDemoReplyRouteImport } from './routes/api/public/prospect/demo-reply'
+import { Route as ApiPublicProspectDetailRouteImport } from './routes/api/public/prospect/detail'
+import { Route as ApiPublicProspectListRouteImport } from './routes/api/public/prospect/list'
+import { Route as ApiPublicProspectRevokeRouteImport } from './routes/api/public/prospect/revoke'
 import { Route as ApiPublicWebhooksStripeInboundRouteImport } from './routes/api/public/webhooks.stripe-inbound'
 import { Route as ApiPublicWebhooksTwilioOutreachRouteImport } from './routes/api/public/webhooks/twilio-outreach'
 import { Route as ApiPublicWebhooksVapiInboundRouteImport } from './routes/api/public/webhooks.vapi-inbound'
@@ -238,6 +245,12 @@ const Char91DotmcpChar93InvokeToolToolRoute =
     path: '/.mcp/invoke-tool/$tool',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AuthenticatedAcquisitionProspectsRoute =
+  AuthenticatedAcquisitionProspectsRouteImport.update({
+    id: '/acquisition/prospects',
+    path: '/acquisition/prospects',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const ApiDashboardVerifyPinRoute = ApiDashboardVerifyPinRouteImport.update({
   id: '/api/dashboard/verify-pin',
   path: '/api/dashboard/verify-pin',
@@ -305,6 +318,11 @@ const BSlugRequestRoute = BSlugRequestRouteImport.update({
   path: '/request',
   getParentRoute: () => BSlugRoute,
 } as any)
+const DemoSlugTokenRoute = DemoSlugTokenRouteImport.update({
+  id: '/demo/$slug/$token',
+  path: '/demo/$slug/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicBillingCheckoutRoute =
   ApiPublicBillingCheckoutRouteImport.update({
     id: '/api/public/billing/checkout',
@@ -343,6 +361,32 @@ const ApiPublicOutreachUnsubscribeRoute =
     path: '/api/public/outreach/unsubscribe',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicProspectBuildRoute = ApiPublicProspectBuildRouteImport.update({
+  id: '/api/public/prospect/build',
+  path: '/api/public/prospect/build',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicProspectDemoReplyRoute =
+  ApiPublicProspectDemoReplyRouteImport.update({
+    id: '/api/public/prospect/demo-reply',
+    path: '/api/public/prospect/demo-reply',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicProspectDetailRoute = ApiPublicProspectDetailRouteImport.update({
+  id: '/api/public/prospect/detail',
+  path: '/api/public/prospect/detail',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicProspectListRoute = ApiPublicProspectListRouteImport.update({
+  id: '/api/public/prospect/list',
+  path: '/api/public/prospect/list',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicProspectRevokeRoute = ApiPublicProspectRevokeRouteImport.update({
+  id: '/api/public/prospect/revoke',
+  path: '/api/public/prospect/revoke',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicWebhooksStripeInboundRoute =
   ApiPublicWebhooksStripeInboundRouteImport.update({
     id: '/api/public/webhooks/stripe-inbound',
@@ -401,6 +445,7 @@ export interface FileRoutesByFullPath {
   '/services/emergency': typeof ServicesEmergencyRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
+  '/acquisition/prospects': typeof AuthenticatedAcquisitionProspectsRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
@@ -413,6 +458,7 @@ export interface FileRoutesByFullPath {
   '/b/$slug/confirmation': typeof BSlugConfirmationRoute
   '/b/$slug/missed-call': typeof BSlugMissedCallRoute
   '/b/$slug/request': typeof BSlugRequestRoute
+  '/demo/$slug/$token': typeof DemoSlugTokenRoute
   '/b/$slug/': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
   '/api/public/billing/checkout-status': typeof ApiPublicBillingCheckoutStatusRoute
@@ -421,6 +467,11 @@ export interface FileRoutesByFullPath {
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
   '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
   '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
+  '/api/public/prospect/build': typeof ApiPublicProspectBuildRoute
+  '/api/public/prospect/demo-reply': typeof ApiPublicProspectDemoReplyRoute
+  '/api/public/prospect/detail': typeof ApiPublicProspectDetailRoute
+  '/api/public/prospect/list': typeof ApiPublicProspectListRoute
+  '/api/public/prospect/revoke': typeof ApiPublicProspectRevokeRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
   '/api/public/webhooks/twilio-outreach': typeof ApiPublicWebhooksTwilioOutreachRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
@@ -458,6 +509,7 @@ export interface FileRoutesByTo {
   '/services/emergency': typeof ServicesEmergencyRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
+  '/acquisition/prospects': typeof AuthenticatedAcquisitionProspectsRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
@@ -470,6 +522,7 @@ export interface FileRoutesByTo {
   '/b/$slug/confirmation': typeof BSlugConfirmationRoute
   '/b/$slug/missed-call': typeof BSlugMissedCallRoute
   '/b/$slug/request': typeof BSlugRequestRoute
+  '/demo/$slug/$token': typeof DemoSlugTokenRoute
   '/b/$slug': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
   '/api/public/billing/checkout-status': typeof ApiPublicBillingCheckoutStatusRoute
@@ -478,6 +531,11 @@ export interface FileRoutesByTo {
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
   '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
   '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
+  '/api/public/prospect/build': typeof ApiPublicProspectBuildRoute
+  '/api/public/prospect/demo-reply': typeof ApiPublicProspectDemoReplyRoute
+  '/api/public/prospect/detail': typeof ApiPublicProspectDetailRoute
+  '/api/public/prospect/list': typeof ApiPublicProspectListRoute
+  '/api/public/prospect/revoke': typeof ApiPublicProspectRevokeRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
   '/api/public/webhooks/twilio-outreach': typeof ApiPublicWebhooksTwilioOutreachRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
@@ -518,6 +576,7 @@ export interface FileRoutesById {
   '/services/emergency': typeof ServicesEmergencyRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
+  '/_authenticated/acquisition/prospects': typeof AuthenticatedAcquisitionProspectsRoute
   '/api/dashboard/verify-pin': typeof ApiDashboardVerifyPinRoute
   '/api/demo/trigger-sms': typeof ApiDemoTriggerSmsRoute
   '/api/public/acquisition': typeof ApiPublicAcquisitionRoute
@@ -530,6 +589,7 @@ export interface FileRoutesById {
   '/b/$slug/confirmation': typeof BSlugConfirmationRoute
   '/b/$slug/missed-call': typeof BSlugMissedCallRoute
   '/b/$slug/request': typeof BSlugRequestRoute
+  '/demo/$slug/$token': typeof DemoSlugTokenRoute
   '/b/$slug/': typeof BSlugIndexRoute
   '/api/public/billing/checkout': typeof ApiPublicBillingCheckoutRoute
   '/api/public/billing/checkout-status': typeof ApiPublicBillingCheckoutStatusRoute
@@ -538,6 +598,11 @@ export interface FileRoutesById {
   '/api/public/billing/summary': typeof ApiPublicBillingSummaryRoute
   '/api/public/outreach/report': typeof ApiPublicOutreachReportRoute
   '/api/public/outreach/unsubscribe': typeof ApiPublicOutreachUnsubscribeRoute
+  '/api/public/prospect/build': typeof ApiPublicProspectBuildRoute
+  '/api/public/prospect/demo-reply': typeof ApiPublicProspectDemoReplyRoute
+  '/api/public/prospect/detail': typeof ApiPublicProspectDetailRoute
+  '/api/public/prospect/list': typeof ApiPublicProspectListRoute
+  '/api/public/prospect/revoke': typeof ApiPublicProspectRevokeRoute
   '/api/public/webhooks/stripe-inbound': typeof ApiPublicWebhooksStripeInboundRoute
   '/api/public/webhooks/twilio-outreach': typeof ApiPublicWebhooksTwilioOutreachRoute
   '/api/public/webhooks/vapi-inbound': typeof ApiPublicWebhooksVapiInboundRoute
@@ -578,6 +643,7 @@ export interface FileRouteTypes {
     | '/services/emergency'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
+    | '/acquisition/prospects'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/acquisition'
@@ -590,6 +656,7 @@ export interface FileRouteTypes {
     | '/b/$slug/confirmation'
     | '/b/$slug/missed-call'
     | '/b/$slug/request'
+    | '/demo/$slug/$token'
     | '/b/$slug/'
     | '/api/public/billing/checkout'
     | '/api/public/billing/checkout-status'
@@ -598,6 +665,11 @@ export interface FileRouteTypes {
     | '/api/public/billing/summary'
     | '/api/public/outreach/report'
     | '/api/public/outreach/unsubscribe'
+    | '/api/public/prospect/build'
+    | '/api/public/prospect/demo-reply'
+    | '/api/public/prospect/detail'
+    | '/api/public/prospect/list'
+    | '/api/public/prospect/revoke'
     | '/api/public/webhooks/stripe-inbound'
     | '/api/public/webhooks/twilio-outreach'
     | '/api/public/webhooks/vapi-inbound'
@@ -635,6 +707,7 @@ export interface FileRouteTypes {
     | '/services/emergency'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
+    | '/acquisition/prospects'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/acquisition'
@@ -647,6 +720,7 @@ export interface FileRouteTypes {
     | '/b/$slug/confirmation'
     | '/b/$slug/missed-call'
     | '/b/$slug/request'
+    | '/demo/$slug/$token'
     | '/b/$slug'
     | '/api/public/billing/checkout'
     | '/api/public/billing/checkout-status'
@@ -655,6 +729,11 @@ export interface FileRouteTypes {
     | '/api/public/billing/summary'
     | '/api/public/outreach/report'
     | '/api/public/outreach/unsubscribe'
+    | '/api/public/prospect/build'
+    | '/api/public/prospect/demo-reply'
+    | '/api/public/prospect/detail'
+    | '/api/public/prospect/list'
+    | '/api/public/prospect/revoke'
     | '/api/public/webhooks/stripe-inbound'
     | '/api/public/webhooks/twilio-outreach'
     | '/api/public/webhooks/vapi-inbound'
@@ -694,6 +773,7 @@ export interface FileRouteTypes {
     | '/services/emergency'
     | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
+    | '/_authenticated/acquisition/prospects'
     | '/api/dashboard/verify-pin'
     | '/api/demo/trigger-sms'
     | '/api/public/acquisition'
@@ -706,6 +786,7 @@ export interface FileRouteTypes {
     | '/b/$slug/confirmation'
     | '/b/$slug/missed-call'
     | '/b/$slug/request'
+    | '/demo/$slug/$token'
     | '/b/$slug/'
     | '/api/public/billing/checkout'
     | '/api/public/billing/checkout-status'
@@ -714,6 +795,11 @@ export interface FileRouteTypes {
     | '/api/public/billing/summary'
     | '/api/public/outreach/report'
     | '/api/public/outreach/unsubscribe'
+    | '/api/public/prospect/build'
+    | '/api/public/prospect/demo-reply'
+    | '/api/public/prospect/detail'
+    | '/api/public/prospect/list'
+    | '/api/public/prospect/revoke'
     | '/api/public/webhooks/stripe-inbound'
     | '/api/public/webhooks/twilio-outreach'
     | '/api/public/webhooks/vapi-inbound'
@@ -750,6 +836,7 @@ export interface RootRouteChildren {
   ApiPublicProcessSmsInvoiceRoute: typeof ApiPublicProcessSmsInvoiceRoute
   ApiPublicStagingReleaseRoute: typeof ApiPublicStagingReleaseRoute
   ApiWebhooksAiPhoneLeadRoute: typeof ApiWebhooksAiPhoneLeadRoute
+  DemoSlugTokenRoute: typeof DemoSlugTokenRoute
   ApiPublicBillingCheckoutRoute: typeof ApiPublicBillingCheckoutRoute
   ApiPublicBillingCheckoutStatusRoute: typeof ApiPublicBillingCheckoutStatusRoute
   ApiPublicBillingPlanRoute: typeof ApiPublicBillingPlanRoute
@@ -757,6 +844,11 @@ export interface RootRouteChildren {
   ApiPublicBillingSummaryRoute: typeof ApiPublicBillingSummaryRoute
   ApiPublicOutreachReportRoute: typeof ApiPublicOutreachReportRoute
   ApiPublicOutreachUnsubscribeRoute: typeof ApiPublicOutreachUnsubscribeRoute
+  ApiPublicProspectBuildRoute: typeof ApiPublicProspectBuildRoute
+  ApiPublicProspectDemoReplyRoute: typeof ApiPublicProspectDemoReplyRoute
+  ApiPublicProspectDetailRoute: typeof ApiPublicProspectDetailRoute
+  ApiPublicProspectListRoute: typeof ApiPublicProspectListRoute
+  ApiPublicProspectRevokeRoute: typeof ApiPublicProspectRevokeRoute
   ApiPublicWebhooksStripeInboundRoute: typeof ApiPublicWebhooksStripeInboundRoute
   ApiPublicWebhooksTwilioOutreachRoute: typeof ApiPublicWebhooksTwilioOutreachRoute
   ApiPublicWebhooksVapiInboundRoute: typeof ApiPublicWebhooksVapiInboundRoute
@@ -996,6 +1088,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/acquisition/prospects': {
+      id: '/_authenticated/acquisition/prospects'
+      path: '/acquisition/prospects'
+      fullPath: '/acquisition/prospects'
+      preLoaderRoute: typeof AuthenticatedAcquisitionProspectsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/api/dashboard/verify-pin': {
       id: '/api/dashboard/verify-pin'
       path: '/api/dashboard/verify-pin'
@@ -1087,6 +1186,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BSlugRequestRouteImport
       parentRoute: typeof BSlugRoute
     }
+    '/demo/$slug/$token': {
+      id: '/demo/$slug/$token'
+      path: '/demo/$slug/$token'
+      fullPath: '/demo/$slug/$token'
+      preLoaderRoute: typeof DemoSlugTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/billing/checkout': {
       id: '/api/public/billing/checkout'
       path: '/api/public/billing/checkout'
@@ -1136,6 +1242,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicOutreachUnsubscribeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/prospect/build': {
+      id: '/api/public/prospect/build'
+      path: '/api/public/prospect/build'
+      fullPath: '/api/public/prospect/build'
+      preLoaderRoute: typeof ApiPublicProspectBuildRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/prospect/demo-reply': {
+      id: '/api/public/prospect/demo-reply'
+      path: '/api/public/prospect/demo-reply'
+      fullPath: '/api/public/prospect/demo-reply'
+      preLoaderRoute: typeof ApiPublicProspectDemoReplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/prospect/detail': {
+      id: '/api/public/prospect/detail'
+      path: '/api/public/prospect/detail'
+      fullPath: '/api/public/prospect/detail'
+      preLoaderRoute: typeof ApiPublicProspectDetailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/prospect/list': {
+      id: '/api/public/prospect/list'
+      path: '/api/public/prospect/list'
+      fullPath: '/api/public/prospect/list'
+      preLoaderRoute: typeof ApiPublicProspectListRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/prospect/revoke': {
+      id: '/api/public/prospect/revoke'
+      path: '/api/public/prospect/revoke'
+      fullPath: '/api/public/prospect/revoke'
+      preLoaderRoute: typeof ApiPublicProspectRevokeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/webhooks/stripe-inbound': {
       id: '/api/public/webhooks/stripe-inbound'
       path: '/api/public/webhooks/stripe-inbound'
@@ -1180,6 +1321,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSetupGuideRoute: typeof AuthenticatedSetupGuideRoute
   AuthenticatedUsageRoute: typeof AuthenticatedUsageRoute
+  AuthenticatedAcquisitionProspectsRoute: typeof AuthenticatedAcquisitionProspectsRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -1195,6 +1337,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSetupGuideRoute: AuthenticatedSetupGuideRoute,
   AuthenticatedUsageRoute: AuthenticatedUsageRoute,
+  AuthenticatedAcquisitionProspectsRoute:
+    AuthenticatedAcquisitionProspectsRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -1249,6 +1393,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicProcessSmsInvoiceRoute: ApiPublicProcessSmsInvoiceRoute,
   ApiPublicStagingReleaseRoute: ApiPublicStagingReleaseRoute,
   ApiWebhooksAiPhoneLeadRoute: ApiWebhooksAiPhoneLeadRoute,
+  DemoSlugTokenRoute: DemoSlugTokenRoute,
   ApiPublicBillingCheckoutRoute: ApiPublicBillingCheckoutRoute,
   ApiPublicBillingCheckoutStatusRoute: ApiPublicBillingCheckoutStatusRoute,
   ApiPublicBillingPlanRoute: ApiPublicBillingPlanRoute,
@@ -1256,6 +1401,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicBillingSummaryRoute: ApiPublicBillingSummaryRoute,
   ApiPublicOutreachReportRoute: ApiPublicOutreachReportRoute,
   ApiPublicOutreachUnsubscribeRoute: ApiPublicOutreachUnsubscribeRoute,
+  ApiPublicProspectBuildRoute: ApiPublicProspectBuildRoute,
+  ApiPublicProspectDemoReplyRoute: ApiPublicProspectDemoReplyRoute,
+  ApiPublicProspectDetailRoute: ApiPublicProspectDetailRoute,
+  ApiPublicProspectListRoute: ApiPublicProspectListRoute,
+  ApiPublicProspectRevokeRoute: ApiPublicProspectRevokeRoute,
   ApiPublicWebhooksStripeInboundRoute: ApiPublicWebhooksStripeInboundRoute,
   ApiPublicWebhooksTwilioOutreachRoute: ApiPublicWebhooksTwilioOutreachRoute,
   ApiPublicWebhooksVapiInboundRoute: ApiPublicWebhooksVapiInboundRoute,
