@@ -236,6 +236,13 @@
         "20260715074344_624e3ef2-f240-4a59-b722-02eaaaa6416d.sql",
         "20260815120000_prospect_intelligence.sql"
       ]
+    },
+    {
+      "file": "20260815160000_live_discovery_google_places.sql",
+      "sha256": "9227a542755add6fbc4071a0f76d796a9a83b9eec709e638e05ef9334afee200",
+      "dependsOn": [
+        "20260815140000_autonomous_discovery.sql"
+      ]
     }
   ]
 }

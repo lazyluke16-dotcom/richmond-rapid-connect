@@ -39,6 +39,24 @@ export interface EngineDeps {
   demoTtlDays?: number;
   /** Candidates requested per provider page (default 25). */
   pageSize?: number;
+  /** Single-flight lease TTL in ms (default 60000). A crashed holder's lease expires. */
+  leaseTtlMs?: number;
+}
+
+/** 128-bit hex token identifying a single-flight advance lease holder. */
+function newLeaseToken(): string {
+  const buf = new Uint8Array(16);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Providers whose display content is temporary-cache-restricted, with the retention window. */
+const PROVIDER_CONTENT_RETENTION_DAYS: Record<string, number> = { google_places: 30 };
+
+function providerContentExpiry(source: string, nowIso: string): string | null {
+  const days = PROVIDER_CONTENT_RETENTION_DAYS[source];
+  if (!days) return null;
+  return new Date(Date.parse(nowIso) + days * 86_400_000).toISOString();
 }
 
 export interface AdvanceResult {
@@ -255,8 +273,40 @@ async function recoverInFlight(deps: EngineDeps, mission: DiscoveryMissionRecord
 /**
  * Advance a running mission by one bounded unit (one provider page). Idempotent and
  * resumable; safe to call repeatedly and concurrently.
+ *
+ * Concurrency is serialised by a DB-backed single-flight lease: only one advance runs per
+ * mission at a time, so the cost read-modify-write and cursor updates cannot race and the
+ * operator spend ceiling can never be bypassed by concurrent workers. A worker that cannot
+ * acquire the lease returns immediately without doing (or duplicating) any work.
  */
 export async function advanceMission(deps: EngineDeps, missionId: string): Promise<AdvanceResult> {
+  const clock = deps.clock ?? (() => new Date().toISOString());
+  const leaseToken = newLeaseToken();
+  const acquired = await deps.missionStore.acquireLease(
+    missionId,
+    leaseToken,
+    clock(),
+    deps.leaseTtlMs ?? 60_000,
+  );
+  if (!acquired) {
+    const busy = await deps.missionStore.getMission(missionId);
+    return {
+      status: busy?.status ?? "running",
+      processed: 0,
+      accepted: 0,
+      collapsed: 0,
+      completed: false,
+      retriedTransientFailure: false,
+    };
+  }
+  try {
+    return await advanceLocked(deps, missionId);
+  } finally {
+    await deps.missionStore.releaseLease(missionId, leaseToken);
+  }
+}
+
+async function advanceLocked(deps: EngineDeps, missionId: string): Promise<AdvanceResult> {
   const clock = deps.clock ?? (() => new Date().toISOString());
   const pageSize = Math.max(1, deps.pageSize ?? 25);
   const initial = await deps.missionStore.getMission(missionId);
@@ -300,6 +350,24 @@ export async function advanceMission(deps: EngineDeps, missionId: string): Promi
   const provider = deps.registry.get(mission.sources[0]);
   const cursorKey = provider.name;
   const cursor = (mission.cursor[cursorKey] as string | null | undefined) ?? null;
+
+  // Refuse a metered request that would exceed the spend ceiling BEFORE making it, so the
+  // ceiling can never be exceeded (the single-flight lease keeps costCents current).
+  const estNextCost = sanitizeCostCents(provider.estimatedRequestCostCents ?? 0);
+  if (
+    mission.costCeilingCents != null &&
+    mission.costCents + estNextCost > mission.costCeilingCents
+  ) {
+    const status = await completeIfRunning(deps, missionId, "cost_ceiling_reached");
+    return {
+      status,
+      processed: 0,
+      accepted: 0,
+      collapsed: 0,
+      completed: status === "completed",
+      retriedTransientFailure: false,
+    };
+  }
 
   // Fetch one page, handling transient (retryable) vs terminal provider failures.
   let page;
@@ -380,6 +448,7 @@ export async function advanceMission(deps: EngineDeps, missionId: string): Promi
       normalized,
       discoveryQuery: mission.geography,
       rawHash: null,
+      providerContentExpiresAt: providerContentExpiry(normalized.source, clock()),
     });
     // Another worker (or an earlier page) already claimed this exact identity — the unique
     // (mission, dedup_key) constraint collapsed an exact/differently-formatted duplicate.
