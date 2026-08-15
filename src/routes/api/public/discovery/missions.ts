@@ -58,6 +58,16 @@ export async function handleMissionCreate(request: Request): Promise<Response> {
     return json({ error: error instanceof Error ? error.message : "Invalid mission" }, 400);
   }
 
+  // Fail closed at the live-provider boundary: a google_places mission cannot be created
+  // unless the server-side credential is configured.
+  const { googlePlacesConfigured } = await import("@/lib/discovery/engine-context");
+  if (parsed.sources.includes("google_places") && !googlePlacesConfigured()) {
+    return json(
+      { error: "Google Places is not configured on this server (GOOGLE_PLACES_API_KEY absent)." },
+      400,
+    );
+  }
+
   try {
     const store = createSupabaseMissionStore(ctx.supabaseAdmin);
     const mission = await store.createMission({ ...parsed, createdBy: ctx.userId });

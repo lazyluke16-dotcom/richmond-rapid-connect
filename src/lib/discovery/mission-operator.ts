@@ -119,8 +119,8 @@ export interface ParsedMissionCreate {
   importSeed: RawDiscoveryCandidate[];
 }
 
-/** The only operator-selectable source in V1 (no lawful live provider is wired). */
-const ALLOWED_SOURCES = new Set(["import"]);
+/** Operator-selectable discovery sources: curated import, or the live Google Places provider. */
+const ALLOWED_SOURCES = new Set(["import", "google_places"]);
 const MAX_IMPORT_SEED = 1000;
 
 function parseImportCandidates(raw: unknown): RawDiscoveryCandidate[] {
@@ -199,6 +199,10 @@ export function parseMissionCreate(body: MissionCreateRequest): ParsedMissionCre
     throw new Error(
       "the import source requires importCandidates (a list of businesses to process)",
     );
+  }
+  // A metered live provider requires an explicit operator-set spend ceiling (cents > 0).
+  if (sources.includes("google_places") && (costCeilingCents == null || costCeilingCents <= 0)) {
+    throw new Error("google_places requires a spend ceiling (costCeilingCents > 0)");
   }
   // Reject an import list whose websites are all unsafe/unfetchable up-front (defense in depth;
   // the qualifier + Slice-1 SSRF gate also enforce this per candidate).
