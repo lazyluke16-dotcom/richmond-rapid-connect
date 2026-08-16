@@ -1,0 +1,195 @@
+name: Smart Answer Twilio signature live token probe
+
+# Determines WHICH Auth Token the live staging Worker validates X-Twilio-Signature
+# against, without a real phone call and WITHOUT mutating any data.
+#
+# It POSTs a self-signed synthetic request to the webhook using a FICTIONAL,
+# non-tenant To number (ACMA fiction range). Because that number resolves to no
+# Smart Answer tenant, the handler returns a Reject response BEFORE any DB write
+# (no forwarding verification, no reception message). Signature validation runs
+# first, so:
+#   - HTTP 200 + <Reject> => the Worker validates that candidate token (sig OK).
+#   - HTTP 401 {"error":"Unauthorized"} => that candidate token is NOT accepted.
+# If EVERY correctly-signed candidate returns 401, the failure is app-side
+# (body/params handling), not the token.
+#
+# No secret values are printed. This is the only workflow here that POSTs; it is
+# deliberately mutation-free (reject path). No production access.
+
+on:
+  workflow_dispatch:
+    inputs:
+      fictional_to:
+        description: "Non-tenant To number (ACMA fiction range; must NOT be in inventory)"
+        required: false
+        default: "+61491570156"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-answer-twilio-signature-live-token-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: staging
+
+    env:
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      TWILIO_WEBHOOK_AUTH_TOKEN: ${{ secrets.TWILIO_WEBHOOK_AUTH_TOKEN }}
+      CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+      FICTIONAL_TO: ${{ inputs.fictional_to }}
+
+    steps:
+      - name: Live token probe (self-signed, mutation-free)
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { createHmac } = require("node:crypto");
+          const { writeFileSync, appendFileSync } = require("node:fs");
+
+          void (async () => {
+            const SID = (process.env.TWILIO_ACCOUNT_SID || "").trim();
+            const SECONDARY = process.env.TWILIO_AUTH_TOKEN || "";
+            const PRIMARY = process.env.TWILIO_WEBHOOK_AUTH_TOKEN || "";
+            const BASE = (process.env.CERTIFICATION_BASE_URL || "").replace(/\/+$/, "");
+            const PATH = "/api/public/webhooks/twilio-smart-answer";
+            const URL_ = `${BASE}${PATH}`;
+            const TO = (process.env.FICTIONAL_TO || "+61491570156").trim();
+
+            // Synthetic, clearly-diagnostic params. To is a non-tenant number, so
+            // the handler returns Reject before any DB write.
+            const fields = {
+              AccountSid: SID,
+              ApiVersion: "2010-04-01",
+              CallSid: "CAdiagnosticsignatureprobe0000000000",
+              CallStatus: "ringing",
+              Called: TO,
+              Caller: "+61491570199",
+              Direction: "inbound",
+              From: "+61491570199",
+              To: TO,
+            };
+            const params = new URLSearchParams(fields);
+            const body = params.toString();
+            const sortedTail = [...params.entries()]
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([k, v]) => `${k}${v}`)
+              .join("");
+            const sign = (token) => createHmac("sha1", token).update(URL_ + sortedTail).digest("base64");
+
+            const candidates = [
+              { name: "secondary(TWILIO_AUTH_TOKEN) trimmed", value: SECONDARY.trim() },
+              { name: "primary(TWILIO_WEBHOOK_AUTH_TOKEN) trimmed", value: PRIMARY.trim() },
+              { name: "primary(TWILIO_WEBHOOK_AUTH_TOKEN) raw", value: PRIMARY },
+              { name: "control_bad_signature", value: null },
+            ];
+
+            async function post(signature) {
+              const res = await fetch(URL_, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/x-www-form-urlencoded",
+                  "X-Twilio-Signature": signature,
+                },
+                body,
+              });
+              const text = await res.text();
+              return { status: res.status, text };
+            }
+
+            const report = {
+              webhookUrl: URL_,
+              fictionalTo: TO,
+              results: [],
+              acceptedToken: null,
+              conclusion: null,
+              valuesPrinted: false,
+            };
+            const write = () =>
+              writeFileSync(
+                "smart-answer-twilio-signature-live-token-probe.json",
+                `${JSON.stringify(report, null, 2)}\n`,
+                { mode: 0o600 },
+              );
+
+            try {
+              for (const c of candidates) {
+                const signature = c.value ? sign(c.value) : "AAAAdeliberatelyWrongSignature0000000000=";
+                const r = await post(signature);
+                const lower = r.text.toLowerCase();
+                const validated = r.status === 200 && (lower.includes("reject") || lower.includes("<response"));
+                const unauthorized = r.status === 401 || lower.includes("unauthorized");
+                report.results.push({
+                  token: c.name,
+                  httpStatus: r.status,
+                  signatureAccepted: validated,
+                  unauthorized,
+                  bodySnippet: r.text.slice(0, 80),
+                });
+                if (validated && c.value && c.name !== "control_bad_signature") {
+                  report.acceptedToken = report.acceptedToken || c.name;
+                }
+              }
+
+              const anyAccepted = report.results.some(
+                (r) => r.signatureAccepted && r.token !== "control_bad_signature",
+              );
+              const control = report.results.find((r) => r.token === "control_bad_signature");
+              if (report.acceptedToken) {
+                report.conclusion = `Live Worker validates signatures against: ${report.acceptedToken}. Ensure that token populates the Worker TWILIO_AUTH_TOKEN binding.`;
+              } else if (control && !control.unauthorized) {
+                report.conclusion =
+                  "Endpoint did not reject a deliberately BAD signature as expected — signature validation may be bypassed/misrouted. Investigate the deployed route.";
+              } else {
+                report.conclusion =
+                  "NEITHER the secondary nor the primary token is accepted by the live Worker (all correctly-signed requests 401, bad-signature control 401). The Worker's TWILIO_AUTH_TOKEN is a THIRD value, OR the app mis-reads the request body/URL so no token can validate. Next: confirm what the Worker's TWILIO_AUTH_TOKEN actually is, or inspect body handling.";
+              }
+              void anyAccepted;
+
+              write();
+              const summary = [
+                "# Smart Answer Twilio signature live token probe",
+                "",
+                `Webhook: \`${report.webhookUrl}\``,
+                `Fictional (non-tenant) To: \`${report.fictionalTo}\``,
+                "",
+                "## Results",
+                ...report.results.map(
+                  (r) => `- ${r.token}: HTTP **${r.httpStatus}** · accepted=${r.signatureAccepted} · unauthorized=${r.unauthorized}`,
+                ),
+                "",
+                `## Conclusion\n${report.conclusion}`,
+                "",
+                "Mutation-free (non-tenant reject path). No token values printed.",
+              ].join("\n");
+              if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+
+              console.log("=== LIVE TOKEN PROBE ===");
+              for (const r of report.results) {
+                console.log(`${r.token}: HTTP ${r.httpStatus} accepted=${r.signatureAccepted} unauthorized=${r.unauthorized} body='${r.bodySnippet.replace(/\n/g, " ")}'`);
+              }
+              console.log(`ACCEPTED_TOKEN=${report.acceptedToken}`);
+              console.log(`CONCLUSION: ${report.conclusion}`);
+            } catch (e) {
+              report.conclusion = `probe_error: ${String(e && e.message ? e.message : e).slice(0, 160)}`;
+              write();
+              console.error(report.conclusion);
+              process.exit(1);
+            }
+          })();
+          NODE
+
+      - name: Upload sanitised live-token-probe artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-twilio-signature-live-token-probe
+          path: smart-answer-twilio-signature-live-token-probe.json
+          if-no-files-found: warn
+          retention-days: 7
