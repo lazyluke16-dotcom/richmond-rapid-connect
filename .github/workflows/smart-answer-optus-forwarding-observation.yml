@@ -1,0 +1,485 @@
+name: Smart Answer Optus forwarding observation
+
+# READ-ONLY, single-call forwarding observation for the isolated staging stack.
+#
+# Watches the isolated Twilio subaccount "Richmond Rapid Connect Hosted Staging"
+# for ONE new inbound call forwarded (Optus call-forward-no-answer) to the
+# certification number +61468089180, then reads the isolated staging Supabase to
+# prove tenant resolution, forwarding-verification behaviour, and — critically —
+# that NO Smart Answer AI/SIP leg started and NO AI voice billing occurred while
+# Smart Answer is OFF.
+#
+# This workflow performs GET / SELECT only:
+#   - Twilio: GET Account, GET IncomingPhoneNumbers, GET Calls  (no POST/PATCH/DELETE)
+#   - Supabase: PostgREST GET + GET rpc of a STABLE read function (no INSERT/UPDATE/DELETE)
+# It never marks forwarding verified, never changes answering_mode, never
+# provisions or enables Smart Answer, never touches production, and never prints
+# secret values. Any forwarding_setup_status transition observed is caused by the
+# application's own inbound webhook, not by this workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_caller_last4:
+        description: "Last 4 digits of the phone that ORIGINATES the test call (optional; enables the caller-ID verdict)"
+        required: false
+        default: ""
+      optus_mobile_last4:
+        description: "Last 4 digits of the Optus destination/test mobile (optional; used to detect NOT-preserved caller ID)"
+        required: false
+        default: ""
+      max_wait_seconds:
+        description: "Maximum observation window in seconds (default 600 = 10 minutes)"
+        required: false
+        default: "600"
+      poll_seconds:
+        description: "Twilio Calls poll interval in seconds (default 5)"
+        required: false
+        default: "5"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-answer-optus-forwarding-observation
+  cancel-in-progress: false
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+
+    env:
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      STAGING_SUPABASE_URL: ${{ vars.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      STAGING_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      EXPECTED_CALLER_LAST4: ${{ inputs.expected_caller_last4 }}
+      OPTUS_MOBILE_LAST4: ${{ inputs.optus_mobile_last4 }}
+      MAX_WAIT_SECONDS: ${{ inputs.max_wait_seconds }}
+      POLL_SECONDS: ${{ inputs.poll_seconds }}
+
+    steps:
+      - name: Read-only Optus forwarding observation
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { writeFileSync, appendFileSync } = require("node:fs");
+
+          void (async () => {
+            // ---- constants (safe resource identifiers) -----------------------
+            const BUSINESS_ID = "7e08963d-2b6f-47c4-9e52-09fb4503c27d";
+            const NUMBER = "+61468089180";
+            const EXPECTED_PN_SID = "PNa03a6dd75afb676fb41d68ad43b5e7af";
+            const EXPECTED_ACCOUNT = "Richmond Rapid Connect Hosted Staging";
+            const EXPECTED_WEBHOOK_PATH = "/api/public/webhooks/twilio-smart-answer";
+
+            const clean = (v) => (v || "").replace(/^\uFEFF/, "").trim();
+            const SID = clean(process.env.TWILIO_ACCOUNT_SID);
+            const TOKEN = clean(process.env.TWILIO_AUTH_TOKEN);
+            const SB_URL = clean(process.env.STAGING_SUPABASE_URL).replace(/\/+$/, "");
+            const SRK = clean(process.env.STAGING_SUPABASE_SERVICE_ROLE_KEY);
+            const EXPECTED_CALLER_LAST4 = clean(process.env.EXPECTED_CALLER_LAST4).replace(/\D/g, "");
+            const OPTUS_LAST4 = clean(process.env.OPTUS_MOBILE_LAST4).replace(/\D/g, "");
+            const MAX_WAIT = Math.max(30, parseInt(process.env.MAX_WAIT_SECONDS || "600", 10) || 600);
+            const POLL = Math.max(2, parseInt(process.env.POLL_SECONDS || "5", 10) || 5);
+
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+            const redact = (s) => {
+              let m = String(s == null ? "" : s);
+              for (const sec of [TOKEN, SRK]) if (sec) m = m.split(sec).join("[REDACTED]");
+              return m.slice(0, 200);
+            };
+            const digits = (s) => String(s || "").replace(/\D/g, "");
+            const looksNumeric = (s) => /^\+?\d{5,}$/.test(String(s || ""));
+            const maskE164 = (s) => {
+              const raw = String(s || "");
+              if (!looksNumeric(raw)) return raw ? "[non-numeric-caller]" : "[empty]";
+              const m = raw.match(/^(\+?\d{2,3})(\d+)(\d{4})$/);
+              if (!m) { const d = digits(raw); return `+${"*".repeat(Math.max(0, d.length - 4))}${d.slice(-4)}`; }
+              return `${m[1]}${"*".repeat(m[2].length)}${m[3]}`;
+            };
+            const last4 = (s) => digits(s).slice(-4);
+
+            const fail = (assertion) => {
+              const e = new Error(assertion);
+              e.assertion = assertion;
+              throw e;
+            };
+
+            // ---- HTTP helpers (GET only) -------------------------------------
+            const twAuth = "Basic " + Buffer.from(`${SID}:${TOKEN}`).toString("base64");
+            async function twGet(path, params) {
+              const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+              const url = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(SID)}${path}${qs}`;
+              const res = await fetch(url, { method: "GET", headers: { Authorization: twAuth } });
+              const body = await res.json().catch(() => ({}));
+              if (!res.ok) fail(`twilio_http_${res.status}:${redact(body && body.message)}`);
+              return body;
+            }
+            async function sbGet(pathAndQuery) {
+              const url = `${SB_URL}/rest/v1/${pathAndQuery}`;
+              const res = await fetch(url, {
+                method: "GET",
+                headers: { apikey: SRK, Authorization: `Bearer ${SRK}`, Accept: "application/json" },
+              });
+              const text = await res.text();
+              let body;
+              try { body = JSON.parse(text); } catch { body = text; }
+              if (!res.ok) fail(`supabase_http_${res.status}:${redact(typeof body === "string" ? body : body && body.message)}`);
+              return body;
+            }
+            const eqNum = `phone_number=eq.${encodeURIComponent(NUMBER)}`;
+
+            // ---- report skeleton --------------------------------------------
+            const report = {
+              observationStartUtc: null,
+              observationStartMelbourne: null,
+              callDetected: false,
+              callSid: null,
+              parentCallSid: null,
+              maskedFrom: null,
+              to: NUMBER,
+              direction: null,
+              callStatus: null,
+              callStartTime: null,
+              callEndTime: null,
+              callDurationSeconds: null,
+              forwardedFrom: null,
+              callerIdVerdict: null,
+              businessId: BUSINESS_ID,
+              tenantResolvesToBusiness: null,
+              forwardingBefore: null,
+              forwardingAfter: null,
+              ordinaryVoicemailObserved: false,
+              vapiSipStarted: false,
+              aiVoiceUsageRecorded: false,
+              stripeMeterEventRecorded: false,
+              smartAnswerEnabledAfter: null,
+              answeringModeAfter: null,
+              productionTouched: false,
+              valuesPrinted: false,
+              finalMarker: null,
+              failedAssertion: null,
+            };
+            const writeArtifact = () =>
+              writeFileSync(
+                "smart-answer-optus-forwarding-observation.json",
+                `${JSON.stringify(report, null, 2)}\n`,
+                { mode: 0o600 },
+              );
+
+            try {
+              // ================= PHASE 2 — pre-call snapshot ==================
+              console.log("::group::Phase 2 — pre-call snapshot & assertions");
+
+              // Twilio account identity guard
+              const account = await twGet(".json");
+              const accountName = account.friendly_name || null;
+              console.log(`Twilio account friendlyName: ${accountName}`);
+              if (accountName !== EXPECTED_ACCOUNT) fail(`twilio_account_mismatch:${accountName}`);
+              if ((account.type || "") === "Full") console.log("note: account.type=Full");
+
+              // Number + webhook
+              let pn;
+              try {
+                pn = await twGet(`/IncomingPhoneNumbers/${EXPECTED_PN_SID}.json`);
+              } catch {
+                const list = await twGet(`/IncomingPhoneNumbers.json`, { PhoneNumber: NUMBER, PageSize: "50" });
+                pn = (list.incoming_phone_numbers || []).find((n) => n.phone_number === NUMBER);
+              }
+              if (!pn) fail("twilio_number_absent");
+              if (pn.sid !== EXPECTED_PN_SID) fail(`twilio_pn_sid_mismatch:${pn.sid}`);
+              if (pn.phone_number !== NUMBER) fail(`twilio_number_mismatch:${pn.phone_number}`);
+              const voiceUrl = pn.voice_url || "";
+              if (!voiceUrl.includes(EXPECTED_WEBHOOK_PATH)) fail(`twilio_voice_url_unexpected:${voiceUrl}`);
+              if ((pn.voice_method || "").toUpperCase() !== "POST") fail(`twilio_voice_method:${pn.voice_method}`);
+              console.log(`Twilio number ${NUMBER} · SID ${pn.sid} · voice_method ${pn.voice_method}`);
+              console.log(`Twilio voice_url targets staging webhook: ${voiceUrl.includes(EXPECTED_WEBHOOK_PATH)}`);
+
+              // Supabase inventory allocation
+              const inv = await sbGet(
+                `platform_phone_inventory?${eqNum}&select=phone_number,status,reserved_business_id,assigned_business_id,provider,provider_phone_id`,
+              );
+              if (!Array.isArray(inv) || inv.length !== 1) fail(`inventory_rows_${Array.isArray(inv) ? inv.length : "err"}`);
+              const invRow = inv[0];
+              const allocatedTo = invRow.assigned_business_id || invRow.reserved_business_id || null;
+              if (allocatedTo !== BUSINESS_ID) fail(`inventory_allocation_mismatch:${allocatedTo}`);
+              console.log(`Inventory ${invRow.phone_number} status=${invRow.status} allocatedTo(business)=matches`);
+
+              // Supabase telephony settings
+              const telRows = await sbGet(
+                `business_telephony_settings?business_id=eq.${BUSINESS_ID}&select=business_id,answering_mode,forwarding_setup_status,smart_answer_enabled,ring_first_seconds`,
+              );
+              if (!telRows.length) fail("telephony_settings_absent");
+              const tel = telRows[0];
+              report.forwardingBefore = tel.forwarding_setup_status;
+              console.log(
+                `Telephony: answering_mode=${tel.answering_mode} forwarding=${tel.forwarding_setup_status} smart_answer_enabled=${tel.smart_answer_enabled} ring_first=${tel.ring_first_seconds}`,
+              );
+              if (tel.answering_mode !== "off") fail(`answering_mode_not_off:${tel.answering_mode}`);
+              if (tel.smart_answer_enabled !== false) fail(`smart_answer_enabled_true`);
+              if (tel.forwarding_setup_status === "verified") fail("forwarding_already_verified_precall");
+
+              // Supabase AI receptionist settings — standard present, Smart Answer absent
+              const aiRows = await sbGet(
+                `business_ai_receptionist_settings?business_id=eq.${BUSINESS_ID}&select=business_id,provider_assistant_id,smart_answer_assistant_id,smart_answer_sip_uri,smart_answer_sip_phone_id`,
+              );
+              if (!aiRows.length) fail("ai_receptionist_settings_absent");
+              const ai = aiRows[0];
+              const providerAssistantPresent = !!(ai.provider_assistant_id && String(ai.provider_assistant_id).trim());
+              console.log(
+                `AI settings: provider_assistant present=${providerAssistantPresent} smart_answer_assistant=${ai.smart_answer_assistant_id ? "PRESENT" : "absent"} smart_answer_sip=${ai.smart_answer_sip_uri ? "PRESENT" : "absent"}`,
+              );
+              if (!providerAssistantPresent) fail("standard_provider_assistant_absent");
+              if (ai.smart_answer_assistant_id) fail("smart_answer_assistant_present_precall");
+              if (ai.smart_answer_sip_uri) fail("smart_answer_sip_present_precall");
+
+              // Authoritative tenant resolution (STABLE fn via GET rpc — read-only)
+              const resolved = await sbGet(
+                `rpc/resolve_smart_answer_tenant?_platform_number=${encodeURIComponent(NUMBER)}&select=business_id,forwarding_setup_status,smart_answer_enabled,answering_mode`,
+              );
+              const resolvedRow = Array.isArray(resolved) ? resolved[0] : resolved;
+              const resolvesPre = !!resolvedRow && resolvedRow.business_id === BUSINESS_ID;
+              report.tenantResolvesToBusiness = resolvesPre;
+              if (!resolvesPre) fail(`tenant_resolution_mismatch:${resolvedRow && resolvedRow.business_id}`);
+              console.log(`resolve_smart_answer_tenant(${NUMBER}) -> business ${BUSINESS_ID}: ${resolvesPre}`);
+
+              // Baseline existing Twilio calls (so an old call is never mistaken)
+              const baseline = await twGet(`/Calls.json`, { To: NUMBER, PageSize: "50" });
+              const baselineSids = new Set((baseline.calls || []).map((c) => c.sid));
+              const mostRecent = (baseline.calls || [])[0] || null;
+              console.log(
+                `Baseline inbound calls to ${NUMBER}: count=${baselineSids.size} mostRecentSid=${mostRecent ? mostRecent.sid : "none"} mostRecentAt=${mostRecent ? mostRecent.date_created : "n/a"}`,
+              );
+
+              const now = new Date();
+              report.observationStartUtc = now.toISOString();
+              try {
+                report.observationStartMelbourne = new Intl.DateTimeFormat("en-AU", {
+                  timeZone: "Australia/Melbourne",
+                  dateStyle: "medium",
+                  timeStyle: "long",
+                }).format(now);
+              } catch { report.observationStartMelbourne = null; }
+              writeArtifact();
+              console.log("::endgroup::");
+
+              // ================= PHASE 3 — READY signal ======================
+              console.log("");
+              console.log("==================================================");
+              console.log("READY_FOR_CALL");
+              console.log("==================================================");
+              console.log(`Staging number (safe): ${NUMBER}`);
+              console.log(`Pre-call forwarding state: ${report.forwardingBefore}`);
+              console.log(`answering_mode: ${tel.answering_mode} · smart_answer_enabled: ${tel.smart_answer_enabled}`);
+              console.log(`OBSERVATION_START_UTC: ${report.observationStartUtc}`);
+              console.log(`OBSERVATION_START_MELBOURNE: ${report.observationStartMelbourne}`);
+              console.log(`Waiting up to ${MAX_WAIT}s for ONE new forwarded call, polling every ${POLL}s...`);
+              console.log("");
+
+              // ================= PHASE 4 — poll for one new call =============
+              const deadline = Date.now() + MAX_WAIT * 1000;
+              let call = null;
+              while (Date.now() < deadline && !call) {
+                const page = await twGet(`/Calls.json`, { To: NUMBER, PageSize: "50" });
+                for (const c of page.calls || []) {
+                  if (!baselineSids.has(c.sid)) { call = c; break; }
+                }
+                if (call) break;
+                const remaining = Math.round((deadline - Date.now()) / 1000);
+                console.log(`...no new call yet (${remaining}s remaining)`);
+                await sleep(POLL * 1000);
+              }
+
+              if (!call) {
+                report.finalMarker = "SMART_ANSWER_OPTUS_FORWARDING_BLOCKED";
+                report.failedAssertion = "no_forwarded_call_reached_staging_within_window";
+                writeArtifact();
+                console.log("");
+                console.log("SMART_ANSWER_OPTUS_FORWARDING_BLOCKED");
+                console.log("Failed assertion: no forwarded call reached +61468089180 within the observation window.");
+                process.exit(1);
+              }
+
+              // Freshest snapshot of the detected call
+              let full = call;
+              try { full = await twGet(`/Calls/${call.sid}.json`); } catch { /* keep list row */ }
+
+              report.callDetected = true;
+              report.callSid = full.sid;
+              report.parentCallSid = full.parent_call_sid || null;
+              report.direction = full.direction || null;
+              report.callStatus = full.status || null;
+              report.callStartTime = full.start_time || null;
+              report.callEndTime = full.end_time || null;
+              report.callDurationSeconds = full.duration != null ? full.duration : null;
+              report.forwardedFrom = full.forwarded_from ? maskE164(full.forwarded_from) : null;
+              report.maskedFrom = maskE164(full.from);
+              console.log("::group::Phase 4 — detected new call");
+              console.log(`Call SID: ${report.callSid}`);
+              console.log(`ParentCallSid: ${report.parentCallSid || "n/a"}`);
+              console.log(`To: ${report.to} · Direction: ${report.direction} · Status: ${report.callStatus}`);
+              console.log(`From (masked): ${report.maskedFrom}`);
+              console.log(`ForwardedFrom (masked): ${report.forwardedFrom || "n/a"}`);
+              console.log(`Start: ${report.callStartTime} · End: ${report.callEndTime} · Duration: ${report.callDurationSeconds}s`);
+              console.log("::endgroup::");
+              writeArtifact();
+
+              // ================= PHASE 5 — caller-ID verdict =================
+              const fromRaw = full.from || "";
+              const fromLast4 = last4(fromRaw);
+              if (!looksNumeric(fromRaw)) {
+                report.callerIdVerdict = "CALLER_ID_INCONCLUSIVE";
+              } else if (EXPECTED_CALLER_LAST4) {
+                if (fromLast4 === EXPECTED_CALLER_LAST4) report.callerIdVerdict = "ORIGINAL_CALLER_ID_PRESERVED";
+                else if (OPTUS_LAST4 && fromLast4 === OPTUS_LAST4) report.callerIdVerdict = "ORIGINAL_CALLER_ID_NOT_PRESERVED";
+                else report.callerIdVerdict = "CALLER_ID_INCONCLUSIVE";
+              } else {
+                report.callerIdVerdict = "PENDING_OPERATOR_LAST4";
+              }
+              console.log(`Caller-ID verdict: ${report.callerIdVerdict}`);
+              writeArtifact();
+
+              // ================= PHASE 6 — post-call staging state ===========
+              console.log("Waiting 15s for inbound webhook persistence...");
+              await sleep(15000);
+
+              const resolvedAfter = await sbGet(
+                `rpc/resolve_smart_answer_tenant?_platform_number=${encodeURIComponent(NUMBER)}&select=business_id,forwarding_setup_status,smart_answer_enabled,answering_mode`,
+              );
+              const resolvedAfterRow = Array.isArray(resolvedAfter) ? resolvedAfter[0] : resolvedAfter;
+              report.tenantResolvesToBusiness = !!resolvedAfterRow && resolvedAfterRow.business_id === BUSINESS_ID;
+
+              const telAfterRows = await sbGet(
+                `business_telephony_settings?business_id=eq.${BUSINESS_ID}&select=answering_mode,forwarding_setup_status,smart_answer_enabled`,
+              );
+              const telAfter = telAfterRows[0] || {};
+              report.forwardingAfter = telAfter.forwarding_setup_status ?? null;
+              report.answeringModeAfter = telAfter.answering_mode ?? null;
+              report.smartAnswerEnabledAfter = telAfter.smart_answer_enabled ?? null;
+
+              const aiAfterRows = await sbGet(
+                `business_ai_receptionist_settings?business_id=eq.${BUSINESS_ID}&select=smart_answer_assistant_id,smart_answer_sip_uri`,
+              );
+              const aiAfter = aiAfterRows[0] || {};
+              const smartAssistantAfter = !!aiAfter.smart_answer_assistant_id;
+              const smartSipAfter = !!aiAfter.smart_answer_sip_uri;
+              report.vapiSipStarted = smartSipAfter; // presence of a SIP URI would indicate a Smart Answer stack
+
+              console.log("::group::Phase 6 — post-call staging state");
+              console.log(`Tenant still resolves to business: ${report.tenantResolvesToBusiness}`);
+              console.log(`forwarding ${report.forwardingBefore} -> ${report.forwardingAfter}`);
+              console.log(`answering_mode after: ${report.answeringModeAfter}`);
+              console.log(`smart_answer_enabled after: ${report.smartAnswerEnabledAfter}`);
+              console.log(`smart_answer_assistant after: ${smartAssistantAfter ? "PRESENT" : "absent"}`);
+              console.log(`smart_answer_sip after: ${smartSipAfter ? "PRESENT" : "absent"}`);
+              console.log("::endgroup::");
+
+              // ================= PHASE 7 — routing (ordinary voicemail) ======
+              const rmRows = await sbGet(
+                `reception_messages?business_id=eq.${BUSINESS_ID}&provider_call_id=eq.${encodeURIComponent(report.callSid)}&select=id,provider,source,status,created_at`,
+              );
+              const voicemailRows = (rmRows || []).filter((r) => r.source === "voicemail");
+              const aiReceptionRows = (rmRows || []).filter((r) => r.source === "ai_receptionist");
+              report.ordinaryVoicemailObserved = voicemailRows.length > 0;
+              console.log(
+                `reception_messages for call: total=${(rmRows || []).length} voicemail=${voicemailRows.length} ai_receptionist=${aiReceptionRows.length}`,
+              );
+              if (aiReceptionRows.length > 0) report.vapiSipStarted = true; // an AI-sourced message implies an AI/SIP leg
+
+              // ================= PHASE 8 — zero AI billing assertion =========
+              const usageWindow = await sbGet(
+                `billing_usage_events?business_id=eq.${BUSINESS_ID}&usage_type=eq.ai_voice_seconds&created_at=gte.${encodeURIComponent(report.observationStartUtc)}&select=id,usage_type,provider,external_call_id,billable,billable_seconds,stripe_meter_event_identifier,stripe_meter_event_status,created_at`,
+              );
+              const usageForCall = await sbGet(
+                `billing_usage_events?usage_type=eq.ai_voice_seconds&external_call_id=eq.${encodeURIComponent(report.callSid)}&select=id,external_call_id,stripe_meter_event_identifier,stripe_meter_event_status`,
+              );
+              const aiUsage = [...(usageWindow || []), ...(usageForCall || [])];
+              report.aiVoiceUsageRecorded = aiUsage.length > 0;
+              report.stripeMeterEventRecorded = aiUsage.some(
+                (u) => u.stripe_meter_event_identifier || ["pending", "sent"].includes(u.stripe_meter_event_status),
+              );
+              console.log("::group::Phase 8 — AI billing");
+              console.log(`ai_voice_seconds events (window ∪ call): ${aiUsage.length}`);
+              console.log(`AI voice usage recorded: ${report.aiVoiceUsageRecorded}`);
+              console.log(`Stripe meter event recorded: ${report.stripeMeterEventRecorded}`);
+              console.log("::endgroup::");
+
+              // Hard defect: AI usage while Smart Answer OFF
+              const billingDefect = report.aiVoiceUsageRecorded || report.stripeMeterEventRecorded;
+
+              // ================= final marker ================================
+              const certified =
+                report.callDetected &&
+                report.callerIdVerdict === "ORIGINAL_CALLER_ID_PRESERVED" &&
+                report.tenantResolvesToBusiness &&
+                report.vapiSipStarted === false &&
+                report.aiVoiceUsageRecorded === false &&
+                report.stripeMeterEventRecorded === false &&
+                report.smartAnswerEnabledAfter === false;
+
+              if (billingDefect) {
+                report.finalMarker = "SMART_ANSWER_OPTUS_FORWARDING_BLOCKED";
+                report.failedAssertion = "ai_voice_billing_occurred_while_smart_answer_off";
+              } else if (certified) {
+                report.finalMarker = "SMART_ANSWER_OPTUS_FORWARDING_CERTIFIED";
+              } else if (report.callerIdVerdict === "PENDING_OPERATOR_LAST4") {
+                report.finalMarker = "SMART_ANSWER_OPTUS_FORWARDING_PENDING_CALLER_ID";
+                report.failedAssertion = "caller_id_last4_not_supplied_at_dispatch";
+              } else {
+                report.finalMarker = "SMART_ANSWER_OPTUS_FORWARDING_BLOCKED";
+                report.failedAssertion =
+                  report.callerIdVerdict !== "ORIGINAL_CALLER_ID_PRESERVED"
+                    ? `caller_id_verdict_${report.callerIdVerdict}`
+                    : "certification_condition_unmet";
+              }
+
+              writeArtifact();
+
+              const summary = [
+                "# Smart Answer Optus forwarding observation",
+                "",
+                `Observation start (UTC): \`${report.observationStartUtc}\``,
+                `Call detected: **${report.callDetected}** · SID \`${report.callSid}\``,
+                `From (masked): **${report.maskedFrom}** → verdict **${report.callerIdVerdict}**`,
+                `Tenant resolves to business: **${report.tenantResolvesToBusiness}**`,
+                `Forwarding: \`${report.forwardingBefore}\` → \`${report.forwardingAfter}\``,
+                `Ordinary voicemail observed: **${report.ordinaryVoicemailObserved}**`,
+                `Vapi/SIP leg started: **${report.vapiSipStarted}**`,
+                `AI voice usage recorded: **${report.aiVoiceUsageRecorded}** · Stripe meter event: **${report.stripeMeterEventRecorded}**`,
+                `Smart Answer enabled after: **${report.smartAnswerEnabledAfter}** · answering_mode after: **${report.answeringModeAfter}**`,
+                "",
+                `**${report.finalMarker}**${report.failedAssertion ? ` — ${report.failedAssertion}` : ""}`,
+                "",
+                "GET/SELECT only. No secret values printed. No provider/database mutations performed.",
+              ].join("\n");
+              if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+
+              console.log("");
+              console.log(report.finalMarker);
+              if (report.failedAssertion) console.log(`Assertion note: ${report.failedAssertion}`);
+              if (billingDefect) process.exit(1);
+            } catch (e) {
+              report.failedAssertion = e && e.assertion ? e.assertion : redact(e && e.message ? e.message : e);
+              report.finalMarker = "SMART_ANSWER_OPTUS_FORWARDING_BLOCKED";
+              writeArtifact();
+              console.error("");
+              console.error("SMART_ANSWER_OPTUS_FORWARDING_BLOCKED");
+              console.error(`Failed assertion: ${report.failedAssertion}`);
+              process.exit(1);
+            }
+          })();
+          NODE
+
+      - name: Upload sanitised observation artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-optus-forwarding-observation
+          path: smart-answer-optus-forwarding-observation.json
+          if-no-files-found: warn
+          retention-days: 7
