@@ -1,0 +1,225 @@
+name: Smart Answer Twilio signature diagnostic
+
+# READ-ONLY diagnosis of WHY X-Twilio-Signature validation fails for the staging
+# Smart Answer webhook. Pulls the failed call's Twilio Debugger alert (which
+# records the exact POST params + the X-Twilio-Signature Twilio sent), then
+# recomputes the expected signature with each candidate Auth Token (secondary vs
+# primary, raw vs trimmed) and each URL variant, and reports WHICH combination
+# matches — by NAME only. Token values, hashes and signatures are NEVER printed.
+#
+# GET only (Twilio Monitor Alerts). Local HMAC only. No mutation, no secret
+# values, no production access.
+
+on:
+  workflow_dispatch:
+    inputs:
+      call_sid:
+        description: "Twilio CallSid of the failed webhook call"
+        required: true
+        default: "CA7188275642805042b6ac950add2752c2"
+      lookback_hours:
+        description: "Hours back to scan Debugger alerts (default 2)"
+        required: false
+        default: "2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-answer-twilio-signature-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: staging
+
+    env:
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      TWILIO_WEBHOOK_AUTH_TOKEN: ${{ secrets.TWILIO_WEBHOOK_AUTH_TOKEN }}
+      CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+      CALL_SID: ${{ inputs.call_sid }}
+      LOOKBACK_HOURS: ${{ inputs.lookback_hours }}
+
+    steps:
+      - name: Read-only signature diagnostic
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { createHmac } = require("node:crypto");
+          const { writeFileSync, appendFileSync } = require("node:fs");
+
+          void (async () => {
+            const clean = (v) => (v || "").replace(/^\uFEFF/, "");
+            const SID = (process.env.TWILIO_ACCOUNT_SID || "").trim();
+            const SECONDARY = process.env.TWILIO_AUTH_TOKEN || "";
+            const PRIMARY = process.env.TWILIO_WEBHOOK_AUTH_TOKEN || "";
+            const BASE = (process.env.CERTIFICATION_BASE_URL || "").replace(/\/+$/, "");
+            const PATH = "/api/public/webhooks/twilio-smart-answer";
+            const CALL_SID = (process.env.CALL_SID || "").trim();
+            const LOOKBACK = Math.max(1, parseInt(process.env.LOOKBACK_HOURS || "2", 10) || 2);
+
+            const auth = "Basic " + Buffer.from(`${SID}:${SECONDARY.trim()}`).toString("base64");
+            async function get(url) {
+              const res = await fetch(url, { method: "GET", headers: { Authorization: auth } });
+              const body = await res.json().catch(() => ({}));
+              return { ok: res.ok, status: res.status, body };
+            }
+
+            // Candidate tokens — never printed, only referenced by name.
+            const tokens = [
+              { name: "secondary(TWILIO_AUTH_TOKEN) raw", value: SECONDARY },
+              { name: "secondary(TWILIO_AUTH_TOKEN) trimmed", value: SECONDARY.trim() },
+              { name: "primary(TWILIO_WEBHOOK_AUTH_TOKEN) raw", value: PRIMARY },
+              { name: "primary(TWILIO_WEBHOOK_AUTH_TOKEN) trimmed", value: PRIMARY.trim() },
+            ];
+
+            const tokenFacts = (label, raw) => ({
+              label,
+              present: !!raw,
+              length: raw.length,
+              trimmedLength: raw.trim().length,
+              hasSurroundingWhitespace: raw !== raw.trim(),
+              isHex32: /^[0-9a-f]{32}$/.test(raw.trim()),
+            });
+
+            const report = {
+              callSid: CALL_SID,
+              alertFound: false,
+              signatureHeaderPresent: false,
+              requestVariablesPresent: false,
+              urlUsedByTwilio: null,
+              appSigningUrl: `${BASE}${PATH}`,
+              primaryEqualsSecondary: SECONDARY.trim() === PRIMARY.trim() && !!PRIMARY,
+              primaryFacts: tokenFacts("primary(TWILIO_WEBHOOK_AUTH_TOKEN)", PRIMARY),
+              secondaryFacts: tokenFacts("secondary(TWILIO_AUTH_TOKEN)", SECONDARY),
+              matches: [],
+              conclusion: null,
+              valuesPrinted: false,
+            };
+            const write = () =>
+              writeFileSync(
+                "smart-answer-twilio-signature-diagnostic.json",
+                `${JSON.stringify(report, null, 2)}\n`,
+                { mode: 0o600 },
+              );
+
+            try {
+              // Locate the Debugger alert for this CallSid.
+              const sinceIso = new Date(Date.now() - LOOKBACK * 3600 * 1000).toISOString();
+              let url = `https://monitor.twilio.com/v1/Alerts?LogLevel=error&StartDate=${encodeURIComponent(sinceIso)}&PageSize=50`;
+              let alert = null;
+              for (let i = 0; i < 10 && url && !alert; i++) {
+                const page = await get(url);
+                if (!page.ok) break;
+                for (const a of page.body.alerts || []) {
+                  const blob = `${a.resource_sid || ""} ${a.alert_text || ""}`;
+                  if (blob.includes(CALL_SID)) { alert = a; break; }
+                }
+                url = (page.body.meta && page.body.meta.next_page_url) || null;
+              }
+              if (!alert) throw new Error("no_alert_for_callsid");
+
+              const detailRes = await get(`https://monitor.twilio.com/v1/Alerts/${encodeURIComponent(alert.sid)}`);
+              const detail = detailRes.ok ? detailRes.body : alert;
+              report.alertFound = true;
+
+              // alert_text is a urlencoded query string carrying most fields.
+              const at = new URLSearchParams(clean(detail.alert_text || ""));
+              const twilioUrl = detail.request_url || at.get("url") || at.get("Url") || "";
+              report.urlUsedByTwilio = twilioUrl;
+
+              // POST params Twilio signed over.
+              const varsStr = detail.request_variables || at.get("parameterString") || at.get("requestVariables") || "";
+              const params = new URLSearchParams(varsStr);
+              report.requestVariablesPresent = [...params.keys()].length > 0;
+
+              // Supplied X-Twilio-Signature — search headers + whole detail blob.
+              const headerBlob = `${detail.request_headers || ""} ${JSON.stringify(detail)}`;
+              const sigMatch = headerBlob.match(/x-twilio-signature["'=:\s]+([A-Za-z0-9+/]{20,}={0,2})/i);
+              const suppliedSig = sigMatch ? sigMatch[1] : "";
+              report.signatureHeaderPresent = !!suppliedSig;
+
+              if (suppliedSig && report.requestVariablesPresent) {
+                const sortedTail = [...params.entries()]
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([k, v]) => `${k}${v}`)
+                  .join("");
+                const urlVariants = [
+                  { name: "twilio_request_url", url: twilioUrl },
+                  { name: "twilio_request_url_no_slash", url: twilioUrl.replace(/\/+$/, "") },
+                  { name: "app_signing_url(PUBLIC_JOB_REQUEST_URL+path)", url: `${BASE}${PATH}` },
+                ];
+                for (const uv of urlVariants) {
+                  if (!uv.url) continue;
+                  const payload = uv.url + sortedTail;
+                  for (const t of tokens) {
+                    if (!t.value) continue;
+                    const expected = createHmac("sha1", t.value).update(payload).digest("base64");
+                    if (expected === suppliedSig) {
+                      report.matches.push({ token: t.name, urlVariant: uv.name });
+                    }
+                  }
+                }
+              }
+
+              // Conclusion
+              if (!report.signatureHeaderPresent) {
+                report.conclusion =
+                  "Twilio Debugger alert did not expose X-Twilio-Signature/request params for this call; cannot recompute. Fall back to token facts below.";
+              } else if (report.matches.length === 0) {
+                report.conclusion =
+                  "NO candidate token matched the signature under any URL variant. The Worker's TWILIO_AUTH_TOKEN is neither the current secondary nor the supplied primary — the value entered as TWILIO_WEBHOOK_AUTH_TOKEN is not the token Twilio signs this subaccount's webhooks with.";
+              } else {
+                const m = report.matches[0];
+                report.conclusion = `MATCH: token='${m.token}', url='${m.urlVariant}'. Deploy that exact token (trimmed) into the Worker TWILIO_AUTH_TOKEN binding and ensure the app signing URL equals the matched URL variant.`;
+              }
+
+              write();
+              const summary = [
+                "# Smart Answer Twilio signature diagnostic",
+                "",
+                `CallSid: \`${report.callSid}\` · alertFound: **${report.alertFound}**`,
+                `X-Twilio-Signature present: **${report.signatureHeaderPresent}** · request params present: **${report.requestVariablesPresent}**`,
+                `URL Twilio used: \`${report.urlUsedByTwilio || "n/a"}\``,
+                `App signing URL: \`${report.appSigningUrl}\``,
+                `primary == secondary (value): **${report.primaryEqualsSecondary}**`,
+                `primary facts: hex32=${report.primaryFacts.isHex32} whitespace=${report.primaryFacts.hasSurroundingWhitespace} len=${report.primaryFacts.length}`,
+                `secondary facts: hex32=${report.secondaryFacts.isHex32} whitespace=${report.secondaryFacts.hasSurroundingWhitespace} len=${report.secondaryFacts.length}`,
+                "",
+                "## Signature matches",
+                ...(report.matches.length ? report.matches.map((m) => `- token **${m.token}** · url **${m.urlVariant}**`) : ["- (none)"]),
+                "",
+                `## Conclusion\n${report.conclusion}`,
+                "",
+                "No token values, hashes or signatures printed.",
+              ].join("\n");
+              if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+
+              console.log("=== SIGNATURE DIAGNOSTIC ===");
+              console.log(`alertFound=${report.alertFound} sigPresent=${report.signatureHeaderPresent} paramsPresent=${report.requestVariablesPresent}`);
+              console.log(`primaryEqualsSecondary=${report.primaryEqualsSecondary}`);
+              console.log(`primary: hex32=${report.primaryFacts.isHex32} whitespace=${report.primaryFacts.hasSurroundingWhitespace} len=${report.primaryFacts.length}`);
+              console.log(`secondary: hex32=${report.secondaryFacts.isHex32} whitespace=${report.secondaryFacts.hasSurroundingWhitespace} len=${report.secondaryFacts.length}`);
+              for (const m of report.matches) console.log(`MATCH token=${m.token} url=${m.urlVariant}`);
+              console.log(`CONCLUSION: ${report.conclusion}`);
+            } catch (e) {
+              report.conclusion = `diagnostic_error: ${String(e && e.message ? e.message : e).slice(0, 160)}`;
+              write();
+              console.error(report.conclusion);
+              process.exit(1);
+            }
+          })();
+          NODE
+
+      - name: Upload sanitised signature-diagnostic artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-twilio-signature-diagnostic
+          path: smart-answer-twilio-signature-diagnostic.json
+          if-no-files-found: warn
+          retention-days: 7
