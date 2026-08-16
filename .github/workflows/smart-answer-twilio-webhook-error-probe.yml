@@ -1,0 +1,282 @@
+name: Smart Answer Twilio webhook error probe
+
+# READ-ONLY diagnosis of WHY the isolated staging Twilio Voice webhook returns an
+# application error for a forwarded/direct call to +61468089180.
+#
+# Queries Twilio's own Debugger (Monitor Alerts) + the Call's Notifications for a
+# given CallSid / time window and reports the EXACT cause Twilio recorded:
+#   - error_code (e.g. 11200 HTTP retrieval failure, 12100 document parse failure)
+#   - the HTTP response status Twilio received (401 vs 404 vs 500)
+#   - the URL Twilio actually called (to compare against PUBLIC_JOB_REQUEST_URL)
+#   - a phone-redacted response-body snippet
+#
+# GET only. No POST/PATCH/DELETE, no Twilio/Supabase/provider/production mutation,
+# never prints secret values, sanitised artifact only. Caller numbers masked to
+# last 4 digits.
+
+on:
+  workflow_dispatch:
+    inputs:
+      call_sid:
+        description: "Twilio CallSid to correlate (optional; blank = all voice-webhook error alerts in the window)"
+        required: false
+        default: "CA7d054336e02b9ad180c6abad332c30dd"
+      lookback_hours:
+        description: "How many hours back to scan Debugger alerts (default 6)"
+        required: false
+        default: "6"
+      max_alerts:
+        description: "Max alerts to scan (default 100)"
+        required: false
+        default: "100"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-answer-twilio-webhook-error-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: staging
+
+    env:
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      CALL_SID: ${{ inputs.call_sid }}
+      LOOKBACK_HOURS: ${{ inputs.lookback_hours }}
+      MAX_ALERTS: ${{ inputs.max_alerts }}
+
+    steps:
+      - name: Read-only Twilio webhook error probe
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { writeFileSync, appendFileSync } = require("node:fs");
+
+          void (async () => {
+            const EXPECTED_ACCOUNT = "Richmond Rapid Connect Hosted Staging";
+            const NUMBER = "+61468089180";
+            const WEBHOOK_HINT = "twilio-smart-answer";
+
+            const clean = (v) => (v || "").replace(/^\uFEFF/, "").trim();
+            const SID = clean(process.env.TWILIO_ACCOUNT_SID);
+            const TOKEN = clean(process.env.TWILIO_AUTH_TOKEN);
+            const CALL_SID = clean(process.env.CALL_SID);
+            const LOOKBACK_HOURS = Math.max(1, parseInt(process.env.LOOKBACK_HOURS || "6", 10) || 6);
+            const MAX_ALERTS = Math.max(10, parseInt(process.env.MAX_ALERTS || "100", 10) || 100);
+
+            const redactSecret = (s) => {
+              let m = String(s == null ? "" : s);
+              if (TOKEN) m = m.split(TOKEN).join("[REDACTED]");
+              return m;
+            };
+            // Mask any AU phone-like sequences to last 4 digits.
+            const maskPhones = (s) =>
+              String(s == null ? "" : s).replace(/\+?\d[\d\s().-]{6,}\d/g, (m) => {
+                const d = m.replace(/\D/g, "");
+                if (d.length < 6) return m;
+                return `+${"*".repeat(Math.max(0, d.length - 4))}${d.slice(-4)}`;
+              });
+            const safe = (s, n = 600) => maskPhones(redactSecret(s)).slice(0, n);
+
+            const auth = "Basic " + Buffer.from(`${SID}:${TOKEN}`).toString("base64");
+            async function get(url) {
+              const res = await fetch(url, { method: "GET", headers: { Authorization: auth } });
+              const text = await res.text();
+              let body;
+              try { body = JSON.parse(text); } catch { body = text; }
+              return { ok: res.ok, status: res.status, body };
+            }
+
+            const report = {
+              account: null,
+              callSid: CALL_SID || null,
+              windowHours: LOOKBACK_HOURS,
+              relevantAlertCount: 0,
+              alerts: [],
+              callNotifications: [],
+              voiceUrlConfigured: null,
+              likelyCause: null,
+              valuesPrinted: false,
+              error: null,
+            };
+            const writeArtifact = () =>
+              writeFileSync(
+                "smart-answer-twilio-webhook-error-probe.json",
+                `${JSON.stringify(report, null, 2)}\n`,
+                { mode: 0o600 },
+              );
+
+            try {
+              // Account identity guard
+              const acct = await get(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(SID)}.json`);
+              if (!acct.ok) throw new Error(`account_probe_http_${acct.status}`);
+              report.account = acct.body.friendly_name || null;
+              console.log(`Twilio account: ${report.account}`);
+              if (report.account !== EXPECTED_ACCOUNT) throw new Error(`account_mismatch:${report.account}`);
+
+              // The configured voice webhook URL (host matters for signature validation)
+              try {
+                const pn = await get(
+                  `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(SID)}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(NUMBER)}&PageSize=5`,
+                );
+                const row = pn.ok && (pn.body.incoming_phone_numbers || []).find((n) => n.phone_number === NUMBER);
+                if (row) report.voiceUrlConfigured = row.voice_url || null;
+                console.log(`Configured voice_url: ${report.voiceUrlConfigured || "n/a"}`);
+              } catch { /* non-fatal */ }
+
+              // Call-scoped notifications (2010 API) for the specific CallSid
+              if (CALL_SID) {
+                const nt = await get(
+                  `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(SID)}/Calls/${encodeURIComponent(CALL_SID)}/Notifications.json?PageSize=50`,
+                );
+                if (nt.ok) {
+                  for (const n of nt.body.notifications || []) {
+                    report.callNotifications.push({
+                      sid: n.sid,
+                      errorCode: n.error_code || null,
+                      log: n.log,
+                      messageText: safe(n.message_text, 300),
+                      requestUrl: safe(n.request_url, 300),
+                      requestMethod: n.request_method || null,
+                      responseBody: safe(n.response_body, 400),
+                      moreInfo: n.more_info || null,
+                      messageDate: n.message_date || null,
+                    });
+                  }
+                }
+                console.log(`Call notifications found: ${report.callNotifications.length}`);
+              }
+
+              // Debugger / Monitor Alerts within the lookback window
+              const sinceIso = new Date(Date.now() - LOOKBACK_HOURS * 3600 * 1000).toISOString();
+              let url = `https://monitor.twilio.com/v1/Alerts?LogLevel=error&StartDate=${encodeURIComponent(sinceIso)}&PageSize=50`;
+              const scanned = [];
+              for (let i = 0; i < 10 && url && scanned.length < MAX_ALERTS; i++) {
+                const page = await get(url);
+                if (!page.ok) { console.log(`alerts list http ${page.status}`); break; }
+                for (const a of page.body.alerts || []) scanned.push(a);
+                const next = page.body.meta && page.body.meta.next_page_url;
+                url = next || null;
+              }
+              console.log(`Debugger error alerts scanned in last ${LOOKBACK_HOURS}h: ${scanned.length}`);
+
+              // Keep alerts that reference our CallSid or the smart-answer webhook
+              const relevant = scanned.filter((a) => {
+                const blob = `${a.resource_sid || ""} ${a.alert_text || ""} ${a.request_url || ""}`;
+                if (CALL_SID && blob.includes(CALL_SID)) return true;
+                return blob.includes(WEBHOOK_HINT) || blob.includes(NUMBER.replace("+", ""));
+              });
+              report.relevantAlertCount = relevant.length;
+
+              for (const a of relevant.slice(0, 25)) {
+                // Fetch full detail for response body + parsed alert_text
+                let detail = a;
+                try {
+                  const d = await get(`https://monitor.twilio.com/v1/Alerts/${encodeURIComponent(a.sid)}`);
+                  if (d.ok) detail = d.body;
+                } catch { /* keep summary */ }
+
+                // alert_text is a urlencoded query string; parse out httpResponse + url + Msg
+                let httpResponse = null, calledUrl = null, msg = null, sourceComponent = null, errFromText = null;
+                try {
+                  const p = new URLSearchParams(detail.alert_text || "");
+                  httpResponse = p.get("httpResponse");
+                  calledUrl = p.get("url") || p.get("Url");
+                  msg = p.get("Msg") || p.get("msg");
+                  sourceComponent = p.get("sourceComponent");
+                  errFromText = p.get("ErrorCode");
+                } catch { /* alert_text not query-shaped */ }
+
+                report.alerts.push({
+                  sid: detail.sid,
+                  dateGenerated: detail.date_generated || a.date_generated || null,
+                  errorCode: detail.error_code || errFromText || null,
+                  logLevel: detail.log_level || a.log_level || null,
+                  resourceSid: detail.resource_sid || a.resource_sid || null,
+                  requestMethod: detail.request_method || null,
+                  httpResponseStatus: httpResponse,
+                  calledUrl: safe(calledUrl, 300),
+                  requestUrl: safe(detail.request_url || a.request_url, 300),
+                  message: safe(msg, 300),
+                  sourceComponent,
+                  responseBodySnippet: safe(detail.response_body, 400),
+                  moreInfo: detail.more_info || a.more_info || null,
+                });
+              }
+
+              // Heuristic conclusion
+              const statuses = report.alerts.map((x) => x.httpResponseStatus).filter(Boolean);
+              const bodies = report.alerts.map((x) => x.responseBodySnippet || "").join(" ").toLowerCase();
+              const has = (code) => statuses.includes(String(code));
+              if (has(401) || bodies.includes("unauthorized") || bodies.includes("invalid twilio signature")) {
+                report.likelyCause =
+                  "HTTP 401 — Twilio signature/verification rejected (PUBLIC_JOB_REQUEST_URL host mismatch, wrong/missing TWILIO_AUTH_TOKEN, or missing PUBLIC_JOB_REQUEST_URL on the staging Worker).";
+              } else if (has(404)) {
+                report.likelyCause =
+                  "HTTP 404 — the Smart Answer route is not deployed/served on the current staging Worker at that URL.";
+              } else if (has(500) || has(502) || has(503)) {
+                report.likelyCause = "HTTP 5xx — the staging Worker route threw a server error.";
+              } else if (report.alerts.length === 0 && report.callNotifications.length === 0) {
+                report.likelyCause =
+                  "No matching Debugger alert found in the window — widen lookback_hours, or Debugger alerting may be off for this subaccount.";
+              } else {
+                report.likelyCause = "See alerts[] — httpResponse/error_code recorded but did not match a known pattern.";
+              }
+
+              writeArtifact();
+
+              const lines = [
+                "# Smart Answer Twilio webhook error probe",
+                "",
+                `Account: **${report.account}**`,
+                `CallSid: \`${report.callSid || "n/a"}\``,
+                `Configured voice_url: \`${report.voiceUrlConfigured || "n/a"}\``,
+                `Relevant Debugger alerts: **${report.relevantAlertCount}** · Call notifications: **${report.callNotifications.length}**`,
+                "",
+                "## Alerts",
+                ...(report.alerts.length
+                  ? report.alerts.map(
+                      (a) =>
+                        `- ${a.dateGenerated || "?"} · error_code **${a.errorCode || "?"}** · httpResponse **${a.httpResponseStatus || "?"}** · url \`${a.calledUrl || a.requestUrl || "?"}\`\n    body: \`${(a.responseBodySnippet || "").slice(0, 160)}\``,
+                    )
+                  : ["- (none matched)"]),
+                "",
+                `## Likely cause\n${report.likelyCause}`,
+                "",
+                "GET only. No mutations. No secret values printed. Caller numbers masked.",
+              ].join("\n");
+              if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines}\n`);
+
+              console.log("");
+              console.log("=== WEBHOOK ERROR PROBE RESULT ===");
+              console.log(`Relevant alerts: ${report.relevantAlertCount}`);
+              for (const a of report.alerts) {
+                console.log(
+                  `alert ${a.dateGenerated} error_code=${a.errorCode} httpResponse=${a.httpResponseStatus} url=${a.calledUrl || a.requestUrl}`,
+                );
+                if (a.responseBodySnippet) console.log(`  body: ${a.responseBodySnippet.slice(0, 160)}`);
+              }
+              console.log(`LIKELY_CAUSE: ${report.likelyCause}`);
+            } catch (e) {
+              report.error = redactSecret(e && e.message ? e.message : String(e)).slice(0, 200);
+              writeArtifact();
+              console.error(`probe failed: ${report.error}`);
+              process.exit(1);
+            }
+          })();
+          NODE
+
+      - name: Upload sanitised webhook-error-probe artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-twilio-webhook-error-probe
+          path: smart-answer-twilio-webhook-error-probe.json
+          if-no-files-found: warn
+          retention-days: 7
