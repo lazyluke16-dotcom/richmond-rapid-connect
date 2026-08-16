@@ -1,0 +1,146 @@
+name: Smart Answer staging Worker config probe
+
+# READ-ONLY inspection of the isolated staging Cloudflare Worker
+# richmond-rapid-connect-acquisition-staging to prove its runtime configuration
+# for the Twilio Smart Answer webhook signature check.
+#
+# Reports ONLY:
+#   - whether an encrypted Worker secret binding named TWILIO_AUTH_TOKEN exists
+#     (presence boolean + total secret count; NEVER the value)
+#   - the plain-text PUBLIC_JOB_REQUEST_URL binding and whether it normalises to
+#     the expected staging workers.dev origin
+#
+# GET only (Cloudflare API). No secret VALUES are retrieved or printed. No
+# mutation. No unrelated configuration is dumped. No production access.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-answer-staging-worker-config-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: staging
+
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+      EXPECTED_PUBLIC_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+
+    steps:
+      - name: Read-only Worker config probe
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { writeFileSync, appendFileSync } = require("node:fs");
+
+          void (async () => {
+            const clean = (v) => (v || "").replace(/^\uFEFF/, "").trim();
+            const ACCT = clean(process.env.CLOUDFLARE_ACCOUNT_ID);
+            const TOKEN = clean(process.env.CLOUDFLARE_API_TOKEN);
+            const WORKER = clean(process.env.CLOUDFLARE_STAGING_WORKER_NAME);
+            const EXPECTED = clean(process.env.EXPECTED_PUBLIC_URL).replace(/\/+$/, "");
+            const TARGET_SECRET = "TWILIO_AUTH_TOKEN";
+
+            const redact = (s) => {
+              let m = String(s == null ? "" : s);
+              if (TOKEN) m = m.split(TOKEN).join("[REDACTED]");
+              return m.slice(0, 200);
+            };
+            async function cf(path) {
+              const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(ACCT)}${path}`;
+              const res = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${TOKEN}` } });
+              const body = await res.json().catch(() => ({}));
+              return { ok: res.ok, status: res.status, body };
+            }
+
+            const report = {
+              workerName: WORKER,
+              workerTwilioAuthTokenPresent: null,
+              secretBindingCount: null,
+              publicJobRequestUrlBinding: null,
+              publicJobRequestUrlNormalised: null,
+              expectedPublicUrl: EXPECTED,
+              publicJobRequestUrlMatches: null,
+              valuesPrinted: false,
+              error: null,
+            };
+            const write = () =>
+              writeFileSync(
+                "smart-answer-staging-worker-config-probe.json",
+                `${JSON.stringify(report, null, 2)}\n`,
+                { mode: 0o600 },
+              );
+
+            try {
+              // 1) Secret binding NAMES (values are never returned by this API)
+              const secrets = await cf(`/workers/scripts/${encodeURIComponent(WORKER)}/secrets`);
+              if (!secrets.ok) throw new Error(`secrets_list_http_${secrets.status}:${redact(JSON.stringify(secrets.body.errors))}`);
+              const secretNames = (secrets.body.result || []).map((s) => s.name);
+              report.secretBindingCount = secretNames.length;
+              report.workerTwilioAuthTokenPresent = secretNames.includes(TARGET_SECRET);
+
+              // 2) Plain-text bindings — extract ONLY PUBLIC_JOB_REQUEST_URL
+              const settings = await cf(`/workers/scripts/${encodeURIComponent(WORKER)}/settings`);
+              if (settings.ok) {
+                const bindings = (settings.body.result && settings.body.result.bindings) || [];
+                const pj = bindings.find((b) => b.name === "PUBLIC_JOB_REQUEST_URL");
+                if (pj && typeof pj.text === "string") {
+                  report.publicJobRequestUrlBinding = pj.text;
+                  report.publicJobRequestUrlNormalised = pj.text.replace(/\/+$/, "");
+                  report.publicJobRequestUrlMatches = report.publicJobRequestUrlNormalised === EXPECTED;
+                }
+                // Fallback: a secret binding named TWILIO_AUTH_TOKEN also counts as present
+                if (report.workerTwilioAuthTokenPresent === false) {
+                  report.workerTwilioAuthTokenPresent = bindings.some(
+                    (b) => b.name === TARGET_SECRET && /secret/i.test(b.type || ""),
+                  );
+                }
+              }
+
+              write();
+              const lines = [
+                "# Smart Answer staging Worker config probe",
+                "",
+                `Worker: \`${report.workerName}\``,
+                `WORKER_TWILIO_AUTH_TOKEN_PRESENT = **${report.workerTwilioAuthTokenPresent}**`,
+                `Encrypted secret bindings on Worker: **${report.secretBindingCount}**`,
+                `PUBLIC_JOB_REQUEST_URL (normalised): \`${report.publicJobRequestUrlNormalised ?? "n/a"}\``,
+                `Expected: \`${report.expectedPublicUrl}\``,
+                `PUBLIC_JOB_REQUEST_URL_MATCHES = **${report.publicJobRequestUrlMatches}**`,
+                "",
+                "GET only. No secret values retrieved or printed.",
+              ].join("\n");
+              if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines}\n`);
+
+              console.log("=== WORKER CONFIG PROBE ===");
+              console.log(`WORKER_TWILIO_AUTH_TOKEN_PRESENT=${report.workerTwilioAuthTokenPresent}`);
+              console.log(`secretBindingCount=${report.secretBindingCount}`);
+              console.log(`PUBLIC_JOB_REQUEST_URL_NORMALISED=${report.publicJobRequestUrlNormalised}`);
+              console.log(`PUBLIC_JOB_REQUEST_URL_MATCHES=${report.publicJobRequestUrlMatches}`);
+            } catch (e) {
+              report.error = redact(e && e.message ? e.message : String(e));
+              write();
+              console.error(`probe failed: ${report.error}`);
+              process.exit(1);
+            }
+          })();
+          NODE
+
+      - name: Upload sanitised worker-config-probe artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-staging-worker-config-probe
+          path: smart-answer-staging-worker-config-probe.json
+          if-no-files-found: warn
+          retention-days: 7
