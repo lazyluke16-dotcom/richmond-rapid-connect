@@ -15,6 +15,13 @@ name: Smart Answer Twilio signature live token probe
 #
 # No secret values are printed. This is the only workflow here that POSTs; it is
 # deliberately mutation-free (reject path). No production access.
+#
+# LIMITATION (why an earlier run gave false certainty): the first version of this
+# probe signed requests with the SAME localeCompare key ordering the application
+# validator used, so it only proved the Worker accepts signatures made by our own
+# (buggy) algorithm — not Twilio's. It now signs with Twilio's OFFICIAL algorithm
+# (native case-sensitive key sort, dedupe+sort multi-values, HMAC-SHA1 over UTF-8),
+# independent of the app, so a 200 proves parity with real Twilio requests.
 
 on:
   workflow_dispatch:
@@ -77,11 +84,21 @@ jobs:
             };
             const params = new URLSearchParams(fields);
             const body = params.toString();
-            const sortedTail = [...params.entries()]
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([k, v]) => `${k}${v}`)
-              .join("");
-            const sign = (token) => createHmac("sha1", token).update(URL_ + sortedTail).digest("base64");
+            // Twilio's OFFICIAL signing algorithm (independent of the app):
+            // native case-sensitive key sort; per key dedupe(Set)+sort values;
+            // append name+value; HMAC-SHA1 over UTF-8 bytes; base64.
+            const grouped = new Map();
+            for (const [k, v] of params.entries()) {
+              const arr = grouped.get(k);
+              if (arr) arr.push(v);
+              else grouped.set(k, [v]);
+            }
+            let sortedTail = "";
+            for (const k of [...grouped.keys()].sort()) {
+              for (const v of [...new Set(grouped.get(k))].sort()) sortedTail += `${k}${v}`;
+            }
+            const sign = (token) =>
+              createHmac("sha1", token).update(Buffer.from(URL_ + sortedTail, "utf-8")).digest("base64");
 
             const candidates = [
               { name: "secondary(TWILIO_AUTH_TOKEN) trimmed", value: SECONDARY.trim() },
