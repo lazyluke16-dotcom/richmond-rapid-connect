@@ -1,0 +1,94 @@
+name: Smart Answer Twilio recent inbound calls probe
+
+# READ-ONLY enumeration of recent inbound calls to the staging DID +61468089180,
+# reporting each call's masked From / ForwardedFrom / status so a genuine
+# carrier-forwarded call can be distinguished from a direct dial. GET only; no
+# mutation; caller numbers masked to last 4; no production.
+
+on:
+  workflow_dispatch:
+    inputs:
+      number:
+        description: "E.164 DID"
+        required: false
+        default: "+61468089180"
+      lookback_minutes:
+        description: "Minutes back to include"
+        required: false
+        default: "60"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-answer-twilio-recent-calls-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: staging
+    env:
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      NUMBER: ${{ inputs.number }}
+      LOOKBACK_MINUTES: ${{ inputs.lookback_minutes }}
+    steps:
+      - name: Read-only recent calls probe
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { writeFileSync, appendFileSync } = require("node:fs");
+          void (async () => {
+            const SID = (process.env.TWILIO_ACCOUNT_SID || "").trim();
+            const TOKEN = (process.env.TWILIO_AUTH_TOKEN || "").trim();
+            const NUMBER = (process.env.NUMBER || "").trim();
+            const LOOKBACK = Math.max(5, parseInt(process.env.LOOKBACK_MINUTES || "60", 10) || 60);
+            const auth = "Basic " + Buffer.from(`${SID}:${TOKEN}`).toString("base64");
+            const mask = (s) => {
+              const raw = String(s || "");
+              if (!/^\+?\d{5,}$/.test(raw)) return raw ? "[non-numeric]" : "[empty]";
+              const d = raw.replace(/\D/g, "");
+              return `+${"*".repeat(Math.max(0, d.length - 4))}${d.slice(-4)}`;
+            };
+            const sinceMs = Date.now() - LOOKBACK * 60 * 1000;
+            const url = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(SID)}/Calls.json?To=${encodeURIComponent(NUMBER)}&PageSize=50`;
+            const res = await fetch(url, { headers: { Authorization: auth } });
+            const body = await res.json().catch(() => ({}));
+            const calls = (body.calls || [])
+              .filter((c) => {
+                const t = Date.parse(c.date_created || c.start_time || "");
+                return Number.isNaN(t) ? true : t >= sinceMs;
+              })
+              .map((c) => ({
+                sid: c.sid,
+                parentCallSid: c.parent_call_sid || null,
+                dateCreated: c.date_created || c.start_time || null,
+                maskedFrom: mask(c.from),
+                fromLast4: (String(c.from || "").replace(/\D/g, "").slice(-4)) || null,
+                maskedForwardedFrom: c.forwarded_from ? mask(c.forwarded_from) : "[none]",
+                forwardedFromLast4: c.forwarded_from ? String(c.forwarded_from).replace(/\D/g, "").slice(-4) : null,
+                direction: c.direction || null,
+                status: c.status || null,
+                durationSeconds: c.duration != null ? c.duration : null,
+              }));
+            const report = { number: NUMBER, lookbackMinutes: LOOKBACK, count: calls.length, calls, valuesPrinted: false };
+            writeFileSync("smart-answer-twilio-recent-calls-probe.json", `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+            const lines = ["# Recent inbound calls to " + NUMBER, "", `count=${calls.length}`, ""];
+            for (const c of calls) {
+              lines.push(`- ${c.dateCreated} sid=${c.sid} from=${c.maskedFrom}(l4:${c.fromLast4}) forwardedFrom=${c.maskedForwardedFrom}(l4:${c.forwardedFromLast4}) dir=${c.direction} status=${c.status} dur=${c.durationSeconds}s parent=${c.parentCallSid || "n/a"}`);
+            }
+            if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+            console.log(lines.join("\n"));
+          })().catch((e) => { console.error("probe error:", String(e && e.message ? e.message : e)); process.exit(1); });
+          NODE
+      - name: Upload recent-calls artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-twilio-recent-calls-probe
+          path: smart-answer-twilio-recent-calls-probe.json
+          if-no-files-found: warn
+          retention-days: 7
