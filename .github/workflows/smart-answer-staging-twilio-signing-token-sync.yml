@@ -1,0 +1,238 @@
+name: Smart Answer staging Twilio signing token sync
+
+# Guarded, staging-ONLY sync of Twilio's CURRENT staging-subaccount Auth Token
+# into the isolated Worker's encrypted TWILIO_AUTH_TOKEN binding, so inbound
+# X-Twilio-Signature validation uses the token Twilio actually signs with.
+#
+# The token is read from Twilio Account.json into process memory and streamed
+# straight to the Cloudflare Worker Secrets API (PUT). It is NEVER printed,
+# logged, hashed, written to disk, put in an artifact/GITHUB_OUTPUT, or stored as
+# a GitHub secret. No Twilio/Supabase/Vapi/Stripe/production mutation.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type SYNC_CURRENT_TWILIO_SIGNING_TOKEN_TO_STAGING_WORKER"
+        required: true
+      expected_account_sid:
+        description: "Expected staging subaccount SID (blank = configured TWILIO_ACCOUNT_SID)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-answer-staging-twilio-signing-token-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: ${{ inputs.confirmation == 'SYNC_CURRENT_TWILIO_SIGNING_TOKEN_TO_STAGING_WORKER' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: staging
+
+    env:
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+      CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      EXPECTED_ACCOUNT_SID: ${{ inputs.expected_account_sid }}
+
+    steps:
+      - name: Guarded in-memory token sync + synthetic verify
+        shell: bash
+        run: |
+          node <<'NODE'
+          const crypto = require("node:crypto");
+          const { writeFileSync, appendFileSync } = require("node:fs");
+
+          void (async () => {
+            const SID = (process.env.TWILIO_ACCOUNT_SID || "").trim();
+            const REST = (process.env.TWILIO_AUTH_TOKEN || "").trim();
+            const CF_ACCT = (process.env.CLOUDFLARE_ACCOUNT_ID || "").trim();
+            const CF_TOKEN = (process.env.CLOUDFLARE_API_TOKEN || "").trim();
+            const WORKER = (process.env.CLOUDFLARE_STAGING_WORKER_NAME || "").trim();
+            const BASE = (process.env.CERTIFICATION_BASE_URL || "").replace(/\/+$/, "");
+            const CONFIRM = (process.env.CONFIRMATION || "").trim();
+            const EXPECTED = (process.env.EXPECTED_ACCOUNT_SID || "").trim() || SID;
+            const PATH = "/api/public/webhooks/twilio-smart-answer";
+            const URL_ = `${BASE}${PATH}`;
+            const EXPECTED_NAME = "Richmond Rapid Connect Hosted Staging";
+            const EXPECTED_WORKER = "richmond-rapid-connect-acquisition-staging";
+
+            const report = {
+              twilioAccountIdentityVerified: false,
+              currentAuthTokenRetrievedInMemory: false,
+              workerSecretUpdated: false,
+              workerTwilioAuthTokenPresent: false,
+              currentAccountTokenSyntheticAccepted: false,
+              badSignatureRejected: false,
+              productionTouched: false,
+              marker: null,
+              failure: null,
+              valuesPrinted: false,
+            };
+            const write = () =>
+              writeFileSync(
+                "smart-answer-staging-twilio-signing-token-sync.json",
+                `${JSON.stringify(report, null, 2)}\n`,
+                { mode: 0o600 },
+              );
+            const fail = (why) => {
+              report.failure = why;
+              write();
+              console.error(`SYNC_BLOCKED: ${why}`);
+              process.exit(1);
+            };
+
+            const basic = (u, p) => "Basic " + Buffer.from(`${u}:${p}`).toString("base64");
+            const twGet = async (path) => {
+              const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts${path}`, {
+                headers: { Authorization: basic(SID, REST) },
+              });
+              const body = await res.json().catch(() => ({}));
+              return { ok: res.ok, status: res.status, body };
+            };
+
+            // ---- Guards ----
+            if (CONFIRM !== "SYNC_CURRENT_TWILIO_SIGNING_TOKEN_TO_STAGING_WORKER") fail("confirmation_mismatch");
+            if (!SID || SID !== EXPECTED) fail(`account_sid_mismatch`);
+            if (WORKER !== EXPECTED_WORKER) fail(`worker_name_unexpected:${WORKER}`);
+            if (/prod/i.test(WORKER)) fail("worker_looks_production");
+            if (!CF_ACCT || !CF_TOKEN) fail("missing_cloudflare_credentials");
+
+            // ---- Twilio account identity + current token (in memory only) ----
+            const acct = await twGet(`/${encodeURIComponent(SID)}.json`);
+            if (!acct.ok) fail(`twilio_account_http_${acct.status}`);
+            if (acct.body.friendly_name !== EXPECTED_NAME) fail(`friendly_name_unexpected`);
+            if (acct.body.sid !== SID) fail(`resolved_sid_mismatch`);
+            report.twilioAccountIdentityVerified = true;
+
+            let token = typeof acct.body.auth_token === "string" ? acct.body.auth_token.trim() : "";
+            if (!token) fail("auth_token_missing");
+            if (!/^[0-9a-f]{32}$/i.test(token)) fail("auth_token_shape_invalid");
+            report.currentAuthTokenRetrievedInMemory = true;
+
+            // ---- Stream directly into the Cloudflare Worker encrypted secret ----
+            {
+              const res = await fetch(
+                `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(CF_ACCT)}/workers/scripts/${encodeURIComponent(WORKER)}/secrets`,
+                {
+                  method: "PUT",
+                  headers: { Authorization: `Bearer ${CF_TOKEN}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ name: "TWILIO_AUTH_TOKEN", text: token, type: "secret_text" }),
+                },
+              );
+              const body = await res.json().catch(() => ({}));
+              report.workerSecretUpdated = res.ok && body.success === true;
+              if (!report.workerSecretUpdated) fail(`worker_secret_put_http_${res.status}`);
+            }
+
+            // ---- Verify present (names only) ----
+            {
+              const res = await fetch(
+                `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(CF_ACCT)}/workers/scripts/${encodeURIComponent(WORKER)}/secrets`,
+                { headers: { Authorization: `Bearer ${CF_TOKEN}` } },
+              );
+              const body = await res.json().catch(() => ({}));
+              report.workerTwilioAuthTokenPresent = (body.result || []).some((s) => s.name === "TWILIO_AUTH_TOKEN");
+            }
+
+            // ---- Mutation-free synthetic verify with the fresh token ----
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+            await sleep(5000); // allow secret propagation
+
+            const fields = {
+              AccountSid: SID,
+              ApiVersion: "2010-04-01",
+              CallSid: "CAsyncverify00000000000000000000000",
+              CallStatus: "ringing",
+              Called: "+61491570156",
+              Caller: "+61491570199",
+              Direction: "inbound",
+              From: "+61491570199",
+              To: "+61491570156",
+            };
+            const usp = new URLSearchParams(fields);
+            const body = usp.toString();
+            const grouped = new Map();
+            for (const [k, v] of usp.entries()) {
+              const a = grouped.get(k);
+              if (a) a.push(v);
+              else grouped.set(k, [v]);
+            }
+            let tail = "";
+            for (const k of [...grouped.keys()].sort()) {
+              for (const v of [...new Set(grouped.get(k))].sort()) tail += `${k}${v}`;
+            }
+            const sig = crypto.createHmac("sha1", token).update(Buffer.from(URL_ + tail, "utf-8")).digest("base64");
+
+            const post = async (signature) => {
+              const res = await fetch(URL_, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Twilio-Signature": signature },
+                body,
+              });
+              const text = await res.text();
+              return { status: res.status, text };
+            };
+
+            // retry a couple times for propagation
+            for (let i = 0; i < 4; i++) {
+              const r = await post(sig);
+              if (r.status === 200 && /reject/i.test(r.text)) {
+                report.currentAccountTokenSyntheticAccepted = true;
+                break;
+              }
+              await sleep(4000);
+            }
+            const rc = await post("AAAAdeliberatelyWrongSignature0000000000=");
+            report.badSignatureRejected = rc.status === 401;
+
+            token = null; // drop from memory
+
+            report.marker =
+              report.currentAccountTokenSyntheticAccepted && report.badSignatureRejected
+                ? "CURRENT_TWILIO_SIGNING_TOKEN_SYNC_CERTIFIED"
+                : "CURRENT_TWILIO_SIGNING_TOKEN_SYNC_BLOCKED";
+
+            write();
+            const summary = [
+              "# Smart Answer staging Twilio signing token sync",
+              "",
+              `TWILIO_ACCOUNT_IDENTITY_VERIFIED=${report.twilioAccountIdentityVerified}`,
+              `CURRENT_AUTH_TOKEN_RETRIEVED_IN_MEMORY=${report.currentAuthTokenRetrievedInMemory}`,
+              `WORKER_SECRET_UPDATED=${report.workerSecretUpdated}`,
+              `WORKER_TWILIO_AUTH_TOKEN_PRESENT=${report.workerTwilioAuthTokenPresent}`,
+              `CURRENT_ACCOUNT_TOKEN_SYNTHETIC_ACCEPTED=${report.currentAccountTokenSyntheticAccepted}`,
+              `BAD_SIGNATURE_REJECTED=${report.badSignatureRejected}`,
+              `PRODUCTION_TOUCHED=false`,
+              "",
+              `**${report.marker}**`,
+              "",
+              "No token value/hash printed or persisted.",
+            ].join("\n");
+            if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+            console.log(summary);
+            if (report.marker !== "CURRENT_TWILIO_SIGNING_TOKEN_SYNC_CERTIFIED") process.exit(1);
+          })().catch((e) => {
+            console.error("sync error:", String(e && e.message ? e.message : e).slice(0, 160));
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload sanitised sync artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-staging-twilio-signing-token-sync
+          path: smart-answer-staging-twilio-signing-token-sync.json
+          if-no-files-found: warn
+          retention-days: 7
