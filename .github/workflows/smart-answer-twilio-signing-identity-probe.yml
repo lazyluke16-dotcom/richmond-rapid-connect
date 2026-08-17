@@ -1,0 +1,320 @@
+name: Smart Answer Twilio signing identity probe
+
+# READ-ONLY proof of WHICH Twilio account/region generated the real webhook and
+# whether the stored webhook token matches Twilio's current Auth Token for that
+# exact account. Returns ONLY identifiers (SIDs, region — not secret) and
+# booleans. Any auth_token returned by Twilio is held in process memory for a
+# constant-time comparison ONLY and is never echoed, logged, hashed, written to
+# the artifact, put in GITHUB_OUTPUT, or persisted. No mutation. No production.
+
+on:
+  workflow_dispatch:
+    inputs:
+      call_sid:
+        description: "Real failed webhook CallSid"
+        required: true
+        default: "CA8130236010e67393aab31128a6769ee2"
+      expected_account_sid:
+        description: "Expected staging subaccount SID (blank = use configured TWILIO_ACCOUNT_SID)"
+        required: false
+        default: ""
+      phone_sid:
+        description: "IncomingPhoneNumber SID"
+        required: false
+        default: "PNa03a6dd75afb676fb41d68ad43b5e7af"
+      number:
+        description: "E.164 number"
+        required: false
+        default: "+61468089180"
+      lookback_hours:
+        description: "Hours back to scan Debugger alerts"
+        required: false
+        default: "3"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-answer-twilio-signing-identity-probe
+  cancel-in-progress: false
+
+jobs:
+  identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: staging
+
+    env:
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      TWILIO_WEBHOOK_AUTH_TOKEN: ${{ secrets.TWILIO_WEBHOOK_AUTH_TOKEN }}
+      CALL_SID: ${{ inputs.call_sid }}
+      EXPECTED_ACCOUNT_SID: ${{ inputs.expected_account_sid }}
+      PHONE_SID: ${{ inputs.phone_sid }}
+      NUMBER: ${{ inputs.number }}
+      LOOKBACK_HOURS: ${{ inputs.lookback_hours }}
+
+    steps:
+      - name: Read-only signing identity probe
+        shell: bash
+        run: |
+          node <<'NODE'
+          const crypto = require("node:crypto");
+          const { writeFileSync, appendFileSync } = require("node:fs");
+
+          void (async () => {
+            const SID = (process.env.TWILIO_ACCOUNT_SID || "").trim();
+            const SECONDARY = (process.env.TWILIO_AUTH_TOKEN || "").trim();
+            const WEBHOOK = (process.env.TWILIO_WEBHOOK_AUTH_TOKEN || "").trim();
+            const CALL_SID = (process.env.CALL_SID || "").trim();
+            // Blank input falls back to the configured staging Account SID so no
+            // SID literal is committed to the workflow (push-protection safe).
+            const EXPECTED = (process.env.EXPECTED_ACCOUNT_SID || "").trim() || SID;
+            const PHONE_SID = (process.env.PHONE_SID || "").trim();
+            const NUMBER = (process.env.NUMBER || "").trim();
+            const LOOKBACK = Math.max(1, parseInt(process.env.LOOKBACK_HOURS || "3", 10) || 3);
+
+            const basic = (sid, tok) => "Basic " + Buffer.from(`${sid}:${tok}`).toString("base64");
+            async function get(url, sid, tok) {
+              const res = await fetch(url, { headers: { Authorization: basic(sid, tok) } });
+              const text = await res.text();
+              let body;
+              try { body = JSON.parse(text); } catch { body = {}; }
+              return { ok: res.ok, status: res.status, body };
+            }
+            function safeEqual(a, b) {
+              const ab = Buffer.from(a || "", "utf8");
+              const bb = Buffer.from(b || "", "utf8");
+              if (ab.length === 0 || bb.length === 0 || ab.length !== bb.length) return false;
+              return crypto.timingSafeEqual(ab, bb);
+            }
+
+            const report = {
+              realCallAccountSid: null,
+              expectedStagingAccountSid: EXPECTED,
+              realCallAccountMatchesStaging: null,
+              debuggerAccountSid: null,
+              parentAccountSid: null,
+              configuredEnvAccountSid: SID,
+              configuredEnvMatchesExpected: SID === EXPECTED,
+              phoneNumberAccountSid: null,
+              phoneNumberAccountMatchesStaging: null,
+              voiceRegion: null,
+              realCallRegion: null,
+              twilioAccountAuthTokenReturned: false,
+              accountTokenEqualsWebhookSecret: false,
+              accountTokenEqualsRestSecret: false,
+              webhookSecretAuthenticatesStagingAccount: null,
+              webhookTokenRegion: null,
+              expectedSigningRegion: null,
+              rootCauseClassification: null,
+              recommendedNextAction: null,
+              valuesPrinted: false,
+            };
+            const write = () =>
+              writeFileSync(
+                "smart-answer-twilio-signing-identity-probe.json",
+                `${JSON.stringify(report, null, 2)}\n`,
+                { mode: 0o600 },
+              );
+
+            try {
+              // ---- PHASE 1: real call AccountSid (Debugger + Call resource) ----
+              const sinceIso = new Date(Date.now() - LOOKBACK * 3600 * 1000).toISOString();
+              let url = `https://monitor.twilio.com/v1/Alerts?LogLevel=error&StartDate=${encodeURIComponent(sinceIso)}&PageSize=50`;
+              let alert = null;
+              for (let i = 0; i < 10 && url && !alert; i++) {
+                const page = await get(url, SID, SECONDARY);
+                if (!page.ok) break;
+                for (const a of page.body.alerts || []) {
+                  if (`${a.resource_sid || ""} ${a.alert_text || ""}`.includes(CALL_SID)) { alert = a; break; }
+                }
+                url = (page.body.meta && page.body.meta.next_page_url) || null;
+              }
+              if (alert) {
+                const at = new URLSearchParams(alert.alert_text || "");
+                report.debuggerAccountSid = at.get("AccountSid") || null;
+                const varsStr = alert.request_variables || at.get("parameterString") || "";
+                const rv = new URLSearchParams(varsStr);
+                report.debuggerAccountSid = report.debuggerAccountSid || rv.get("AccountSid") || null;
+              }
+              // Call resource account_sid (authoritative owner of the call)
+              const call = await get(
+                `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(EXPECTED)}/Calls/${encodeURIComponent(CALL_SID)}.json`,
+                SID,
+                SECONDARY,
+              );
+              const callAccountSid = call.ok ? call.body.account_sid : null;
+              report.realCallAccountSid = callAccountSid || report.debuggerAccountSid || null;
+              report.realCallAccountMatchesStaging =
+                report.realCallAccountSid != null && report.realCallAccountSid === EXPECTED;
+
+              // Parent account
+              const acctMeta = await get(
+                `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(EXPECTED)}.json`,
+                SID,
+                SECONDARY,
+              );
+              if (acctMeta.ok) {
+                report.parentAccountSid = acctMeta.body.owner_account_sid || null;
+              }
+
+              // ---- PHASE 2: number ownership ----
+              const pn = await get(
+                `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(EXPECTED)}/IncomingPhoneNumbers/${encodeURIComponent(PHONE_SID)}.json`,
+                SID,
+                SECONDARY,
+              );
+              if (pn.ok) report.phoneNumberAccountSid = pn.body.account_sid || null;
+              report.phoneNumberAccountMatchesStaging =
+                report.phoneNumberAccountSid != null && report.phoneNumberAccountSid === EXPECTED;
+
+              // ---- PHASE 3: inbound voice region ----
+              const routes = await get(
+                `https://routes.twilio.com/v2/PhoneNumbers/${encodeURIComponent(NUMBER)}`,
+                SID,
+                SECONDARY,
+              );
+              if (routes.status === 404) report.voiceRegion = "us1-default";
+              else if (routes.ok) report.voiceRegion = routes.body.voice_region || "unknown";
+              else report.voiceRegion = `routes_http_${routes.status}`;
+
+              // Cross-check where the Call record lives (US1 vs AU1)
+              const us1 = call.ok
+                ? { ok: true }
+                : await get(
+                    `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(EXPECTED)}/Calls/${encodeURIComponent(CALL_SID)}.json`,
+                    SID,
+                    SECONDARY,
+                  );
+              const au1 = await get(
+                `https://api.au1.twilio.com/2010-04-01/Accounts/${encodeURIComponent(EXPECTED)}/Calls/${encodeURIComponent(CALL_SID)}.json`,
+                SID,
+                SECONDARY,
+              );
+              report.realCallRegion = us1.ok && au1.ok ? "us1+au1" : us1.ok ? "us1" : au1.ok ? "au1" : "not_found";
+
+              // ---- PHASE 4: compare Twilio's current Auth Token to stored secrets ----
+              // auth_token held in memory only, compared, then dropped.
+              {
+                const acct = await get(
+                  `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(EXPECTED)}.json`,
+                  SID,
+                  SECONDARY,
+                );
+                let accountToken = acct.ok ? acct.body.auth_token : "";
+                report.twilioAccountAuthTokenReturned =
+                  typeof accountToken === "string" && accountToken.length > 0;
+                if (report.twilioAccountAuthTokenReturned) {
+                  report.accountTokenEqualsWebhookSecret = safeEqual(accountToken, WEBHOOK);
+                  report.accountTokenEqualsRestSecret = safeEqual(accountToken, SECONDARY);
+                }
+                accountToken = null; // drop
+              }
+
+              // ---- PHASE 5: does the webhook secret authenticate this account? ----
+              const authCheck = await get(
+                `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(EXPECTED)}.json`,
+                EXPECTED,
+                WEBHOOK,
+              );
+              report.webhookSecretAuthenticatesStagingAccount = authCheck.status === 200;
+
+              // ---- PHASE 6: regional credential check ----
+              const webhookUs1 = authCheck.status === 200
+                ? { status: 200 }
+                : await get(
+                    `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(EXPECTED)}.json`,
+                    EXPECTED,
+                    WEBHOOK,
+                  );
+              const webhookAu1 = await get(
+                `https://api.au1.twilio.com/2010-04-01/Accounts/${encodeURIComponent(EXPECTED)}.json`,
+                EXPECTED,
+                WEBHOOK,
+              );
+              const us1ok = webhookUs1.status === 200;
+              const au1ok = webhookAu1.status === 200;
+              report.webhookTokenRegion = us1ok && au1ok ? "us1+au1" : us1ok ? "us1" : au1ok ? "au1" : "none";
+              report.expectedSigningRegion =
+                report.voiceRegion === "us1-default" ? "us1" : (report.voiceRegion || "unknown");
+
+              // ---- PHASE 7: decision matrix ----
+              if (report.realCallAccountMatchesStaging === false) {
+                report.rootCauseClassification = "SIGNING_ACCOUNT_MISMATCH_PROVEN";
+                report.recommendedNextAction =
+                  "The real webhook's AccountSid is not the staging subaccount. Align the deployed webhook token to the account that actually owns/signs the call.";
+              } else if (report.twilioAccountAuthTokenReturned && !report.accountTokenEqualsWebhookSecret) {
+                report.rootCauseClassification = "WEBHOOK_TOKEN_VALUE_MISMATCH_PROVEN";
+                report.recommendedNextAction = report.accountTokenEqualsRestSecret
+                  ? "Twilio's current account Auth Token equals the REST secret (TWILIO_AUTH_TOKEN), NOT the webhook secret. The Worker webhook binding should use the account's current Auth Token."
+                  : "Twilio's current account Auth Token equals neither stored secret. Update the webhook token source to Twilio's current account Auth Token.";
+              } else if (
+                report.voiceRegion &&
+                report.voiceRegion !== "us1-default" &&
+                report.webhookTokenRegion !== "none" &&
+                report.expectedSigningRegion !== report.webhookTokenRegion &&
+                report.webhookTokenRegion.indexOf(report.expectedSigningRegion) === -1
+              ) {
+                report.rootCauseClassification = "WEBHOOK_TOKEN_REGION_MISMATCH_PROVEN";
+                report.recommendedNextAction = `Inbound processing region is ${report.voiceRegion} but the webhook token is a ${report.webhookTokenRegion} credential. Use the ${report.expectedSigningRegion} Auth Token.`;
+              } else if (
+                report.realCallAccountMatchesStaging &&
+                report.phoneNumberAccountMatchesStaging &&
+                report.voiceRegion &&
+                report.webhookSecretAuthenticatesStagingAccount &&
+                (!report.twilioAccountAuthTokenReturned || report.accountTokenEqualsWebhookSecret)
+              ) {
+                report.rootCauseClassification = "STORED_WEBHOOK_TOKEN_CONFIRMED_CORRECT";
+                report.recommendedNextAction =
+                  "Signing identity confirmed. If real calls still 401, capture a real X-Twilio-Signature (console request inspector) for a final recompute; otherwise investigate edge signing (e.g., media/region proxy).";
+              } else {
+                report.rootCauseClassification = "INCONCLUSIVE";
+                report.recommendedNextAction =
+                  "Some identity facts unavailable under current read access; see fields. Consider Twilio console request inspector for the sent signature.";
+              }
+
+              write();
+              const b = (v) => (v === null ? "n/a" : String(v));
+              const summary = [
+                "# Smart Answer Twilio signing identity probe",
+                "",
+                `REAL_CALL_ACCOUNT_SID=${b(report.realCallAccountSid)}`,
+                `EXPECTED_STAGING_ACCOUNT_SID=${EXPECTED}`,
+                `REAL_CALL_ACCOUNT_MATCHES_STAGING=${b(report.realCallAccountMatchesStaging)}`,
+                `debuggerAccountSid=${b(report.debuggerAccountSid)} parentAccountSid=${b(report.parentAccountSid)}`,
+                `configuredEnvAccountSid=${b(report.configuredEnvAccountSid)} matchesExpected=${b(report.configuredEnvMatchesExpected)}`,
+                `PHONE_NUMBER_ACCOUNT_SID=${b(report.phoneNumberAccountSid)}`,
+                `PHONE_NUMBER_ACCOUNT_MATCHES_STAGING=${b(report.phoneNumberAccountMatchesStaging)}`,
+                `VOICE_REGION=${b(report.voiceRegion)}`,
+                `REAL_CALL_REGION=${b(report.realCallRegion)}`,
+                `TWILIO_ACCOUNT_AUTH_TOKEN_RETURNED=${b(report.twilioAccountAuthTokenReturned)}`,
+                `ACCOUNT_TOKEN_EQUALS_WEBHOOK_SECRET=${b(report.accountTokenEqualsWebhookSecret)}`,
+                `ACCOUNT_TOKEN_EQUALS_REST_SECRET=${b(report.accountTokenEqualsRestSecret)}`,
+                `WEBHOOK_SECRET_AUTHENTICATES_STAGING_ACCOUNT=${b(report.webhookSecretAuthenticatesStagingAccount)}`,
+                `WEBHOOK_TOKEN_REGION=${b(report.webhookTokenRegion)}`,
+                `EXPECTED_SIGNING_REGION=${b(report.expectedSigningRegion)}`,
+                `ROOT_CAUSE_CLASSIFICATION=${b(report.rootCauseClassification)}`,
+                "",
+                "No auth_token value/hash printed or persisted.",
+              ].join("\n");
+              if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+              console.log(summary);
+            } catch (e) {
+              report.rootCauseClassification = `probe_error: ${String(e && e.message ? e.message : e).slice(0, 160)}`;
+              write();
+              console.error(report.rootCauseClassification);
+              process.exit(1);
+            }
+          })();
+          NODE
+
+      - name: Upload sanitised signing-identity artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-twilio-signing-identity-probe
+          path: smart-answer-twilio-signing-identity-probe.json
+          if-no-files-found: warn
+          retention-days: 7
