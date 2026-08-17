@@ -106,11 +106,10 @@ jobs:
           VAPI_SIP_AUTH_USERNAME: ${{ secrets.VAPI_SIP_AUTH_USERNAME }}
           VAPI_SIP_AUTH_PASSWORD: ${{ secrets.VAPI_SIP_AUTH_PASSWORD }}
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          # SECONDARY Twilio token — REST/API automation identity only. The Worker
+          # runtime signing token is synced separately from Twilio Account.json,
+          # so no manually-maintained webhook token is required here.
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-          # PRIMARY Twilio Auth Token, used ONLY to populate the Worker runtime
-          # secret TWILIO_AUTH_TOKEN for X-Twilio-Signature validation. Kept
-          # separate from the SECONDARY REST-automation token above.
-          TWILIO_WEBHOOK_AUTH_TOKEN: ${{ secrets.TWILIO_WEBHOOK_AUTH_TOKEN }}
         shell: bash
         run: |
           node <<'NODE'
@@ -131,7 +130,6 @@ jobs:
             "VAPI_SIP_AUTH_PASSWORD",
             "TWILIO_ACCOUNT_SID",
             "TWILIO_AUTH_TOKEN",
-            "TWILIO_WEBHOOK_AUTH_TOKEN",
           ];
           // Optional/recoverable — aligned with the runtime contract in
           // src/lib/vapi.server.ts resolveVapiServerCredentialId(): when unset,
@@ -194,13 +192,11 @@ jobs:
           VAPI_SERVER_CREDENTIAL_ID: ${{ secrets.VAPI_SERVER_CREDENTIAL_ID }}
           VAPI_SIP_AUTH_USERNAME: ${{ secrets.VAPI_SIP_AUTH_USERNAME }}
           VAPI_SIP_AUTH_PASSWORD: ${{ secrets.VAPI_SIP_AUTH_PASSWORD }}
-          # The Worker runtime binding TWILIO_AUTH_TOKEN is sourced from the
-          # PRIMARY webhook token (TWILIO_WEBHOOK_AUTH_TOKEN), NOT the SECONDARY
-          # REST-automation token, because Twilio signs inbound webhooks with the
-          # primary Auth Token. Uploaded as an encrypted Worker secret (never a
-          # --var, never printed). The application keeps reading
-          # process.env.TWILIO_AUTH_TOKEN unchanged.
-          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_WEBHOOK_AUTH_TOKEN }}
+          # NOTE: the Worker runtime binding TWILIO_AUTH_TOKEN is intentionally NOT
+          # uploaded here. It is set by the canonical current-signing-token sync
+          # step below (Twilio Account.json -> Cloudflare secret), because Twilio
+          # signs inbound webhooks with the subaccount's CURRENT Auth Token, which
+          # a manually-maintained GitHub secret can drift from.
         run: |
           node - <<'NODE' |
           const names = [
@@ -209,7 +205,6 @@ jobs:
             "VAPI_SERVER_CREDENTIAL_ID",
             "VAPI_SIP_AUTH_USERNAME",
             "VAPI_SIP_AUTH_PASSWORD",
-            "TWILIO_AUTH_TOKEN",
           ];
           process.stdout.write(JSON.stringify(Object.fromEntries(names.map((name) => [name, process.env[name]]))));
           NODE
@@ -238,6 +233,16 @@ jobs:
             --var STRIPE_MODE:test
             --var STAGING_CERTIFICATION_ENABLED:true
             --var STAGING_CERTIFICATION_EXECUTE:I_UNDERSTAND_STAGING_ONLY
+
+      - name: Sync current Twilio signing token into the staging Worker
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+        run: node scripts/sync-staging-twilio-signing-token.mjs
 
       - name: Verify hosted staging responds
         env:

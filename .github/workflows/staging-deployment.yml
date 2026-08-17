@@ -216,7 +216,6 @@ jobs:
           CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
           TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
-          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
           TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
           VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
           VAPI_SERVER_SECRET: ${{ secrets.VAPI_SERVER_SECRET }}
@@ -237,7 +236,9 @@ jobs:
           const names = [
             "SUPABASE_SERVICE_ROLE_KEY",
             "TWILIO_ACCOUNT_SID",
-            "TWILIO_AUTH_TOKEN",
+            // TWILIO_AUTH_TOKEN is set by the canonical current-signing-token sync
+            // step (Twilio Account.json -> Worker), never from a GitHub secret, so
+            // it always equals the token Twilio signs inbound webhooks with.
             "TWILIO_FROM_NUMBER",
             "VAPI_API_KEY",
             "VAPI_SERVER_SECRET",
@@ -313,6 +314,16 @@ jobs:
           SMS_INVOICE_PROCESSOR_KEY: ${{ secrets.SMS_INVOICE_PROCESSOR_KEY }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           DASHBOARD_PIN: ${{ secrets.DASHBOARD_PIN }}
+
+      - name: Sync current Twilio signing token into the staging Worker
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+        run: node scripts/sync-staging-twilio-signing-token.mjs
 
       - name: Verify exact hosted release identity
         env:
