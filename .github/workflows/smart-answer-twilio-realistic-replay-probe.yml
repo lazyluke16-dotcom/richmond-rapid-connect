@@ -1,0 +1,233 @@
+name: Smart Answer Twilio realistic replay probe
+
+# Distinguishes "wrong token" from "app reconstruction bug" for the persistent
+# webhook 401, WITHOUT touching credentials and WITHOUT mutation.
+#
+# It reads the REAL failed call's request parameters from the Twilio Debugger,
+# then replays them faithfully to the live webhook — signed with the PRIMARY
+# token using Twilio's OFFICIAL algorithm — but with To swapped to a fictional
+# non-tenant number so the handler returns Reject before any DB write.
+#   - HTTP 200 <Reject> => the live Worker validates a realistic, primary-signed,
+#     Twilio-native request => app reconstruction is correct => the real 401 is a
+#     TOKEN mismatch (Twilio signs with a token != the deployed primary).
+#   - HTTP 401 => a reconstruction difference is reproduced (bisect the params).
+#
+# Also reports safe anomaly facts about the real params (count, empty-valued
+# names, values containing '+' or space) with phone digits masked. No secret
+# values printed. Mutation-free (reject path). No production access.
+
+on:
+  workflow_dispatch:
+    inputs:
+      call_sid:
+        description: "Twilio CallSid of the failed webhook call to replay"
+        required: true
+        default: "CA8130236010e67393aab31128a6769ee2"
+      fictional_to:
+        description: "Non-tenant To used for the replay (must not be in inventory)"
+        required: false
+        default: "+61491570156"
+      lookback_hours:
+        description: "Hours back to scan Debugger alerts"
+        required: false
+        default: "2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smart-answer-twilio-realistic-replay-probe
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    environment:
+      name: staging
+
+    env:
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+      TWILIO_WEBHOOK_AUTH_TOKEN: ${{ secrets.TWILIO_WEBHOOK_AUTH_TOKEN }}
+      CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+      CALL_SID: ${{ inputs.call_sid }}
+      FICTIONAL_TO: ${{ inputs.fictional_to }}
+      LOOKBACK_HOURS: ${{ inputs.lookback_hours }}
+
+    steps:
+      - name: Realistic replay probe (mutation-free)
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { createHmac } = require("node:crypto");
+          const { writeFileSync, appendFileSync } = require("node:fs");
+
+          void (async () => {
+            const SID = (process.env.TWILIO_ACCOUNT_SID || "").trim();
+            const SECONDARY = (process.env.TWILIO_AUTH_TOKEN || "").trim();
+            const PRIMARY = (process.env.TWILIO_WEBHOOK_AUTH_TOKEN || "").trim();
+            const BASE = (process.env.CERTIFICATION_BASE_URL || "").replace(/\/+$/, "");
+            const PATH = "/api/public/webhooks/twilio-smart-answer";
+            const URL_ = `${BASE}${PATH}`;
+            const CALL_SID = (process.env.CALL_SID || "").trim();
+            const FICTIONAL_TO = (process.env.FICTIONAL_TO || "+61491570156").trim();
+            const LOOKBACK = Math.max(1, parseInt(process.env.LOOKBACK_HOURS || "2", 10) || 2);
+
+            const maskPhone = (s) => {
+              const d = String(s || "").replace(/\D/g, "");
+              return d.length >= 6 ? `+${"*".repeat(d.length - 4)}${d.slice(-4)}` : s;
+            };
+            const authHeader = "Basic " + Buffer.from(`${SID}:${SECONDARY}`).toString("base64");
+            async function get(url) {
+              const res = await fetch(url, { headers: { Authorization: authHeader } });
+              const body = await res.json().catch(() => ({}));
+              return { ok: res.ok, status: res.status, body };
+            }
+
+            // Twilio-official signature (native sort, dedupe+sort multi-values).
+            function twilioSign(token, url, usp) {
+              const grouped = new Map();
+              for (const [k, v] of usp.entries()) {
+                const a = grouped.get(k);
+                if (a) a.push(v);
+                else grouped.set(k, [v]);
+              }
+              let data = url;
+              for (const k of [...grouped.keys()].sort()) {
+                for (const v of [...new Set(grouped.get(k))].sort()) data += `${k}${v}`;
+              }
+              return createHmac("sha1", token).update(Buffer.from(data, "utf-8")).digest("base64");
+            }
+
+            const report = {
+              callSid: CALL_SID,
+              realParamsFound: false,
+              realParamCount: 0,
+              realParamNames: [],
+              emptyValuedNames: [],
+              namesWithSpaceInValue: [],
+              namesWithPlusInValue: [],
+              replay: { primaryHttp: null, primaryAccepted: null, controlHttp: null },
+              conclusion: null,
+              valuesPrinted: false,
+            };
+            const write = () =>
+              writeFileSync(
+                "smart-answer-twilio-realistic-replay-probe.json",
+                `${JSON.stringify(report, null, 2)}\n`,
+                { mode: 0o600 },
+              );
+
+            try {
+              const sinceIso = new Date(Date.now() - LOOKBACK * 3600 * 1000).toISOString();
+              let url = `https://monitor.twilio.com/v1/Alerts?LogLevel=error&StartDate=${encodeURIComponent(sinceIso)}&PageSize=50`;
+              let alert = null;
+              for (let i = 0; i < 10 && url && !alert; i++) {
+                const page = await get(url);
+                if (!page.ok) break;
+                for (const a of page.body.alerts || []) {
+                  if (`${a.resource_sid || ""} ${a.alert_text || ""}`.includes(CALL_SID)) { alert = a; break; }
+                }
+                url = (page.body.meta && page.body.meta.next_page_url) || null;
+              }
+              if (!alert) throw new Error("no_alert_for_callsid");
+              const detailRes = await get(`https://monitor.twilio.com/v1/Alerts/${encodeURIComponent(alert.sid)}`);
+              const detail = detailRes.ok ? detailRes.body : alert;
+
+              const at = new URLSearchParams(detail.alert_text || "");
+              const varsStr =
+                detail.request_variables || at.get("parameterString") || at.get("requestVariables") || "";
+              const real = new URLSearchParams(varsStr);
+              report.realParamsFound = [...real.keys()].length > 0;
+              report.realParamCount = [...real.keys()].length;
+
+              // Build the faithful replay: keep every real param, swap To -> fictional.
+              const replay = new URLSearchParams();
+              for (const [k, v] of real.entries()) {
+                if (k === "To") continue;
+                replay.append(k, v);
+                if (v === "") report.emptyValuedNames.push(k);
+                if (/\s/.test(v)) report.namesWithSpaceInValue.push(k);
+                if (v.includes("+")) report.namesWithPlusInValue.push(k);
+              }
+              replay.append("To", FICTIONAL_TO);
+              report.realParamNames = [...new Set([...real.keys()])].sort();
+
+              const body = replay.toString();
+              async function post(signature) {
+                const res = await fetch(URL_, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-Twilio-Signature": signature,
+                  },
+                  body,
+                });
+                const text = await res.text();
+                return { status: res.status, text };
+              }
+
+              const primarySig = twilioSign(PRIMARY, URL_, replay);
+              const rPrimary = await post(primarySig);
+              report.replay.primaryHttp = rPrimary.status;
+              report.replay.primaryAccepted =
+                rPrimary.status === 200 && rPrimary.text.toLowerCase().includes("reject");
+
+              const rControl = await post("AAAAbadsignature000000000000000000000000=");
+              report.replay.controlHttp = rControl.status;
+
+              if (report.replay.primaryAccepted) {
+                report.conclusion =
+                  "REPLAY 200: the live Worker validates a realistic, primary-signed, Twilio-native request. App reconstruction is CORRECT for real-shaped params => the persistent real-call 401 is a TOKEN mismatch: Twilio signs this subaccount's webhooks with a token != the deployed TWILIO_WEBHOOK_AUTH_TOKEN.";
+              } else if (report.replay.controlHttp !== 401) {
+                report.conclusion =
+                  "Control (bad signature) was not rejected as 401 — investigate routing before concluding.";
+              } else {
+                report.conclusion =
+                  "REPLAY 401: reproduced the real failure with realistic params (primary token, native algorithm). This is an app RECONSTRUCTION difference, not the token. Inspect anomaly fields (empty values / space / plus in values) to bisect.";
+              }
+
+              write();
+              const summary = [
+                "# Smart Answer Twilio realistic replay probe",
+                "",
+                `CallSid: \`${report.callSid}\` · real params: **${report.realParamCount}**`,
+                `Empty-valued params: ${report.emptyValuedNames.join(", ") || "(none)"}`,
+                `Values with a space: ${report.namesWithSpaceInValue.join(", ") || "(none)"}`,
+                `Values with '+': ${report.namesWithPlusInValue.join(", ") || "(none)"}`,
+                "",
+                `Replay (primary, native): HTTP **${report.replay.primaryHttp}** accepted=${report.replay.primaryAccepted}`,
+                `Control (bad sig): HTTP **${report.replay.controlHttp}**`,
+                "",
+                `## Conclusion\n${report.conclusion}`,
+                "",
+                "Mutation-free (reject path). No token values printed.",
+              ].join("\n");
+              if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+
+              console.log("=== REALISTIC REPLAY ===");
+              console.log(`realParamCount=${report.realParamCount}`);
+              console.log(`emptyValued=${report.emptyValuedNames.join(",")}`);
+              console.log(`spaceInValue=${report.namesWithSpaceInValue.join(",")}`);
+              console.log(`plusInValue=${report.namesWithPlusInValue.join(",")}`);
+              console.log(`replay primary HTTP=${report.replay.primaryHttp} accepted=${report.replay.primaryAccepted}`);
+              console.log(`control HTTP=${report.replay.controlHttp}`);
+              console.log(`CONCLUSION: ${report.conclusion}`);
+            } catch (e) {
+              report.conclusion = `probe_error: ${String(e && e.message ? e.message : e).slice(0, 160)}`;
+              write();
+              console.error(report.conclusion);
+              process.exit(1);
+            }
+          })();
+          NODE
+
+      - name: Upload sanitised realistic-replay artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-answer-twilio-realistic-replay-probe
+          path: smart-answer-twilio-realistic-replay-probe.json
+          if-no-files-found: warn
+          retention-days: 7
