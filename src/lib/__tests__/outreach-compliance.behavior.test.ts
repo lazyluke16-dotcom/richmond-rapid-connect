@@ -78,7 +78,7 @@ describe("Twilio STOP ingestion", () => {
     const payload =
       endpoint +
       [...params.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([key, value]) => `${key}${value}`)
         .join("");
     const signature = createHmac("sha1", authToken).update(payload).digest("base64");
