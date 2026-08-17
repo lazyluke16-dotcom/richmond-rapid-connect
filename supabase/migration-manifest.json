@@ -209,6 +209,21 @@
         "20260801130000_seamless_acquisition_activation.sql",
         "20260801200000_authoritative_gst_pricing.sql"
       ]
+    },
+    {
+      "file": "20260813160000_smart_answer_v1.sql",
+      "sha256": "02983f78a0fc88f589897a6506318958735c4c71fc8a96655a942fdf88bdcf6f",
+      "dependsOn": ["20260801130000_seamless_acquisition_activation.sql"]
+    },
+    {
+      "file": "20260813162000_smart_answer_assistant.sql",
+      "sha256": "b3cf1301e2dc3121a6013b07b4eb776a1fc1e6d2b24405a828431232fcb03e29",
+      "dependsOn": ["20260813160000_smart_answer_v1.sql"]
+    },
+    {
+      "file": "20260813163000_smart_answer_message_security.sql",
+      "sha256": "a32c26f8ee22d8cb2c42cca760221d8d09235eb2467925f145b7f03b0a305129",
+      "dependsOn": ["20260813162000_smart_answer_assistant.sql"]
     }
   ]
 }

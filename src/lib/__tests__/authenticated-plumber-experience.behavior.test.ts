@@ -73,6 +73,7 @@ describe("authenticated plumber application shell", () => {
       "Dashboard",
       "Missed Jobs",
       "Services",
+      "Smart Answer",
       "Account & Billing",
       "Help / Setup",
     ]);

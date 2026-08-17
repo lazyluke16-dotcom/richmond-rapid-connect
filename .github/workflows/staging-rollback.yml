@@ -95,6 +95,18 @@ jobs:
             --name ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
             -y
 
+      - name: Re-sync current Twilio signing token after rollback
+        # A version rollback can restore a stale TWILIO_AUTH_TOKEN secret, so
+        # re-assert the subaccount's CURRENT Auth Token from Twilio Account.json.
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_STAGING_WORKER_NAME: ${{ vars.CLOUDFLARE_STAGING_WORKER_NAME }}
+          CERTIFICATION_BASE_URL: ${{ vars.CERTIFICATION_BASE_URL }}
+        run: node scripts/sync-staging-twilio-signing-token.mjs
+
       - name: Verify restored release identity
         env:
           DEPLOYMENT_TARGET: staging

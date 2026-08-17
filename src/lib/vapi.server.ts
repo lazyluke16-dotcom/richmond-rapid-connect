@@ -50,9 +50,14 @@ export interface VapiAssistantConfig {
   recordingEnabled?: boolean;
   maxDurationSeconds?: number;
   structuredDataSchema?: Record<string, unknown>;
+  summaryPrompt?: string;
+  tools?: Record<string, unknown>[];
+  serverMessages?: string[];
 }
 
 export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string, unknown> {
+  // Preserve the established production receptionist contract unless a caller
+  // explicitly supplies a specialised schema (Smart Answer does this).
   const schema = cfg.structuredDataSchema ?? {
     type: "object",
     properties: {
@@ -82,6 +87,7 @@ export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string,
       provider: "openai",
       model: "gpt-4o-mini",
       messages: [{ role: "system", content: cfg.systemPrompt }],
+      tools: cfg.tools?.length ? cfg.tools : undefined,
     },
     voice: { provider: "11labs", voiceId: "sarah" },
     transcriber: {
@@ -99,7 +105,7 @@ export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string,
             credentialId: cfg.serverCredentialId,
           }
         : undefined,
-    serverMessages: ["end-of-call-report"],
+    serverMessages: cfg.serverMessages ?? ["end-of-call-report"],
     analysisPlan: {
       structuredDataPlan: {
         enabled: true,
@@ -110,7 +116,7 @@ export function buildVapiAssistantBody(cfg: VapiAssistantConfig): Record<string,
         messages: [
           {
             role: "system",
-            content: "Summarise the plumbing enquiry in 1-2 sentences.",
+            content: cfg.summaryPrompt ?? "Summarise the plumbing enquiry in 1-2 sentences.",
           },
         ],
       },
@@ -134,6 +140,43 @@ export async function updateVapiAssistant(
 
 export async function getVapiAssistant(id: string): Promise<Record<string, unknown>> {
   return vapi(`/assistant/${id}`, { method: "GET" });
+}
+
+export function vapiSipHost(): string {
+  return VAPI_BASE.includes("api.eu.vapi.ai") ? "sip.eu.vapi.ai" : "sip.vapi.ai";
+}
+
+export async function createVapiSipPhoneNumber(input: {
+  assistantId: string;
+  sipUser: string;
+  name: string;
+  username?: string | null;
+  password?: string | null;
+}): Promise<{ id: string; sipUri?: string }> {
+  const host = vapiSipHost();
+  const sipUri = `sip:${input.sipUser}@${host}`;
+  const authentication =
+    input.username && input.password
+      ? {
+          realm: host,
+          username: input.username,
+          password: input.password,
+        }
+      : undefined;
+  return vapi("/phone-number", {
+    method: "POST",
+    body: JSON.stringify({
+      provider: "vapi",
+      sipUri,
+      assistantId: input.assistantId,
+      name: input.name,
+      authentication,
+    }),
+  });
+}
+
+export async function deleteVapiPhoneNumber(id: string): Promise<void> {
+  await vapi(`/phone-number/${id}`, { method: "DELETE" });
 }
 
 export async function resolveVapiServerCredentialId(

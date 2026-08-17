@@ -4,6 +4,7 @@ import {
   CreditCard,
   LayoutDashboard,
   PhoneCall,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -22,6 +23,12 @@ export const plumberNavigationItems: PlumberNavigationItem[] = [
     to: "/call-handling",
     icon: PhoneCall,
     matches: ["/call-handling", "/ai-receptionist", "/missed-call-settings"],
+  },
+  {
+    label: "Smart Answer",
+    to: "/smart-answer",
+    icon: ShieldCheck,
+    matches: ["/smart-answer"],
   },
   {
     label: "Account & Billing",

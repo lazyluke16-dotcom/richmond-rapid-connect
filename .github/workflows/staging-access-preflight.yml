@@ -35,6 +35,9 @@ jobs:
       TWILIO_FROM_NUMBER: ${{ secrets.TWILIO_FROM_NUMBER }}
       VAPI_API_KEY: ${{ secrets.VAPI_API_KEY }}
       VAPI_SERVER_SECRET: ${{ secrets.VAPI_SERVER_SECRET }}
+      VAPI_SERVER_CREDENTIAL_ID: ${{ secrets.VAPI_SERVER_CREDENTIAL_ID }}
+      VAPI_SIP_AUTH_USERNAME: ${{ secrets.VAPI_SIP_AUTH_USERNAME }}
+      VAPI_SIP_AUTH_PASSWORD: ${{ secrets.VAPI_SIP_AUTH_PASSWORD }}
       STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
       STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
       STRIPE_SMS_GST_TAX_RATE_ID: ${{ secrets.STRIPE_SMS_GST_TAX_RATE_ID }}
@@ -74,6 +77,8 @@ jobs:
             "TWILIO_FROM_NUMBER",
             "VAPI_API_KEY",
             "VAPI_SERVER_SECRET",
+            "VAPI_SIP_AUTH_USERNAME",
+            "VAPI_SIP_AUTH_PASSWORD",
             "STRIPE_SECRET_KEY",
             "STRIPE_WEBHOOK_SECRET",
             "STRIPE_SMS_GST_TAX_RATE_ID",
@@ -87,9 +92,19 @@ jobs:
             "WEBHOOK_SECRET",
             "DASHBOARD_PIN",
           ];
+          // Optional/recoverable: the runtime contract in
+          // src/lib/vapi.server.ts resolveVapiServerCredentialId() recovers the
+          // Vapi server credential id from the existing receptionist assistant
+          // (or by matching the Smart Answer server URL) when this secret is
+          // absent. It therefore MUST NOT block staging readiness. It is
+          // reported for visibility only.
+          const optionalRecoverableSecretNames = ["VAPI_SERVER_CREDENTIAL_ID"];
 
           const missingVariables = variableNames.filter((name) => !process.env[name]?.trim());
           const missingSecrets = secretNames.filter((name) => !process.env[name]?.trim());
+          const optionalSecretsNotConfigured = optionalRecoverableSecretNames.filter(
+            (name) => !process.env[name]?.trim(),
+          );
           const report = {
             target: "staging",
             ready: missingVariables.length === 0 && missingSecrets.length === 0,
@@ -99,6 +114,10 @@ jobs:
             requiredSecretCount: secretNames.length,
             missingVariables,
             missingSecrets,
+            optionalRecoverableSecretNames,
+            optionalSecretsNotConfigured,
+            optionalSecretsNote:
+              "VAPI_SERVER_CREDENTIAL_ID is recovered at provisioning time when unset; not required for readiness.",
             valuesInspected: false,
           };
 
@@ -117,9 +136,17 @@ jobs:
             "",
             ...(missingVariables.length ? missingVariables.map((name) => `- \`${name}\``) : ["- None"]),
             "",
-            "## Missing secrets",
+            "## Missing required secrets",
             "",
             ...(missingSecrets.length ? missingSecrets.map((name) => `- \`${name}\``) : ["- None"]),
+            "",
+            "## Optional / recoverable credentials (do not block readiness)",
+            "",
+            ...(optionalSecretsNotConfigured.length
+              ? optionalSecretsNotConfigured.map(
+                  (name) => `- \`${name}\` — not set; recovered from the existing Vapi assistant at provisioning time`,
+                )
+              : optionalRecoverableSecretNames.map((name) => `- \`${name}\` — configured`)),
             "",
             "No credential values were printed, stored in the report, or transmitted elsewhere.",
           ].join("\n");
@@ -133,6 +160,7 @@ jobs:
               requiredSecretCount: report.requiredSecretCount,
               missingVariables,
               missingSecrets,
+              optionalSecretsNotConfigured,
               valuesPrinted: false,
             }),
           );

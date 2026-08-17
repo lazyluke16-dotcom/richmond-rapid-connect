@@ -50,7 +50,9 @@ export function verifyMigrationManifest(root = repositoryRoot) {
     }
     const actualHash = sha256(join(migrationsDirectory, entry.file));
     if (actualHash !== entry.sha256) {
-      throw new Error(`Migration hash mismatch: ${entry.file}`);
+      throw new Error(
+        `Migration hash mismatch: ${entry.file} (manifest ${entry.sha256}, actual ${actualHash})`,
+      );
     }
     seen.add(entry.file);
   }

@@ -15,7 +15,7 @@ describe("Twilio webhook signatures", () => {
     const payload =
       url +
       [...params.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([key, value]) => `${key}${value}`)
         .join("");
     const signature = createHmac("sha1", token).update(payload).digest("base64");
